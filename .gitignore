@@ -1,1 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+**/*.pyc
 
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# custom
+.vscode
+*.onnx
+*.npy
