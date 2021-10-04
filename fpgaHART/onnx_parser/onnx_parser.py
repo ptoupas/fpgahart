@@ -4,14 +4,14 @@ import sys
 import logging
 import configparser
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 class OnnxModelParser():
     def __init__(self, model_name):
         self.model_name = model_name
         self.model_path = os.path.join(os.getcwd(), 'models', self.model_name + '.onnx')
 
-        self.layers = {}
+        self.torch_layers = {}
 
         self.onnx_model = onnx.load(self.model_path)
         self.onnx_model = onnx.shape_inference.infer_shapes(self.onnx_model)
@@ -185,7 +185,7 @@ class OnnxModelParser():
                     out_shape.append(dim.dim_value)
                 layers_outputs[n.output[0]] = out_shape
 
-                self.layers[n.name] = {
+                self.torch_layers[n.name] = {
                     "operation": n.op_type,
                     "input": layer_input_shapes,
                     "input_id": layer_input_ids,
