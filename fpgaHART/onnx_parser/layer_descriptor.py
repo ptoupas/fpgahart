@@ -89,9 +89,12 @@ class ModelLayerDescriptor(OnnxModelParser):
                   self.layers[name] = {"operation": operation,
                                         "shape_in": swish_input_shape,
                                         "shape_out": swish_output_shape,
-                                        sigmoid_name: sigmoid,
-                                        mul_name: mul,
-                                        "branching": True}
+                                        "shape_branch": swish_input_shape,
+                                        "branching": True,
+                                        "primitive_ops": {
+                                                sigmoid_name: sigmoid,
+                                                mul_name: mul}
+                                       }
 
                   del self.layers[sigmoid_name]
                   del self.layers[mul_name]
@@ -181,13 +184,15 @@ class ModelLayerDescriptor(OnnxModelParser):
                                       "shape_in": se_input_shape,
                                       "shape_out": se_output_shape,
                                       "shape_branch": se_branch_shape,
-                                      gap_name: gap,
-                                      conv1_name: conv1,
-                                      relu_name: relu,
-                                      conv2_name: conv2,
-                                      sigmoid_name: sigmoid,
-                                      mul_name: mul,
-                                      "branching": True}
+                                      "branching": True,
+                                      "primitive_ops": {
+                                                gap_name: gap,
+                                                conv1_name: conv1,
+                                                relu_name: relu,
+                                                conv2_name: conv2,
+                                                sigmoid_name: sigmoid,
+                                                mul_name: mul}
+                                    }
 
                 del self.layers[gap_name]
                 del self.layers[conv1_name]
