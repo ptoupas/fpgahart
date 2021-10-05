@@ -36,7 +36,7 @@ class OnnxModelParser():
 
     def get_config(self):
         config = configparser.ConfigParser()
-        config.read(os.path.join(os.getcwd(), 'fpgaHART', 'onnx_parser', 'config.ini'))
+        config.read(os.path.join(os.getcwd(), 'fpgaHART', 'config', 'config_pytorch.ini'))
         self.supported_operations = config.get('Onnx Supported', 'layers').split(',')
 
     def get_tensor_shape(self, tensor_name, is_initializer=False):
