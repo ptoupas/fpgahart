@@ -12,3 +12,6 @@ pip-delete-this-directory.txt
 .vscode
 *.onnx
 *.npy
+*.png
+*.jpg
+*.jpeg

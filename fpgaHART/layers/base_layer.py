@@ -24,20 +24,18 @@ class BaseLayer():
         self.dsp = int(config.get('FPGA Specifications', 'dsp'))
         self.mem_bw = float(config.get('FPGA Specifications', 'mem_bw'))
 
-    def get_dp_performance(self, gamma, ii, muls, adds, mem, depth):
+    def get_dp_performance(self, workload_matrix, ii, muls, adds, mem, depth):
         mem_kb = (mem * self.word_bytes) / 1e3
         mem_bram = math.ceil(mem_kb / self.bram_bytes)
         bram_util = (mem_bram / self.bram) * 100
 
         dsps_util = (muls/self.dsp)*100
 
-        rin = gamma[0,0]
-        rout = abs(gamma[-1,-1])
-        thr_in = self.cycles_per_sec * rin      # Words per second
-        thr_out = self.cycles_per_sec * rout    # Words per second
-
         latency_cycles = np.max(np.abs(ii)) + depth
         latency_sec = latency_cycles/self.cycles_per_sec
+
+        thr_in = workload_matrix[0,0]/latency_sec       # Input words per second
+        thr_out = workload_matrix[-1,-1]/latency_sec    # Output words per second
 
         return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util
 

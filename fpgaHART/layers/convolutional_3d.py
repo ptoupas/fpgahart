@@ -5,8 +5,6 @@ np.set_printoptions(precision=5, suppress=True, linewidth=150)
 
 DEBUG=False
 
-#TODO: *SOS* REVISE THE DEPTHWISE CONV!!!!! CAREFULL WITH THE CHANNEL DIVISION WITH GROUPS!!!! *SOS*
-#TODO: *SOS* HOW TO DEAL WITH THE CHANNELS AND FILTERS WITH COARSE IN COARSE OUT FACTORS *SOS*
 class Convolutional3DLayer(BaseLayer):
     def __init__(self, description):
         super().__init__()
@@ -76,7 +74,6 @@ class Convolutional3DLayer(BaseLayer):
 
         if not self.depthwise:
             # Accumulation Depth
-            #TODO: CHECK THIS PART OF THE DEPTH CALCULATION
             depth += (math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut))
             # Accumulation Additions
             max_parallel_adds += ((math.ceil(self.channels * f_coarseIn) - 1) * math.ceil(self.filters * f_coarseOut))
@@ -89,23 +86,25 @@ class Convolutional3DLayer(BaseLayer):
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
-        workload_matrix = self.get_workload_matrix(f_coarseIn, f_coarseOut)
+        workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(gamma_matrix_balanced, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
-        total_workload = self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
-        throughput_gops = total_workload/latency_sec
-        thr_in /= np.prod(np.array(self.input_shape[2:])) * self.channels       #math.ceil(self.channels * f_coarseIn)               # Volumes per second
-        thr_out /= np.prod(np.array(self.output_shape[2:])) * self.filters      #math.ceil(self.filters * f_coarseOut)               # Volumes per secon
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
+        total_ops = self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
+        throughput_gops = total_ops/latency_sec
+        thr_in /= (np.prod(np.array(self.input_shape[2:])) * self.channels)         # Volumes per second
+        thr_out /= (np.prod(np.array(self.output_shape[2:])) * self.filters)        # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        # if dsps_util < 90. and bram_util < 90.:
-        #     print("(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f}, latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_workload*1e-9, mem_bounded_in, mem_bounded_out))
-        # else:
-        #     print("Discarding design point.")
-        return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_workload*1e-9, mem_bounded_in, mem_bounded_out
+        if DEBUG:
+            if dsps_util < 90. and bram_util < 90.:
+                print("(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f}, latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out))
+            else:
+                print("Discarding design point.")
+
+        return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out
 
     def get_rate_matrix(self, f_fine):
         if not self.depthwise:
@@ -196,7 +195,7 @@ class Convolutional3DLayer(BaseLayer):
             print("D:\n{}".format(data_matrix))
         return data_matrix
 
-    def get_workload_matrix(self, f_coarseIn, f_coarseOut):
+    def get_workload_matrix(self):
         in_volume = self.depth_in * self.rows_in * self.cols_in
         out_volume = self.depth_out * self.rows_out * self.cols_out
         kernel_volume = self.kd * self.kw * self.kh
@@ -223,25 +222,7 @@ class Convolutional3DLayer(BaseLayer):
 
             workload_matrix[4, 5] = out_volume * self.filters
         else:
-            workload_matrix[3, 4] = out_volume * self.filters
-        # workload_matrix[0, 0] = in_volume * math.ceil(self.channels * f_coarseIn)
-        
-        # workload_matrix[0, 1] = in_volume * math.ceil(self.channels * f_coarseIn)
-        # workload_matrix[1, 1] = out_volume * kernel_volume * math.ceil(self.channels * f_coarseIn)
-
-        # workload_matrix[1, 2] = out_volume * kernel_volume * math.ceil(self.channels * f_coarseIn)
-        # workload_matrix[2, 2] = out_volume * kernel_volume * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-
-        # workload_matrix[2, 3] = out_volume * kernel_volume * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-        # workload_matrix[3, 3] = out_volume * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-
-        # if not self.depthwise:
-        #     workload_matrix[3, 4] = out_volume * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-        #     workload_matrix[4, 4] = out_volume * math.ceil(self.filters * f_coarseOut)
-
-        #     workload_matrix[4, 5] = out_volume * math.ceil(self.filters * f_coarseOut)
-        # else:
-        #     workload_matrix[3, 4] = out_volume * math.ceil(self.filters * f_coarseOut)            
+            workload_matrix[3, 4] = out_volume * self.filters     
 
         if DEBUG:
             print("WL:\n{}".format(workload_matrix))
