@@ -1,14 +1,17 @@
 import numpy as np
 import math
+import scipy.optimize as optimize
+from scipy.optimize import LinearConstraint, Bounds
 from .base_layer import BaseLayer
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 
 DEBUG=False
 
 class Convolutional3DLayer(BaseLayer):
-    def __init__(self, description):
+    def __init__(self, description, optimization):
         super().__init__()
 
+        self.optimization = optimization
         self.input_shape = description['shape_in'][0]
         self.depth_in = self.input_shape[2]
         self.rows_in = self.input_shape[3]
@@ -53,6 +56,22 @@ class Convolutional3DLayer(BaseLayer):
         if self.depthwise:
             self.channels = self.channels//self.groups
 
+        if self.optimization == 'Powell':
+            initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
+            bnds = ((0.01, 1.0), (0.01, 1.0), (0.01, 1.0), (0.01, mem_bw_in), (0.01, mem_bw_out))
+            # bnds = Bounds([0.001, 0.001, 0.001, 0.001, 0.001], [1.0, 1.0, 1.0, self.mem_words_per_cycle, self.mem_words_per_cycle])
+            # cons = LinearConstraint([[0, 0, 0, 1, 1],
+            #                          [0, 0, 0, 1, 1],
+            #                          [0, 0, 0, 1, 1],
+            #                          [0, 0, 0, 1, 1],
+            #                          [0, 0, 0, 1, 1]], [0.01, 0.01, 0.01, 0.01, 0.01], [self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle])        
+            result = optimize.minimize(self.get_latency, initial_guess, method='Powell', bounds=bnds)
+            if result.success:
+                f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = result.x
+            else:
+                print("Failed to optimize. Skipping...")
+                return
+
         if self.pointwise:
             # Sliding Window Depth
             depth = 1
@@ -68,8 +87,8 @@ class Convolutional3DLayer(BaseLayer):
             # Sliding Window buffer in words/elements
             init_buffer = self.depth_in * self.rows_in * max(self.kw - 1, 1) * self.channels + self.channels * self.kd * self.kh * max(self.kw - 1, 1)
 
-        max_parallel_muls = kernel_elems * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-        max_parallel_adds = (kernel_elems - 1) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
+        max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
+        max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
         memory = init_buffer + kernel_elems * self.channels * self.filters
 
         if not self.depthwise:
@@ -79,7 +98,7 @@ class Convolutional3DLayer(BaseLayer):
             max_parallel_adds += ((math.ceil(self.channels * f_coarseIn) - 1) * math.ceil(self.filters * f_coarseOut))
             # Accumulation Buffer
             memory += self.channels
-            
+
         gamma_matrix = self.get_rate_matrix(f_fine) * self.get_stream_matrix(f_coarseIn, f_coarseOut) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
@@ -106,13 +125,61 @@ class Convolutional3DLayer(BaseLayer):
 
         return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out
 
+    def get_latency(self, params):
+        f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = params
+        if not (f_fine>0 and f_coarseIn>0 and f_coarseOut>0 and mem_bw_in>0 and mem_bw_out>0):
+            return -1
+
+        kernel_elems = int(np.prod(np.array(self.kernel_shape)))
+
+        if self.pointwise:
+            # Sliding Window Depth
+            depth = 1
+            # Convolution 3D Depth
+            depth += 1
+            # Sliding Window buffer in words/elements
+            init_buffer = 1
+        else:
+            # Sliding Window Depth
+            depth = self.depth_in * self.rows_in * max(self.kw - 1, 1) * math.ceil(self.channels * f_coarseIn) + math.ceil(self.channels * f_coarseIn) * self.kd * self.kh * max(self.kw - 1, 1)
+            # Convolution 3D Depth
+            depth += math.ceil(1/f_fine)
+            # Sliding Window buffer in words/elements
+            init_buffer = self.depth_in * self.rows_in * max(self.kw - 1, 1) * self.channels + self.channels * self.kd * self.kh * max(self.kw - 1, 1)
+
+        max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
+        max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
+        memory = init_buffer + kernel_elems * self.channels * self.filters
+
+        if not self.depthwise:
+            # Accumulation Depth
+            depth += (math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut))
+            # Accumulation Additions
+            max_parallel_adds += ((math.ceil(self.channels * f_coarseIn) - 1) * math.ceil(self.filters * f_coarseOut))
+            # Accumulation Buffer
+            memory += self.channels
+
+        mem_kb = (memory * self.word_bytes) / 1e3
+        mem_bram = math.ceil(mem_kb / self.bram_bytes)
+        bram_util = (mem_bram / self.bram) * 100
+        dsps_util = (max_parallel_muls/self.dsp)*100
+
+        gamma_matrix = self.get_rate_matrix(f_fine) * self.get_stream_matrix(f_coarseIn, f_coarseOut) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+        workload_matrix = self.get_workload_matrix()
+        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
+        
+        latency_cycles = np.max(np.abs(ii_matrix)) + depth
+        penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
+
+        return latency_cycles + penalize_factor
+
     def get_rate_matrix(self, f_fine):
         if not self.depthwise:
             rate_matrix = np.zeros( shape=(5,6) , dtype=float )
         else:
             rate_matrix = np.zeros( shape=(4,5) , dtype=float )
 
-        # Memory bandwidth splitted between read and write
         rate_matrix[0, 0] = 1
         
         rate_matrix[0, 1] = 1
@@ -128,10 +195,8 @@ class Convolutional3DLayer(BaseLayer):
             rate_matrix[3, 4] = 1
             rate_matrix[4, 4] = 1
 
-            # Memory bandwidth splitted between read and write
             rate_matrix[4, 5] = 1
         else:
-            # Memory bandwidth splitted between read and write
             rate_matrix[3, 4] = 1
 
         if DEBUG:
