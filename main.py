@@ -4,6 +4,7 @@ import argparse
 # from fpgaHART.onnx_parser.layer_descriptor import ModelLayerDescriptor
 from fpgaHART.onnx_parser.partition_descriptor import PartitionDescriptor
 from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
+from fpgaHART.layers.squeeze_excitation import SqueezeExcitationLayer
 import itertools
 import numpy as np
 from matplotlib import pyplot as plt
@@ -15,7 +16,7 @@ sns.set_style("whitegrid")
 def parse_args():
     parser = argparse.ArgumentParser(description='fpgaHART toolflow parser')
     parser.add_argument('model_name', help='name of the HAR model')
-    parser.add_argument('--optimization', type=str, default='brute_force', choices=['brute_force', 'Powell'], help='Optimization Strategy')
+    parser.add_argument('--optimization', type=str, default='brute_force', choices=['brute_force', 'Powell', 'trust-constr'], help='Optimization Strategy')
 
     args = parser.parse_args()
     return args
@@ -62,6 +63,30 @@ if __name__ == '__main__':
             print("(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f}, latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(best[0], best[1], best[2], best[3], best[4], best[5], best[6], best[7], best[8], best[9], best[10], best[11], best[12], best[13], best[14], best[15], best[16], best[17], best[18], best[19]))
             print("*"*40)
         elif l['operation'] == 'SqueezeExcitation':
+            se = SqueezeExcitationLayer(l, args.optimization)
+
+            if args.optimization == 'brute_force':
+                fine_1 = [1]
+                coarsein_1 = [1/conv.channels, 0.2, 0.4, 0.5, 0.6, 0.8, 1]
+                coarseout_1 = [1/conv.filters, 0.1, 0.3, 0.5, 0.7, 0.9, 0.1]
+                fine_2 = [1]
+                coarsein_2 = [1/conv.channels, 0.2, 0.4, 0.5, 0.6, 0.8, 1]
+                coarseout_2 = [1/conv.filters, 0.1, 0.3, 0.5, 0.7, 0.9, 0.1]
+            else:
+                fine_1 = [1]
+                coarsein_1 = [1]
+                coarseout_1 = [1]
+                fine_2 = [1]
+                coarsein_2 = [1]
+                coarseout_2 = [1]
+            mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
+            total = [fine_1, coarsein_1, coarseout_1, fine_2, coarsein_2, coarseout_2, mem_bw]
+            combinations = itertools.product(*total)
+
+            for (f1, c11, c21, f2, c12, c22, (bw_in, bw_out)) in combinations:
+                se.get_design_point(f1, c11, c21, f2, c12, c22, bw_in, bw_out)
+                exit()
+            exit()
             for n_se,l_se in l['primitive_ops'].items():
                 if l_se['operation'] == 'Conv':
                     conv = Convolutional3DLayer(l_se, args.optimization)

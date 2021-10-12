@@ -1,7 +1,7 @@
 import numpy as np
 import math
 import scipy.optimize as optimize
-from scipy.optimize import LinearConstraint, Bounds
+from scipy.optimize import NonlinearConstraint, Bounds
 from .base_layer import BaseLayer
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 
@@ -47,6 +47,14 @@ class Convolutional3DLayer(BaseLayer):
 
     def update_layer(self):
         self.channels = self.input_shape[1]
+        self.full_rate_in = 0
+        self.full_rate_out = 0
+        self.max_parallel_muls = 0
+        self.memory = 0
+        self.depth = 0
+
+    def get_dp_info(self):
+        return self.full_rate_in, self.full_rate_out, self.max_parallel_muls, self.memory, self.depth
 
     def get_design_point(self, f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out):
         self.update_layer()
@@ -58,14 +66,20 @@ class Convolutional3DLayer(BaseLayer):
 
         if self.optimization == 'Powell':
             initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
-            bnds = ((0.01, 1.0), (0.01, 1.0), (0.01, 1.0), (0.01, mem_bw_in), (0.01, mem_bw_out))
-            # bnds = Bounds([0.001, 0.001, 0.001, 0.001, 0.001], [1.0, 1.0, 1.0, self.mem_words_per_cycle, self.mem_words_per_cycle])
-            # cons = LinearConstraint([[0, 0, 0, 1, 1],
-            #                          [0, 0, 0, 1, 1],
-            #                          [0, 0, 0, 1, 1],
-            #                          [0, 0, 0, 1, 1],
-            #                          [0, 0, 0, 1, 1]], [0.01, 0.01, 0.01, 0.01, 0.01], [self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle, self.mem_words_per_cycle])        
-            result = optimize.minimize(self.get_latency, initial_guess, method='Powell', bounds=bnds)
+            bnds = ((0.01, 1.0), (0.01, 1.0), (0.01, 1.0), (0.01, mem_bw_in), (0.01, mem_bw_out))   
+            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
+            if result.success:
+                f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = result.x
+            else:
+                print("Failed to optimize. Skipping...")
+                return
+        elif self.optimization == 'trust-constr':
+            initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
+            bnds = Bounds([0.001, 0.001, 0.001, 0.001, 0.001], [1.0, 1.0, 1.0, mem_bw_in, mem_bw_out])  
+            cons_f = lambda x: np.array([((math.ceil(kernel_elems * x[0]) * math.ceil(self.channels * x[1]) * math.ceil(self.filters * x[2]))/self.dsp) * 100 + 0*x[3] + 0*x[4]])
+            cons_J = lambda x: np.array([[((kernel_elems * math.ceil(self.channels * x[1]) * math.ceil(self.filters * x[2]))/8)*100, ((math.ceil(kernel_elems * x[0]) * self.channels * math.ceil(self.filters * x[2]))/8)*100, ((math.ceil(kernel_elems * x[0]) * math.ceil(self.channels * x[1]) * self.filters)/8)*100]])
+            non_linear_constraint = NonlinearConstraint(cons_f, 0.001, 90.)
+            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, constraints=[non_linear_constraint], bounds=bnds)
             if result.success:
                 f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = result.x
             else:
@@ -123,6 +137,11 @@ class Convolutional3DLayer(BaseLayer):
             else:
                 print("Discarding design point.")
 
+        self.full_rate_in = gamma_matrix_balanced[0, 0]
+        self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+        self.max_parallel_muls = max_parallel_muls
+        self.memory = memory
+        self.depth = depth
         return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out
 
     def get_latency(self, params):
@@ -172,7 +191,12 @@ class Convolutional3DLayer(BaseLayer):
         latency_cycles = np.max(np.abs(ii_matrix)) + depth
         penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
 
-        return latency_cycles + penalize_factor
+        if self.optimization == 'Powell':
+            optimization_score = latency_cycles + penalize_factor
+        elif self.optimization == 'trust-constr':
+            optimization_score = latency_cycles
+
+        return optimization_score
 
     def get_rate_matrix(self, f_fine):
         if not self.depthwise:
