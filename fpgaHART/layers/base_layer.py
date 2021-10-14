@@ -4,10 +4,11 @@ import math
 import numpy as np
 
 class BaseLayer():
-    def __init__(self, data_format='NDHWC'):
-        assert data_format=='NDHWC' or data_format=='NCDHW', "Wrong data format. Accepted formats are 'NDHWC' or 'NCDHW'"
+    def __init__(self, data_format='NHWDC'):
+        assert data_format=='NHWDC' or data_format=='NCHWD', "Wrong data format. Accepted formats are 'NHWDC' or 'NCHWD'"
         
         self.get_config()
+        self.data_format = data_format
         self.word_bytes = self.word_length/8
         self.cycles_per_sec = self.clock_freq*1e6
         self.mem_bandwidth = self.mem_bw * 1e9
@@ -69,31 +70,56 @@ class BaseLayer():
 
         if matrix[0, 0] < abs(matrix[0, 1]):
             mem_bounded_in = True
+            for i in range(0, matrix.shape[0]):
+                layer = matrix.shape[0] - i
+                if abs(matrix[layer-1,layer]) > matrix[layer-1,layer-1]:
+                    # propogate forward
+                    for j in range(layer,matrix.shape[0] + 1):
+                        if abs(matrix[j-1,j]) <= matrix[j-1,j-1]:
+                            break
+                        matrix[j-1,j] = -matrix[j-1,j-1]
+                        if j < matrix.shape[0]:
+                            matrix[j,j] = matrix[j-1,j-1]*rate_ratio[j-1]
+                elif abs(matrix[layer-1,layer]) < matrix[layer-1,layer-1]:
+                    # propogate backward
+                    for j in range(0,layer):
+                        if(abs(matrix[layer-j-1,layer-j]) >= matrix[layer-j-1,layer-j-1]):
+                            break
+                        matrix[layer-j-1,layer-j-1]  = abs(matrix[layer-j-1,layer-j])
+                        if layer-j-1 > 0:
+                            matrix[layer-j-2,layer-j-1] = -matrix[layer-j-1,layer-j-1]/rate_ratio[layer-1-j-1]
+
+            rate_ratio_new_2 = [abs(matrix[i,i]/matrix[i-1,i]) for i in range(1, matrix.shape[1]-1)]
+            assert np.allclose(rate_ratio_new, rate_ratio_new_2), "{} - {}".format(rate_ratio_new, rate_ratio_new_2)
 
         if abs(matrix[-1, -1]) < matrix[-1, -2]:
             mem_bounded_out = True
+            
+            for i in range(0, matrix.shape[0]):
+                layer = matrix.shape[0] - i
+                if abs(matrix[layer-1,layer]) > matrix[layer-1,layer-1]:
+                    # propogate forward
+                    for j in range(layer,matrix.shape[0] + 1):
+                        if abs(matrix[j-1,j]) <= matrix[j-1,j-1]:
+                            break
+                        matrix[j-1,j] = -matrix[j-1,j-1]
+                        if j < matrix.shape[0]:
+                            matrix[j,j] = matrix[j-1,j-1]*rate_ratio[j-1]
+                elif abs(matrix[layer-1,layer]) < matrix[layer-1,layer-1]:
+                    # propogate backward
+                    for j in range(0,layer):
+                        if(abs(matrix[layer-j-1,layer-j]) >= matrix[layer-j-1,layer-j-1]):
+                            break
+                        matrix[layer-j-1,layer-j-1]  = abs(matrix[layer-j-1,layer-j])
+                        if layer-j-1 > 0:
+                            matrix[layer-j-2,layer-j-1] = -matrix[layer-j-1,layer-j-1]/rate_ratio[layer-1-j-1]
 
-        for i in range(0, matrix.shape[0]):
-            layer = matrix.shape[0] - i
-            if abs(matrix[layer-1,layer]) > matrix[layer-1,layer-1]:
-                # propogate forward
-                for j in range(layer,matrix.shape[0] + 1):
-                    if abs(matrix[j-1,j]) <= matrix[j-1,j-1]:
-                        break
-                    matrix[j-1,j] = -matrix[j-1,j-1]
-                    if j < matrix.shape[0]:
-                        matrix[j,j] = matrix[j-1,j-1]*rate_ratio[j-1]
-            elif abs(matrix[layer-1,layer]) < matrix[layer-1,layer-1]:
-                # propogate backward
-                for j in range(0,layer):
-                    if(abs(matrix[layer-j-1,layer-j]) >= matrix[layer-j-1,layer-j-1]):
-                        break
-                    matrix[layer-j-1,layer-j-1]  = abs(matrix[layer-j-1,layer-j])
-                    if layer-j-1 > 0:
-                        matrix[layer-j-2,layer-j-1] = -matrix[layer-j-1,layer-j-1]/rate_ratio[layer-1-j-1]
+            rate_ratio_new_2 = [abs(matrix[i,i]/matrix[i-1,i]) for i in range(1, matrix.shape[1]-1)]
+            assert np.allclose(rate_ratio_new, rate_ratio_new_2), "{} - {}".format(rate_ratio_new, rate_ratio_new_2)
 
-        rate_ratio_new_2 = [abs(matrix[i,i]/matrix[i-1,i]) for i in range(1, matrix.shape[1]-1)]
-        assert np.allclose(rate_ratio_new, rate_ratio_new_2), "{} - {}".format(rate_ratio_new, rate_ratio_new_2)
+        if not mem_bounded_in and not mem_bounded_out:
+            matrix[0, 0] = abs(matrix[0, 1])
+            matrix[-1, -1] = -matrix[-1, -1 -1]
 
         return matrix, mem_bounded_in, mem_bounded_out
         

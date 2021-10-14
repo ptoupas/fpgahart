@@ -4,6 +4,7 @@ import scipy.optimize as optimize
 from scipy.optimize import NonlinearConstraint, Bounds
 from .base_layer import BaseLayer
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
+np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG=False
 
@@ -50,11 +51,17 @@ class Convolutional3DLayer(BaseLayer):
         self.full_rate_in = 0
         self.full_rate_out = 0
         self.max_parallel_muls = 0
+        self.max_parallel_adds = 0
         self.memory = 0
         self.depth = 0
+        self.mem_bd_in = False
+        self.mem_bd_out = False
+
+    def get_total_workload(self):
+        return self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
 
     def get_dp_info(self):
-        return self.full_rate_in, self.full_rate_out, self.max_parallel_muls, self.memory, self.depth
+        return self.full_rate_in, self.full_rate_out, self.max_parallel_muls, self.max_parallel_adds, self.memory, self.depth, self.mem_bd_in, self.mem_bd_out
 
     def get_design_point(self, f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out):
         self.update_layer()
@@ -125,24 +132,27 @@ class Convolutional3DLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
-        total_ops = self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
-        throughput_gops = total_ops/latency_sec
+        total_ops = self.get_total_workload()
+        throughput_ops = total_ops/latency_sec
         thr_in /= (np.prod(np.array(self.input_shape[2:])) * self.channels)         # Volumes per second
         thr_out /= (np.prod(np.array(self.output_shape[2:])) * self.filters)        # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
         if DEBUG:
             if dsps_util < 90. and bram_util < 90.:
-                print("(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f}, latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out))
+                print("(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f}, latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in, mem_bounded_out))
             else:
                 print("Discarding design point.")
 
         self.full_rate_in = gamma_matrix_balanced[0, 0]
         self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
         self.max_parallel_muls = max_parallel_muls
+        self.max_parallel_adds = max_parallel_adds
         self.memory = memory
         self.depth = depth
-        return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_gops*1e-9, thr_in, thr_out, depth, total_ops*1e-9, mem_bounded_in, mem_bounded_out
+        self.mem_bd_in = mem_bounded_in
+        self.mem_bd_out = mem_bounded_out
+        return f_fine, math.ceil(f_fine*kernel_elems), f_coarseIn, math.ceil(self.channels * f_coarseIn), f_coarseOut, math.ceil(self.filters * f_coarseOut), mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in, mem_bounded_out
 
     def get_latency(self, params):
         f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = params
