@@ -233,6 +233,7 @@ class Convolutional3DLayer(BaseLayer):
         else:
             rate_matrix[3, 4] = 1
 
+        assert np.max(rate_matrix) <= 1 and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0, "Rate matrix issue"
         if DEBUG:
             print("R:\n{}".format(rate_matrix))
         return rate_matrix

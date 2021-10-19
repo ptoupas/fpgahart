@@ -122,4 +122,92 @@ class BaseLayer():
             matrix[-1, -1] = -matrix[-1, -1 -1]
 
         return matrix, mem_bounded_in, mem_bounded_out
+
+    def balance_matrix_elemwise(self, matrix, branch_node):
+        mem_bounded_in_1 = False
+        mem_bounded_in_2 = False
+        mem_bounded_out = False
+
+        branch_ratio = abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node])
+
+        if abs(matrix[branch_node-1, branch_node]) > matrix[branch_node-1, branch_node-1]:
+            mem_bounded_in_2 = True
+            matrix[branch_node-1, branch_node] = -matrix[branch_node-1, branch_node-1]
+        else:
+            matrix[branch_node-1, branch_node-1] = abs(matrix[branch_node-1, branch_node])
+
+        if abs(matrix[0, branch_node]) > matrix[0, 0]:
+            mem_bounded_in_1 = True
+            matrix[0, branch_node] = -matrix[0,0]
+        else:
+            matrix[0,0] = abs(matrix[0, branch_node])
+
+        matrix[branch_node,branch_node] = min(abs(matrix[0, branch_node]), abs(matrix[branch_node-1, branch_node]))
+
+        if abs(matrix[-1, -1]) < matrix[-1, -2]:
+            mem_bounded_out = True
+            matrix[branch_node,branch_node] = abs(matrix[-1, -1])
+        else:
+            matrix[-1, -1] = -matrix[branch_node,branch_node]
+
+        if matrix[branch_node,branch_node] <= abs(matrix[branch_node-1,branch_node]):
+            matrix[branch_node-1,branch_node] = -matrix[branch_node,branch_node]
+            matrix[branch_node-1,branch_node-1] = matrix[branch_node,branch_node]
+        else:
+            assert False, "Failed to move backwards on Γ matrix for input 2"
+
+        if matrix[branch_node,branch_node] <= abs(matrix[0,branch_node]):
+            matrix[0,branch_node] = -matrix[branch_node,branch_node]
+            matrix[0,0] = matrix[branch_node,branch_node]
+        else:
+            assert False, "Failed to move backwards on Γ matrix for input 1"
+
+        assert branch_ratio == abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]), "Problem with the graph balancing"
+
+        return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
+
+    def balance_matrix_elemwise_broadcasting(self, matrix, branch_node):
+        mem_bounded_in_1 = False
+        mem_bounded_in_2 = False
+        mem_bounded_out = False
+
+        branch_ratio = abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node])
+
+        if abs(matrix[branch_node-1, branch_node]) > matrix[branch_node-1, branch_node-1]:
+            mem_bounded_in_2 = True
+            matrix[branch_node-1, branch_node] = -matrix[branch_node-1, branch_node-1]
+        else:
+            matrix[branch_node-1, branch_node-1] = abs(matrix[branch_node-1, branch_node])
+
+        if abs(matrix[0, branch_node]) > matrix[0, 0]:
+            mem_bounded_in_1 = True
+            matrix[0, branch_node] = -matrix[0,0]
+        else:
+            matrix[0,0] = abs(matrix[0, branch_node])
+
+        matrix[branch_node,branch_node] = abs(matrix[0, branch_node])
+
+        if abs(matrix[-1, -1]) < matrix[-1, -2]:
+            mem_bounded_out = True
+            matrix[branch_node,branch_node] = abs(matrix[-1, -1])
+        else:
+            matrix[-1, -1] = -matrix[branch_node,branch_node]
+
+        if branch_ratio >= abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]):
+            pass
+        else:
+            matrix[branch_node,branch_node] = branch_ratio*abs(matrix[branch_node-1,branch_node])
+            matrix[0,branch_node] = branch_ratio*abs(matrix[branch_node-1,branch_node])
+            matrix[0,0] = branch_ratio*abs(matrix[branch_node-1,branch_node])
+            matrix[-1,-1] = branch_ratio*abs(matrix[branch_node-1,branch_node])
+            branch_ratio = abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node])
+
+        if matrix[branch_node,branch_node] <= abs(matrix[0,branch_node]):
+            matrix[0,branch_node] = -matrix[branch_node,branch_node]
+            matrix[0,0] = matrix[branch_node,branch_node]
+        else:
+            assert False, "Failed to move backwards on Γ matrix for input 1"
         
+        assert branch_ratio >= abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]), "Problem with the graph balancing"
+
+        return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
