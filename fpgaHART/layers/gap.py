@@ -41,10 +41,10 @@ class GAPLayer(BaseLayer):
     def get_dp_info(self):
         return self.full_rate_in, self.full_rate_out, self.max_parallel_muls, self.max_parallel_adds, self.memory, self.depth, self.mem_bd_in, self.mem_bd_out
 
-    def get_design_point(self, coarse_in_out, mem_bw_in, mem_bw_out):
+    def get_design_point(self, coarse_in, coarse_out, mem_bw_in, mem_bw_out):
         self.update_layer()
 
-        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix(coarse_in) * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
@@ -56,21 +56,23 @@ class GAPLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         if self.data_format == 'NCHWD':
-            max_parallel_muls = 2
-            max_parallel_adds = math.ceil(self.depth_in  * coarse_in_out)
+            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
             memory = 1
-            depth = (self.depth_in * self.rows_in * self.cols_in)/math.ceil(self.depth_in  * coarse_in_out)
+            depth = 1
+            # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
-            max_parallel_muls = (self.channels * coarse_in_out) * 2
-            max_parallel_adds = math.ceil(self.channels * coarse_in_out)
+            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
             memory = self.channels
-            depth = (self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * coarse_in_out)
+            depth = 1
+            # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
         total_ops = self.get_total_workload()
         throughput_ops = total_ops/latency_sec
-        thr_in /= (np.prod(np.array(self.input_shape[2:])) * self.channels)         # Volumes per second
-        thr_out /= (np.prod(np.array(self.output_shape[2:])) * self.filters)        # Volumes per second
+        thr_in /= workload_matrix[0, 0]             # Volumes per second
+        thr_out /= workload_matrix[-1, -1]          # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
         self.full_rate_in = gamma_matrix_balanced[0, 0]
@@ -82,38 +84,32 @@ class GAPLayer(BaseLayer):
         self.mem_bd_in = mem_bounded_in
         self.mem_bd_out = mem_bounded_out
         if DEBUG:
-            print("*"*40, coarse_in_out, latency_cycles, depth)
-        return coarse_in_out, mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in, mem_bounded_out
+            print("*"*40, "in factor={} out factor={} latency={} depth={}, max_parallel_muls={}".format(coarse_in, coarse_out, int(latency_cycles), depth, dsps_util))
 
-    def get_rate_matrix(self):
+        return coarse_in, coarse_out, mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in, mem_bounded_out, self.full_rate_in, self.full_rate_out
+
+    def get_rate_matrix(self, coarse_in):
         rate_matrix = np.zeros( shape=(2,3) , dtype=float )
 
         rate_matrix[0, 0] = 1
         
         rate_matrix[0, 1] = 1
-        if self.data_format == 'NCHWD':
-           rate_matrix[1, 1] = 1/(self.depth_in * self.rows_in * self.cols_in)
-        else:
-            rate_matrix[1, 1] = 1
+        rate_matrix[1, 1] = 1/(self.depth_in * self.rows_in * self.cols_in/(math.ceil(self.depth_in * self.rows_in * self.cols_in * coarse_in)))
 
         rate_matrix[1, 2] = 1
 
+        assert np.max(rate_matrix) <= 1 and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0, "Rate matrix issue"
         if DEBUG:
             print("R:\n{}".format(rate_matrix))
         return rate_matrix
 
-    def get_stream_matrix(self, coarse_in_out):
+    def get_stream_matrix(self, coarse_in, coarse_out):
         stream_matrix = np.zeros( shape=(2,3) , dtype=float )
 
         stream_matrix[0, 0] = 1
-        
-        if self.data_format == 'NCHWD':
-            stream_matrix[0, 1] = math.ceil(self.depth_in  * coarse_in_out)
-            stream_matrix[1, 1] = math.ceil(self.depth_in  * coarse_in_out)
-        else:
-            stream_matrix[0, 1] = math.ceil(self.channels * coarse_in_out)
-            stream_matrix[1, 1] = math.ceil(self.channels * coarse_in_out)
-
+    
+        stream_matrix[0, 1] = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+        stream_matrix[1, 1] = math.ceil(self.filters * coarse_out)
         stream_matrix[1, 2] = 1
 
         if DEBUG:
@@ -125,7 +121,7 @@ class GAPLayer(BaseLayer):
 
         data_matrix[0, 0] = mem_bw_in
         
-        data_matrix[0, 1] = -(self.depth_in * self.rows_in * self.cols_in)
+        data_matrix[0, 1] = -1
         data_matrix[1, 1] = 1
 
         data_matrix[1, 2] = -mem_bw_out

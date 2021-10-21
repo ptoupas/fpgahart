@@ -134,7 +134,8 @@ class ElementWiseLayer(BaseLayer):
         self.mem_bd_in_2 = mem_bounded_in_2
         self.mem_bd_out = mem_bounded_out
         if DEBUG:
-            print("*"*40, coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, latency_cycles, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out)
+            print("f={}, bwin1={}, bwin2={}, bwout={}, latency={}, muls={}, dsps={}, boundin1={}, boundin2={}, boundout={}".format(coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, int(latency_cycles), max_parallel_muls, dsps_util, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out))
+            print("*"*40)
         
         return coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
 
@@ -179,11 +180,12 @@ class ElementWiseLayer(BaseLayer):
         elif self.parrallel_dims == 'HWDC':
             stream_matrix[0, 2] = math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout)
 
+        #TODO: Add a second factor here for the branch ONLY when there is a broadcasting in place
         stream_matrix[1, 1] = 1
         if self.parrallel_dims == 'C':
-            stream_matrix[1, 2] = math.ceil(channels_2 * coarseinout)
+            stream_matrix[1, 2] = channels_2 # math.ceil(channels_2 * coarseinout)
         elif self.parrallel_dims == 'HWDC':
-            stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
+            stream_matrix[1, 2] = channels_2 # math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
 
         if self.parrallel_dims == 'C':
             stream_matrix[2, 2] = math.ceil(self.filters * coarseinout)
