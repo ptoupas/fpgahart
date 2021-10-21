@@ -157,7 +157,9 @@ class Convolutional3DLayer(BaseLayer):
     def get_latency(self, params):
         f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = params
         if not (f_fine>0 and f_coarseIn>0 and f_coarseOut>0 and mem_bw_in>0 and mem_bw_out>0):
-            return -1
+            return 1000000000000
+        if (f_fine>1 or f_coarseIn>1 or f_coarseOut>1):
+            return 1000000000000
 
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 

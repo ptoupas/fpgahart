@@ -44,6 +44,17 @@ class GAPLayer(BaseLayer):
     def get_design_point(self, coarse_in, coarse_out, mem_bw_in, mem_bw_out):
         self.update_layer()
 
+        if self.optimization == 'Powell':
+            initial_guess = [0.5, 0.5, mem_bw_in, mem_bw_out]
+            lower_bound = 1/(self.channels*self.depth_in*self.rows_in*self.cols_in)
+            bnds = ((lower_bound, 1.0), (lower_bound, 1.0), (0.001, mem_bw_in), (0.001, mem_bw_out))   
+            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
+            if result.success:
+                coarse_in, coarse_out, mem_bw_in, mem_bw_out = result.x
+            else:
+                print("Failed to optimize. Skipping...")
+                return
+
         gamma_matrix = self.get_rate_matrix(coarse_in) * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
@@ -87,6 +98,49 @@ class GAPLayer(BaseLayer):
             print("*"*40, "in factor={} out factor={} latency={} depth={}, max_parallel_muls={}".format(coarse_in, coarse_out, int(latency_cycles), depth, dsps_util))
 
         return coarse_in, coarse_out, mem_bw_in, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in, mem_bounded_out, self.full_rate_in, self.full_rate_out
+
+    def get_latency(self, params):
+        coarse_in, coarse_out, mem_bw_in, mem_bw_out = params
+        if not (coarse_in>0 and coarse_out>0 and mem_bw_in>0 and mem_bw_out>0):
+            return 1000000000000
+        if (coarse_in>1 or coarse_out>1):
+            return 1000000000000
+
+        gamma_matrix = self.get_rate_matrix(coarse_in) * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        if DEBUG:
+            print("Γ:\n{}".format(gamma_matrix))
+        gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+        if DEBUG:
+            print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+        workload_matrix = self.get_workload_matrix()
+        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
+        if DEBUG:
+            print("II:\n{}".format(ii_matrix))
+
+        if self.data_format == 'NCHWD':
+            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+            memory = 1
+            depth = 1
+            # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
+        else:
+            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+            memory = self.channels
+            depth = 1
+            # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
+
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
+
+        latency_cycles = np.max(np.abs(ii_matrix)) + depth
+        penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
+
+        if self.optimization == 'Powell':
+            optimization_score = latency_cycles + penalize_factor
+        elif self.optimization == 'trust-constr':
+            optimization_score = latency_cycles
+
+        return optimization_score
 
     def get_rate_matrix(self, coarse_in):
         rate_matrix = np.zeros( shape=(2,3) , dtype=float )
