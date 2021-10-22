@@ -77,14 +77,16 @@ class Convolutional3DLayer(BaseLayer):
         dp_info['vols/s'] = self.throughput_vols
         dp_info['DSP'] = self.dsps_util
         dp_info['BRAM'] = self.bram_util
-        dp_info['rateIn'] = self.full_rate_in
+        dp_info['rateIn1'] = self.full_rate_in
+        dp_info['rateIn2'] = -1
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
         dp_info['muls'] = self.max_parallel_muls
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
         dp_info['memKBs'] = self.memoryKB
-        dp_info['memBoundedIn'] = self.mem_bd_in
+        dp_info['memBoundedIn1'] = self.mem_bd_in
+        dp_info['memBoundedIn2'] = -1
         dp_info['memBoundedOut'] = self.mem_bd_out
         dp_info['config'] = self.config
         
