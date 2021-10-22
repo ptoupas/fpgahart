@@ -38,7 +38,7 @@ class BaseLayer():
         thr_in = workload_matrix[0,0]/latency_sec       # Input words per second
         thr_out = workload_matrix[-1,-1]/latency_sec    # Output words per second
 
-        return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util
+        return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, mem_kb
 
     def balance_matrix(self, matrix):        
         rate_ratio = [abs(matrix[i,i]/matrix[i-1,i]) for i in range(1, matrix.shape[1]-1)]

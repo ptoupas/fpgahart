@@ -48,10 +48,18 @@ class ElementWiseLayer(BaseLayer):
         self.max_parallel_muls = 0
         self.max_parallel_adds = 0
         self.memory = 0
+        self.memoryKB = 0
         self.depth = 0
         self.mem_bd_in_1 = False
         self.mem_bd_in_2 = False
         self.mem_bd_out = False
+        self.config = []
+        self.dsps_util = 0
+        self.bram_util = 0
+        self.latency_sec = 0
+        self.latency_cycles = 0
+        self.throughput_ops = 0
+        self.throughput_vols = 0
 
     def get_total_workload(self):
         if self.type == 'Add':
@@ -62,7 +70,28 @@ class ElementWiseLayer(BaseLayer):
             return int(np.prod(np.array(self.output_shape[1:]))) * 2
 
     def get_dp_info(self):
-        return self.full_rate_in_1, self.full_rate_in_2, self.full_rate_out, self.max_parallel_muls, self.max_parallel_adds, self.memory, self.depth, self.mem_bd_in_1, self.mem_bd_in_2, self.mem_bd_out
+        dp_info = {}
+
+        dp_info['latency(C)'] = self.latency_cycles
+        dp_info['latency(S)'] = self.latency_sec
+        dp_info['GOP/s'] = self.throughput_ops*1e-9
+        dp_info['vols/s'] = self.throughput_vols
+        dp_info['DSP'] = self.dsps_util
+        dp_info['BRAM'] = self.bram_util
+        dp_info['rateIn1'] = self.full_rate_in_1
+        dp_info['rateIn2'] = self.full_rate_in_2
+        dp_info['rateOut'] = self.full_rate_out
+        dp_info['depth'] = self.depth
+        dp_info['muls'] = self.max_parallel_muls
+        dp_info['adds'] = self.max_parallel_adds
+        dp_info['memWords'] = self.memory
+        dp_info['memKBs'] = self.memoryKB
+        dp_info['memBoundedIn1'] = self.mem_bd_in_1
+        dp_info['memBoundedIn2'] = self.mem_bd_in_2
+        dp_info['memBoundedOut'] = self.mem_bd_out
+        dp_info['config'] = self.config
+        
+        return dp_info
 
     def get_design_point(self, coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
         self.update_layer()
@@ -128,28 +157,45 @@ class ElementWiseLayer(BaseLayer):
                 max_parallel_adds = 0
                 max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout) * 2
 
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
         total_ops = self.get_total_workload()
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
-        self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
-        self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
-        self.max_parallel_muls = max_parallel_muls
-        self.max_parallel_adds = max_parallel_adds
-        self.memory = memory
-        self.depth = depth
-        self.mem_bd_in_1 = mem_bounded_in_1
-        self.mem_bd_in_2 = mem_bounded_in_2
-        self.mem_bd_out = mem_bounded_out
-        if DEBUG:
-            print("f={}, bwin1={}, bwin2={}, bwout={}, latency={}, muls={}, dsps={}, boundin1={}, boundin2={}, boundout={}".format(coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, int(latency_cycles), max_parallel_muls, dsps_util, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out))
-            print("*"*40)
+        if dsps_util < 90. and bram_util < 90.:
+
+            self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
+            self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
+            self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+            self.max_parallel_muls = max_parallel_muls
+            self.max_parallel_adds = max_parallel_adds
+            self.memory = memory
+            self.depth = depth
+            self.mem_bd_in_1 = mem_bounded_in_1
+            self.mem_bd_in_2 = mem_bounded_in_2
+            self.mem_bd_out = mem_bounded_out
+
+            config = [coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
+            self.config = config
+            self.memoryKB = memKBs
+            self.dsps_util = dsps_util
+            self.bram_util = bram_util
+            self.latency_sec = latency_sec
+            self.latency_cycles = int(latency_cycles)
+            self.throughput_ops = throughput_ops
+            self.throughput_vols = thr_out
+
+            if DEBUG:
+                print("f={}, bwin1={}, bwin2={}, bwout={}, latency={}, muls={}, dsps={}, boundin1={}, boundin2={}, boundout={}".format(coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, int(latency_cycles), max_parallel_muls, dsps_util, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out))
+                print("*"*40)
+        else:
+            self.update_layer()
+            if DEBUG:
+                print("Discarding design point.")
         
-        return coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, dsps_util, max_parallel_muls, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, depth, total_ops, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
+        return self.get_dp_info()
 
     def get_latency(self, params):
         coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out = params

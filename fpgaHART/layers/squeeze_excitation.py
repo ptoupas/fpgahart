@@ -35,9 +35,54 @@ class SqueezeExcitationLayer(BaseLayer):
                 self.sequencial[n_se] = ElementWiseLayer(l_se, optimization)
         self.num_layers = len(self.sequencial) + 2
 
-    def get_design_point(self, f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out):
+    def update_layer(self):
+        self.full_rate_in_1 = 0
+        self.full_rate_in_2 = 0
+        self.full_rate_out = 0
+        self.max_parallel_muls = 0
+        self.max_parallel_adds = 0
+        self.memory = 0
+        self.memoryKB = 0
+        self.depth = 0
+        self.mem_bd_in_1 = False
+        self.mem_bd_in_2 = False
+        self.mem_bd_out = False
+        self.config = []
+        self.dsps_util = 0
+        self.bram_util = 0
+        self.latency_sec = 0
+        self.latency_cycles = 0
+        self.throughput_ops = 0
+        self.throughput_vols = 0
 
-        #TODO: Add an extra connection to the graph for the 2nd input of MUL operation
+    def get_dp_info(self):
+        dp_info = {}
+
+        dp_info['latency(C)'] = self.latency_cycles
+        dp_info['latency(S)'] = self.latency_sec
+        dp_info['GOP/s'] = self.throughput_ops*1e-9
+        dp_info['vols/s'] = self.throughput_vols
+        dp_info['DSP'] = self.dsps_util
+        dp_info['BRAM'] = self.bram_util
+        dp_info['rateIn1'] = self.full_rate_in_1
+        dp_info['rateIn2'] = self.full_rate_in_2
+        dp_info['rateOut'] = self.full_rate_out
+        dp_info['depth'] = self.depth
+        dp_info['muls'] = self.max_parallel_muls
+        dp_info['adds'] = self.max_parallel_adds
+        dp_info['memWords'] = self.memory
+        dp_info['memKBs'] = self.memoryKB
+        dp_info['memBoundedIn1'] = self.mem_bd_in_1
+        dp_info['memBoundedIn2'] = self.mem_bd_in_2
+        dp_info['memBoundedOut'] = self.mem_bd_out
+        dp_info['config'] = self.config
+        
+        return dp_info
+
+    def get_design_point(self, f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out):
+        self.update_layer()
+
+        #TODO: Add an extra connection to the graph for the 2nd input of MUL operation ADD mem_bw_in1 and mem_bw_in2
         gamma_matrix = np.zeros( shape=(self.num_layers-1, self.num_layers) , dtype=float )
         gamma_matrix[0, 0] = mem_bw_in
         gamma_matrix[-1, -1] = -mem_bw_out
@@ -57,21 +102,22 @@ class SqueezeExcitationLayer(BaseLayer):
                 curr_layer_rate = 10000000
             
             if n==0:
-                self.sequencial[l].get_design_point(f_gap_coarsein, f_gap_coarseout, prev_layer_rate, curr_layer_rate)
+                dp_info = self.sequencial[l].get_design_point(f_gap_coarsein, f_gap_coarseout, prev_layer_rate, curr_layer_rate)
             elif n==1:
-                self.sequencial[l].get_design_point(f_fine_1, f_coarseIn_1, f_coarseOut_1, prev_layer_rate, curr_layer_rate)
+                dp_info = self.sequencial[l].get_design_point(f_fine_1, f_coarseIn_1, f_coarseOut_1, prev_layer_rate, curr_layer_rate)
             elif n==2:
-                self.sequencial[l].get_design_point(f_fine_2, f_coarseIn_2, f_coarseOut_2, prev_layer_rate, curr_layer_rate)
+                dp_info = self.sequencial[l].get_design_point(f_fine_2, f_coarseIn_2, f_coarseOut_2, prev_layer_rate, curr_layer_rate)
             elif n==3:
-                self.sequencial[l].get_design_point(f_mul_coarseinout, mem_bw_in, prev_layer_rate, curr_layer_rate)
+                dp_info = self.sequencial[l].get_design_point(f_mul_coarseinout, mem_bw_in, prev_layer_rate, curr_layer_rate)
+            
 
             if n==3:
-                full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = self.sequencial[l].get_dp_info()
+                full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
                 # gamma_matrix[0, n+1] = -full_rate_in_1
                 gamma_matrix[n, n+1] = -full_rate_in_2
                 gamma_matrix[n+1, n+1] = full_rate_out
             else:
-                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = self.sequencial[l].get_dp_info()
+                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'], dp_info['memBoundedOut']
                 gamma_matrix[n, n+1] = -full_rate_in
                 gamma_matrix[n+1, n+1] = full_rate_out
 
@@ -97,20 +143,45 @@ class SqueezeExcitationLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         mem_bounded_in = mem_bounded_in or first_layer_bw_in
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth)
         total_ops = self.get_total_workload()
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if DEBUG:
-            if dsps_util < 90. and bram_util < 90.:
-                print("GOPs/s={:.2f}, DSPS={:.2f}, BRAM={:.2f}, depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(throughput_ops*1e-9, dsps_util, bram_util, total_depth, latency_sec, latency_cycles, mem_bounded_in, mem_bounded_out))
-            else:
-                print("Discarding design point.")
+        if dsps_util < 90. and bram_util < 90.:
+            #TODO: Add 2nd input
+            self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
+            self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
+            self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+            self.max_parallel_muls = max_parallel_muls
+            self.max_parallel_adds = max_parallel_adds
+            self.memory = memory
+            self.depth = depth
+            #TODO: Add 2nd input
+            self.mem_bd_in_1 = mem_bounded_in
+            self.mem_bd_in_2 = mem_bounded_in
+            self.mem_bd_out = mem_bounded_out
 
-        return f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out, dsps_util, bram_util, latency_sec, int(latency_cycles), throughput_ops, thr_in, thr_out, total_depth, total_ops, mem_bounded_in, mem_bounded_out
+            #TODO: Add 2nd input
+            config = [f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out]
+            self.config = config
+            self.memoryKB = memKBs
+            self.dsps_util = dsps_util
+            self.bram_util = bram_util
+            self.latency_sec = latency_sec
+            self.latency_cycles = int(latency_cycles)
+            self.throughput_ops = throughput_ops
+            self.throughput_vols = thr_out
+
+            if DEBUG:
+                print("GOPs/s={:.2f}, DSPS={:.2f}, BRAM={:.2f}, depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(throughput_ops*1e-9, dsps_util, bram_util, total_depth, latency_sec, latency_cycles, mem_bounded_in, mem_bounded_out))
+        else:
+            self.update_layer()
+            print("Discarding design point.")
+
+        return self.get_dp_info()
         
     def get_total_workload(self):
         total_wl = 0
