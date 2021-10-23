@@ -117,9 +117,15 @@ class SqueezeExcitationLayer(BaseLayer):
                 gamma_matrix[n, n+1] = -full_rate_in_2
                 gamma_matrix[n+1, n+1] = full_rate_out
             else:
-                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'], dp_info['memBoundedOut']
+                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
                 gamma_matrix[n, n+1] = -full_rate_in
                 gamma_matrix[n+1, n+1] = full_rate_out
+
+            if not dp_info['config']:
+                self.update_layer()
+                if DEBUG:
+                    print("Discarding design point.")
+                return self.get_dp_info()
 
             if n==0:
                first_layer_bw_in = mem_bd_in
@@ -155,10 +161,10 @@ class SqueezeExcitationLayer(BaseLayer):
             self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
             self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
             self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
-            self.max_parallel_muls = max_parallel_muls
-            self.max_parallel_adds = max_parallel_adds
-            self.memory = memory
-            self.depth = depth
+            self.max_parallel_muls = total_muls
+            self.max_parallel_adds = total_adds
+            self.memory = total_memory
+            self.depth = total_depth
             #TODO: Add 2nd input
             self.mem_bd_in_1 = mem_bounded_in
             self.mem_bd_in_2 = mem_bounded_in
@@ -179,7 +185,8 @@ class SqueezeExcitationLayer(BaseLayer):
                 print("GOPs/s={:.2f}, DSPS={:.2f}, BRAM={:.2f}, depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(throughput_ops*1e-9, dsps_util, bram_util, total_depth, latency_sec, latency_cycles, mem_bounded_in, mem_bounded_out))
         else:
             self.update_layer()
-            print("Discarding design point.")
+            if DEBUG:
+                print("Discarding design point.")
 
         return self.get_dp_info()
         

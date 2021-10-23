@@ -112,7 +112,9 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2)
+            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            branch_ratio = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
+            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -208,7 +210,9 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2)
+            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            branch_ratio = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
+            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -272,7 +276,11 @@ class ElementWiseLayer(BaseLayer):
         rate_matrix[0, 2] = 1
         
         rate_matrix[1, 1] = 1
-        rate_matrix[1, 2] = 1
+        if self.broadcasting:
+            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            rate_matrix[1, 2] = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
+        else:
+            rate_matrix[1, 2] = 1
 
         if self.type == 'Add' or self.type == 'Mul':
             rate_matrix[2, 2] = 1
@@ -315,7 +323,7 @@ class ElementWiseLayer(BaseLayer):
                 stream_matrix[1, 2] = math.ceil(channels_2 * coarseinout)
         elif self.parrallel_dims == 'HWDC':
             if self.broadcasting:
-                stream_matrix[1, 2] = channels_2
+                stream_matrix[1, 2] = min(channels_2, math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout))
             else:
                 stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
 
@@ -337,11 +345,7 @@ class ElementWiseLayer(BaseLayer):
         data_matrix[0, 2] = -1
         
         data_matrix[1, 1] = mem_bw_in_2
-        if self.broadcasting:
-            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            data_matrix[1, 2] = -1/(int(np.prod(np.array(broadcasted_shape[2:]))))
-        else:
-            data_matrix[1, 2] = -1
+        data_matrix[1, 2] = -1
 
         data_matrix[2, 2] = 1
         data_matrix[2, 3] = -mem_bw_out

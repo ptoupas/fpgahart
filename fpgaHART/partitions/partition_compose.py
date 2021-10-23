@@ -6,6 +6,7 @@ import csv
 
 class PartitionComposer():
     def __init__(self, model_name, optimization, singlethreaded, per_layer_plot):
+        self.se_full = True
         self.model_name = model_name
         self.optimization = optimization
         self.singlethreaded = singlethreaded
@@ -21,10 +22,17 @@ class PartitionComposer():
 
     def model_partition(self, partition):
         for layer in partition:
-            self.model_layer(layer, self.model_descriptor.layers[layer])
+            if self.se_full:
+                self.model_layer(layer, self.model_descriptor.layers[layer])
+            else:
+                if self.model_descriptor.layers[layer]['operation'] == 'SqueezeExcitation':
+                    for sub_layer, sub_description in self.model_descriptor.layers[layer]['primitive_ops'].items():
+                        self.model_layer(layer + '_' + sub_layer, sub_description)
+                else:
+                    self.model_layer(layer, self.model_descriptor.layers[layer])
 
     def model_layer(self, layer, layer_description):
-        # print("Modeling {} layer...".format(layer))
+        print("Modeling {} layer...".format(layer))
         throughput_gops, throughput_vols, latency, dsp_util, bram_util = layer_compose(layer, layer_description, self.layer_model_file, self.optimization, self.singlethreaded)
         if self.per_layer_plot and latency:
             calculate_pareto = True

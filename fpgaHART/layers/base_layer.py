@@ -32,7 +32,7 @@ class BaseLayer():
 
         dsps_util = (muls/self.dsp)*100
 
-        latency_cycles = np.max(np.abs(ii)) + depth
+        latency_cycles = np.max(np.abs(ii)) # + depth
         latency_sec = latency_cycles/self.cycles_per_sec
 
         thr_in = workload_matrix[0,0]/latency_sec       # Input words per second
@@ -166,22 +166,28 @@ class BaseLayer():
 
         return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
 
-    def balance_matrix_elemwise_broadcasting(self, matrix, branch_node):
+    def balance_matrix_elemwise_broadcasting(self, matrix, branch_node, branch_ratio):
         mem_bounded_in_1 = False
         mem_bounded_in_2 = False
         mem_bounded_out = False
-
-        branch_ratio = abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node])
+        
+        curr_branch_ratio = 1/(abs(matrix[0, branch_node])/abs(matrix[branch_node-1, branch_node]))
+        if curr_branch_ratio < branch_ratio:
+            matrix[0, branch_node] = -abs(matrix[branch_node-1, branch_node]) / branch_ratio
+        elif curr_branch_ratio > branch_ratio:
+            matrix[branch_node-1, branch_node] = -abs(matrix[0, branch_node]) * branch_ratio
 
         if abs(matrix[branch_node-1, branch_node]) > matrix[branch_node-1, branch_node-1]:
             mem_bounded_in_2 = True
             matrix[branch_node-1, branch_node] = -matrix[branch_node-1, branch_node-1]
+            matrix[0, branch_node] = -abs(matrix[branch_node-1, branch_node]) / branch_ratio
         else:
             matrix[branch_node-1, branch_node-1] = abs(matrix[branch_node-1, branch_node])
 
         if abs(matrix[0, branch_node]) > matrix[0, 0]:
             mem_bounded_in_1 = True
             matrix[0, branch_node] = -matrix[0,0]
+            matrix[branch_node-1, branch_node] = -abs(matrix[0, branch_node]) * branch_ratio
         else:
             matrix[0,0] = abs(matrix[0, branch_node])
 
@@ -193,21 +199,17 @@ class BaseLayer():
         else:
             matrix[-1, -1] = -matrix[branch_node,branch_node]
 
-        if branch_ratio >= abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]):
-            pass
-        else:
-            matrix[branch_node,branch_node] = branch_ratio*abs(matrix[branch_node-1,branch_node])
-            matrix[0,branch_node] = branch_ratio*abs(matrix[branch_node-1,branch_node])
-            matrix[0,0] = branch_ratio*abs(matrix[branch_node-1,branch_node])
-            matrix[-1,-1] = branch_ratio*abs(matrix[branch_node-1,branch_node])
-            branch_ratio = abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node])
+        curr_branch_ratio = 1/(abs(matrix[branch_node, branch_node])/abs(matrix[branch_node-1, branch_node]))
+        if curr_branch_ratio > branch_ratio:
+            matrix[branch_node-1, branch_node] = -abs(matrix[branch_node, branch_node]) * branch_ratio
+            matrix[branch_node-1, branch_node-1] = abs(matrix[branch_node, branch_node]) * branch_ratio
 
-        if matrix[branch_node,branch_node] <= abs(matrix[0,branch_node]):
             matrix[0,branch_node] = -matrix[branch_node,branch_node]
             matrix[0,0] = matrix[branch_node,branch_node]
-        else:
-            assert False, "Failed to move backwards on Γ matrix for input 1"
         
-        assert branch_ratio >= abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]), "Problem with the graph balancing"
+        curr_branch_ratio = 1/(abs(matrix[0, branch_node])/abs(matrix[branch_node-1, branch_node]))
+        assert branch_ratio == curr_branch_ratio, "Problem with the graph balancing"
+        curr_branch_ratio = 1/(abs(matrix[branch_node, branch_node])/abs(matrix[branch_node-1, branch_node]))
+        assert branch_ratio == curr_branch_ratio, "Problem with the graph balancing"
 
         return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
