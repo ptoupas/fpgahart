@@ -8,23 +8,34 @@ np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG=False
 
-class BatchNorm3DLayer(BaseLayer):
+class ActivationLayer(BaseLayer):
     def __init__(self, description, optimization):
         super().__init__()
 
+        self.activation_type = description['operation']
         self.optimization = optimization
         self.input_shape = description['shape_in'][0]
-        self.depth_in = self.input_shape[2]
-        self.rows_in = self.input_shape[3]
-        self.cols_in = self.input_shape[4]
+        if len(self.input_shape) > 2:
+            self.depth_in = self.input_shape[2]
+            self.rows_in = self.input_shape[3]
+            self.cols_in = self.input_shape[4]
+        else:
+            self.depth_in = 1
+            self.rows_in = 1
+            self.cols_in = 1
         self.output_shape = description['shape_out']
-        self.depth_out = self.output_shape[2]
-        self.rows_out = self.output_shape[3]
-        self.cols_out = self.output_shape[4]
+        if len(self.output_shape) > 2:
+            self.depth_out = self.output_shape[2]
+            self.rows_out = self.output_shape[3]
+            self.cols_out = self.output_shape[4]
+        else:
+            self.depth_out = 1
+            self.rows_out = 1
+            self.cols_out = 1            
 
         self.channels = self.input_shape[1]
         self.filters = self.output_shape[1]
-    
+
     def update_layer(self):
         self.full_rate_in = 0
         self.full_rate_out = 0
@@ -44,7 +55,12 @@ class BatchNorm3DLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        return int(np.prod(np.array(self.output_shape[1:]))) * 3
+        if self.activation_type == 'Relu':
+            return 1
+        elif self.activation_type == 'Sigmoid':
+            return int(np.prod(np.array(self.output_shape[1:]))) * 5
+        elif self.activation_type == 'Swish':
+            return int(np.prod(np.array(self.output_shape[1:]))) * 6
 
     def get_dp_info(self):
         dp_info = {}
@@ -95,10 +111,22 @@ class BatchNorm3DLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 4)
-        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
-        memory = 1
-        depth = 50 # This value came up from some experiments on HLS. Should revise that
+
+        if self.activation_type == 'Relu':
+            max_parallel_muls = 0
+            max_parallel_adds = 0
+            memory = 1
+            depth = 1
+        elif self.activation_type == 'Sigmoid':
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 5)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            memory = 1
+            depth = 25 # This value came up from some experiments on HLS. Should revise that
+        elif self.activation_type == 'Swish':
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 6)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            memory = 1
+            depth = 25 # This value came up from some experiments on HLS. Should revise that
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
         total_ops = self.get_total_workload()
@@ -154,10 +182,21 @@ class BatchNorm3DLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 4)
-        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
-        memory = 1
-        depth = 50 # This value came up from some experiments on HLS. Should revise that
+        if self.activation_type == 'Relu':
+            max_parallel_muls = 0
+            max_parallel_adds = 0
+            memory = 1
+            depth = 1
+        elif self.activation_type == 'Sigmoid':
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 5)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            memory = 1
+            depth = 25 # This value came up from some experiments on HLS. Should revise that
+        elif self.activation_type == 'Swish':
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 6)
+            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            memory = 1
+            depth = 25 # This value came up from some experiments on HLS. Should revise that
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
 
@@ -170,7 +209,6 @@ class BatchNorm3DLayer(BaseLayer):
             optimization_score = latency_cycles
 
         return optimization_score
-
 
     def get_rate_matrix(self):
         rate_matrix = np.zeros( shape=(2,3) , dtype=float )

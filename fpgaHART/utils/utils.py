@@ -68,3 +68,53 @@ def plot_graph(throughput_ops, throughput_vols, latency, dsp_util, bram_util, la
     file_name = layer_name + '.jpg'
     plt.savefig(os.path.join(dsps_dir, file_name))
     plt.clf()
+
+def drop_duplicates_csv(file_name):
+    layers_df = pd.read_csv(file_name)
+
+    original_size = len(layers_df.index)
+    columns = layers_df.columns.tolist()
+    del(columns[-1])
+
+    layers_df = layers_df.drop_duplicates(subset=columns, ignore_index=True)
+    final_size = len(layers_df.index)
+    print("Dropped {} rows due to duplicate".format(original_size - final_size))
+
+    os.remove(file_name)
+    layers_df.to_csv(file_name, index=False)
+
+def plot_layers_csv(file_name, model_name, calculate_pareto=True, xaxis='volumes/s', yaxis='DSP(%)'):
+    plot_dir = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'graphs_csv', model_name, 'throughput_dsps')
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+
+    layers_df = pd.read_csv(file_name)
+
+    layers = layers_df['Layer'].unique()
+    for l in layers:
+        curr_df = layers_df.loc[layers_df['Layer'] == l]
+
+        curr_df.plot.scatter(x=xaxis, y=yaxis)
+
+        x_axis = curr_df[xaxis].to_numpy()
+        y_axis = curr_df[yaxis].to_numpy()
+        if calculate_pareto:
+            scores = np.zeros((x_axis.shape[0], 2))
+            scores[:,0] = x_axis
+            scores[:,1] = y_axis
+
+            pareto = find_pareto(scores)
+            pareto_front = scores[pareto]
+
+            pareto_front_df = pd.DataFrame(pareto_front)
+            pareto_front_df.sort_values(0, inplace=True)
+            pareto_front = pareto_front_df.values
+
+            plt.plot(pareto_front[:, 0], pareto_front[:, 1], color='red')
+
+        plt.ylim([-5, max(100, max(y_axis) + 0.1*max(y_axis))])
+        plt.xscale('log')
+        plt.title(l)
+        file_name = l + '.jpg'
+        plt.savefig(os.path.join(plot_dir, file_name))
+        plt.clf()

@@ -142,7 +142,7 @@ class BaseLayer():
         else:
             matrix[0,0] = abs(matrix[0, branch_node])
 
-        matrix[branch_node,branch_node] = min(abs(matrix[0, branch_node]), abs(matrix[branch_node-1, branch_node]))
+        matrix[branch_node,branch_node] = min(abs(matrix[0, branch_node]), abs(matrix[branch_node-1, branch_node]), matrix[branch_node,branch_node])
 
         if abs(matrix[-1, -1]) < matrix[-1, -2]:
             mem_bounded_out = True
@@ -162,7 +162,8 @@ class BaseLayer():
         else:
             assert False, "Failed to move backwards on Γ matrix for input 1"
 
-        assert branch_ratio == abs(matrix[0,branch_node])/abs(matrix[branch_node-1,branch_node]), "Problem with the graph balancing"
+        assert abs(matrix[0,branch_node]) == abs(matrix[branch_node-1,branch_node]), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
+        assert abs(matrix[0,branch_node]) == abs(matrix[branch_node,branch_node]), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
 
         return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
 

@@ -93,7 +93,7 @@ class ElementWiseLayer(BaseLayer):
         
         return dp_info
 
-    def get_design_point(self, coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
+    def get_design_point(self, coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
         self.update_layer()
 
 
@@ -103,12 +103,12 @@ class ElementWiseLayer(BaseLayer):
             bnds = ((lower_bound, 1), (0.001, mem_bw_in_1), (0.001, mem_bw_in_2), (0.001, mem_bw_out))   
             result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
             if result.success:
-                coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out = result.x
+                coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out = result.x
             else:
                 print("Failed to optimize. Skipping...")
                 return
 
-        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarseinout) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in1, coarse_in2, coarse_out) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
@@ -119,6 +119,7 @@ class ElementWiseLayer(BaseLayer):
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
         if DEBUG:
@@ -139,25 +140,25 @@ class ElementWiseLayer(BaseLayer):
             
         if self.type == 'Add':
             if self.parrallel_dims == 'C':
-                max_parallel_adds = math.ceil(final_channel  * coarseinout)
+                max_parallel_adds = math.ceil(final_channel  * coarse_in1)
                 max_parallel_muls = 0
             elif self.parrallel_dims == 'HWDC':
-                max_parallel_adds = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout)
+                max_parallel_adds = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1)
                 max_parallel_muls = 0
         elif self.type == 'Mul':
             if self.parrallel_dims == 'C':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel  * coarseinout)
+                max_parallel_muls = math.ceil(final_channel  * coarse_in1)
             elif self.parrallel_dims == 'HWDC':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout)
+                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1)
         elif self.type == 'Div':
             if self.parrallel_dims == 'C':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * coarseinout) * 2
+                max_parallel_muls = math.ceil(final_channel * coarse_in1) * 2
             elif self.parrallel_dims == 'HWDC':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout) * 2
+                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1) * 2
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
         total_ops = self.get_total_workload()
@@ -179,7 +180,7 @@ class ElementWiseLayer(BaseLayer):
             self.mem_bd_in_2 = mem_bounded_in_2
             self.mem_bd_out = mem_bounded_out
 
-            config = [coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
+            config = [coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
@@ -190,7 +191,7 @@ class ElementWiseLayer(BaseLayer):
             self.throughput_vols = thr_out
 
             if DEBUG:
-                print("f={}, bwin1={}, bwin2={}, bwout={}, latency={}, muls={}, dsps={}, boundin1={}, boundin2={}, boundout={}".format(coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, int(latency_cycles), max_parallel_muls, dsps_util, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out))
+                print("cin1={}, cin2={}, cout={}, bwin1={}, bwin2={}, bwout={}, latency={}, muls={}, dsps={}, boundin1={}, boundin2={}, boundout={}".format(coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out, int(latency_cycles), max_parallel_muls, dsps_util, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out))
                 print("*"*40)
         else:
             self.update_layer()
@@ -200,13 +201,13 @@ class ElementWiseLayer(BaseLayer):
         return self.get_dp_info()
 
     def get_latency(self, params):
-        coarseinout, mem_bw_in_1, mem_bw_in_2, mem_bw_out = params
-        if not (coarseinout>0 and mem_bw_in_1>0 and mem_bw_in_2>0 and mem_bw_out>0):
+        coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out = params
+        if not (coarse_in1>0 and coarse_in2>0 and coarse_out>0 and mem_bw_in_1>0 and mem_bw_in_2>0 and mem_bw_out>0):
             return 1000000000000
-        if (coarseinout>1):
+        if (coarse_in1>1 or coarse_in2>1 or coarse_out>1):
             return 1000000000000
 
-        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarseinout) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in1, coarse_in2, coarse_out) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
@@ -237,25 +238,25 @@ class ElementWiseLayer(BaseLayer):
             
         if self.type == 'Add':
             if self.parrallel_dims == 'C':
-                max_parallel_adds = math.ceil(final_channel  * coarseinout)
+                max_parallel_adds = math.ceil(final_channel  * coarse_in1)
                 max_parallel_muls = 0
             elif self.parrallel_dims == 'HWDC':
-                max_parallel_adds = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout)
+                max_parallel_adds = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1)
                 max_parallel_muls = 0
         elif self.type == 'Mul':
             if self.parrallel_dims == 'C':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel  * coarseinout)
+                max_parallel_muls = math.ceil(final_channel  * coarse_in1)
             elif self.parrallel_dims == 'HWDC':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout)
+                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1)
         elif self.type == 'Div':
             if self.parrallel_dims == 'C':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * coarseinout) * 2
+                max_parallel_muls = math.ceil(final_channel * coarse_in1) * 2
             elif self.parrallel_dims == 'HWDC':
                 max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarseinout) * 2
+                max_parallel_muls = math.ceil(final_channel * final_depth * final_columns * final_rows * coarse_in1) * 2
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
 
@@ -295,7 +296,7 @@ class ElementWiseLayer(BaseLayer):
             print("R:\n{}".format(rate_matrix))
         return rate_matrix
 
-    def get_stream_matrix(self, coarseinout):
+    def get_stream_matrix(self, coarse_in1, coarse_in2, coarse_out):
         stream_matrix = np.zeros( shape=(3,4) , dtype=float )
 
         if self.broadcasting:
@@ -310,27 +311,28 @@ class ElementWiseLayer(BaseLayer):
         
         stream_matrix[0, 0] = 1
         if self.parrallel_dims == 'C':
-            stream_matrix[0, 2] = math.ceil(channels_1 * coarseinout)
+            stream_matrix[0, 2] = math.ceil(channels_1 * coarse_in1)
         elif self.parrallel_dims == 'HWDC':
-            stream_matrix[0, 2] = math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout)
+            stream_matrix[0, 2] = math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarse_in1)
 
-        #TODO: Add a second factor here for the branch ONLY when there is a broadcasting in place
         stream_matrix[1, 1] = 1
         if self.parrallel_dims == 'C':
-            if self.broadcasting:
-                stream_matrix[1, 2] = channels_2
-            else:
-                stream_matrix[1, 2] = math.ceil(channels_2 * coarseinout)
+            stream_matrix[1, 2] = math.ceil(channels_2 * coarse_in2)
+            # if self.broadcasting:
+            #     stream_matrix[1, 2] = channels_2
+            # else:
+            #     stream_matrix[1, 2] = math.ceil(channels_2 * coarseinout)
         elif self.parrallel_dims == 'HWDC':
-            if self.broadcasting:
-                stream_matrix[1, 2] = min(channels_2, math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout))
-            else:
-                stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
+            stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarse_in2)
+            # if self.broadcasting:
+            #     stream_matrix[1, 2] = min(channels_2, math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout))
+            # else:
+            #     stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
 
         if self.parrallel_dims == 'C':
-            stream_matrix[2, 2] = math.ceil(self.filters * coarseinout)
+            stream_matrix[2, 2] = math.ceil(self.filters * coarse_out)
         elif self.parrallel_dims == 'HWDC':
-            stream_matrix[2, 2] = math.ceil(self.filters * self.depth_out * self.cols_out * self.rows_out * coarseinout)
+            stream_matrix[2, 2] = math.ceil(self.filters * self.depth_out * self.cols_out * self.rows_out * coarse_out)
 
         stream_matrix[2, 3] = 1
 

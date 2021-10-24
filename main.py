@@ -6,7 +6,7 @@ from fpgaHART.onnx_parser.partition_descriptor import PartitionDescriptor
 from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
 from fpgaHART.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpgaHART.layers.gap import GAPLayer
-from fpgaHART.primitive_blocks.elemwise import ElementWiseLayer
+from fpgaHART.layers.elemwise import ElementWiseLayer
 from fpgaHART.utils import utils
 from fpgaHART.partitions.partition_compose import PartitionComposer
 import itertools
@@ -37,7 +37,8 @@ if __name__ == '__main__':
     args = parse_args()
 
     composer = PartitionComposer(args.model_name, args.optimization, args.singlethreaded, args.plot_layers)
-    composer.parser()
+    composer.model_individual_layers()
+    # composer.parser()
     exit()
     # OnnxModelParser(args.model_name)
     # ModelLayerDescriptor(args.model_name)
@@ -79,7 +80,7 @@ if __name__ == '__main__':
             min_latency = 1000000000000
             best = []
             if not args.singlethreaded:
-                processes_pool = Pool(4)
+                processes_pool = Pool(8)
                 input_vars = []
                 for (f, c1, c2, (bw_in, bw_out)) in combinations:
                     input_vars.append([f, c1, c2, conv.mem_words_per_cycle*bw_in, conv.mem_words_per_cycle*bw_out])
@@ -167,7 +168,7 @@ if __name__ == '__main__':
             min_latency = 1000000000000
             best = []
             if not args.singlethreaded:
-                processes_pool = Pool(4)
+                processes_pool = Pool(8)
                 input_vars = []
                 for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
                     input_vars.append([gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out])
@@ -235,7 +236,7 @@ if __name__ == '__main__':
                     best = []
 
                     if not args.singlethreaded:
-                        processes_pool = Pool(4)
+                        processes_pool = Pool(8)
                         input_vars = []
                         for (f, c1, c2, (bw_in, bw_out)) in combinations:
                             input_vars.append([f, c1, c2, conv.mem_words_per_cycle*bw_in, conv.mem_words_per_cycle*bw_out])
@@ -303,7 +304,7 @@ if __name__ == '__main__':
                     min_latency = 1000000000000
                     best = []
                     if not args.singlethreaded:
-                        processes_pool = Pool(4)
+                        processes_pool = Pool(8)
                         input_vars = []
                         for (cin, cout, (bw_in, bw_out)) in combinations:
                             input_vars.append([cin, cout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out])
@@ -370,7 +371,7 @@ if __name__ == '__main__':
                     min_latency = 10000000000
                     best = []
                     if not args.singlethreaded:
-                        processes_pool = Pool(4)
+                        processes_pool = Pool(8)
                         input_vars = []
                         for (cinout, (bw_in_1, bw_in_2, bw_out)) in combinations:
                             input_vars.append([cinout, elemwise.mem_words_per_cycle*bw_in_1, elemwise.mem_words_per_cycle*bw_in_2, elemwise.mem_words_per_cycle*bw_out])
@@ -429,7 +430,7 @@ if __name__ == '__main__':
             min_latency = 10000000000
             best = []
             if not args.singlethreaded:
-                processes_pool = Pool(4)
+                processes_pool = Pool(8)
                 input_vars = []
                 for (cin, cout, (bw_in, bw_out)) in combinations:
                     input_vars.append([cin, cout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out])
@@ -495,7 +496,7 @@ if __name__ == '__main__':
             min_latency = 10000000000
             best = []
             if not args.singlethreaded:
-                processes_pool = Pool(4)
+                processes_pool = Pool(8)
                 input_vars = []
                 for (cinout, (bw_in_1, bw_in_2, bw_out)) in combinations:
                     input_vars.append([cinout, elemwise.mem_words_per_cycle*bw_in_1, elemwise.mem_words_per_cycle*bw_in_2, elemwise.mem_words_per_cycle*bw_out])

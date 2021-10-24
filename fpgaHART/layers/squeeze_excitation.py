@@ -5,7 +5,7 @@ from scipy.optimize import NonlinearConstraint, Bounds
 from .base_layer import BaseLayer
 from .convolutional_3d import Convolutional3DLayer
 from .gap import GAPLayer
-from ..primitive_blocks.elemwise import ElementWiseLayer
+from .elemwise import ElementWiseLayer
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide='ignore', invalid='ignore')
 
