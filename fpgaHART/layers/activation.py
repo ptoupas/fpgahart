@@ -86,6 +86,11 @@ class ActivationLayer(BaseLayer):
         
         return dp_info
 
+    def get_num_streams(self):
+        self.max_streams_in = self.channels * self.depth_in * self.rows_in * self.cols_in
+        self.max_streams_out = self.channels * self.depth_in * self.rows_in * self.cols_in
+        return self.max_streams_in, self.max_streams_out
+
     def get_design_point(self, coarse_inout, mem_bw_in, mem_bw_out):
         self.update_layer()
 

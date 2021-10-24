@@ -93,6 +93,26 @@ class ElementWiseLayer(BaseLayer):
         
         return dp_info
 
+    def get_num_streams(self):
+        if self.broadcasting:
+            full_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            reduced_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) < int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+        else:
+            full_shape = self.input_shape_1
+            reduced_shape = self.input_shape_1
+        _, channels_1, depth_1, rows_1, cols_1 = full_shape
+        _, channels_2, depth_2, rows_2, cols_2 = reduced_shape
+
+        if self.parrallel_dims == 'C':
+            self.max_streams_in_1 = channels_1
+            self.max_streams_in_2 = channels_2
+            self.max_streams_out = self.filters
+        elif self.parrallel_dims == 'HWDC':
+            self.max_streams_in_1 = channels_1 * depth_1 * rows_1 * cols_1
+            self.max_streams_in_2 = channels_2 * depth_2 * rows_2 * cols_2
+            self.max_streams_out = self.filters * self.depth_out * self.cols_out * self.rows_out
+        return self.max_streams_in_1, self.max_streams_in_2, self.max_streams_out
+
     def get_design_point(self, coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
         self.update_layer()
 

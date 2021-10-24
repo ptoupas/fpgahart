@@ -92,6 +92,11 @@ class Convolutional3DLayer(BaseLayer):
         
         return dp_info
 
+    def get_num_streams(self):
+        self.max_streams_in = self.channels
+        self.max_streams_out = self.filters
+        return self.max_streams_in, self.max_streams_out
+
     def get_design_point(self, f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out):
         self.update_layer()
 

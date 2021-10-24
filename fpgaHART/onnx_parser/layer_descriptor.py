@@ -28,10 +28,14 @@ class ModelLayerDescriptor(OnnxModelParser):
             operation = self.torch_layers[k]['operation']
             input_shape = [self.torch_layers[k]['input'][0]]
             output_shape = self.torch_layers[k]['output']
+            input_node = [self.torch_layers[k]['input_id'][0]]
+            output_node = self.torch_layers[k]['output_id']
 
             self.layers[name] = {"operation": operation,
                                  "shape_in": input_shape,
                                  "shape_out": output_shape,
+                                 "node_in": input_node,
+                                 "node_out": output_node,
                                  "branching": False}
 
             if operation == 'Conv':
@@ -51,7 +55,8 @@ class ModelLayerDescriptor(OnnxModelParser):
                 self.layers[name]['bias'] = self.torch_layers[k]['bias']
 
             if operation == 'Add' or operation == 'Mul' or operation == 'MatMul':
-                input_shape.append(self.torch_layers[k]['input'][0])
+                self.layers[name]['shape_in'].append(self.torch_layers[k]['input'][1])
+                self.layers[name]['node_in'].append(self.torch_layers[k]['input_id'][1])
                 if self.model_name == 'x3d_m' and operation == 'MatMul':
                     self.layers[name]['kernel'] = self.torch_layers[k]['kernel']
 
@@ -65,23 +70,33 @@ class ModelLayerDescriptor(OnnxModelParser):
                   sigmoid_name = swish_module[0][1]
                   operation = self.torch_layers[sigmoid_name]['operation']
                   input_shape = [self.torch_layers[sigmoid_name]['input'][0]]
+                  input_node = [self.torch_layers[sigmoid_name]['input_id'][0]]
                   swish_input_shape = input_shape
+                  swish_input_node = input_node
                   output_shape = self.torch_layers[sigmoid_name]['output']
+                  output_node = self.torch_layers[sigmoid_name]['output_id']
 
                   sigmoid = {"operation": operation,
                              "shape_in": input_shape,
                              "shape_out": output_shape,
+                             "node_in": input_node,
+                             "node_out": output_node,
                              "branching": False}
 
                   mul_name = swish_module[1][1]
                   operation = self.torch_layers[mul_name]['operation']
                   input_shape = self.torch_layers[mul_name]['input']
+                  input_node = self.torch_layers[mul_name]['input_id']
                   output_shape = self.torch_layers[mul_name]['output']
+                  output_node = self.torch_layers[mul_name]['output_id']
                   swish_output_shape = output_shape
+                  swish_output_node = output_node
 
                   mul = {"operation": operation,
                          "shape_in": input_shape,
                          "shape_out": output_shape,
+                         "node_in": input_node,
+                         "node_out": output_node,
                          "branching": False}
 
                   name = 'Swish_' + swish_module[0][1].split('_')[1]
@@ -89,6 +104,8 @@ class ModelLayerDescriptor(OnnxModelParser):
                   self.layers[name] = {"operation": operation,
                                         "shape_in": swish_input_shape,
                                         "shape_out": swish_output_shape,
+                                        "node_in": swish_input_node,
+                                        "node_out": swish_output_node,
                                         "shape_branch": swish_input_shape,
                                         "branching": True,
                                         "primitive_ops": {
@@ -106,22 +123,31 @@ class ModelLayerDescriptor(OnnxModelParser):
                 gap_name = se_module[0][1]
                 operation = self.torch_layers[gap_name]['operation']
                 input_shape = [self.torch_layers[gap_name]['input'][0]]
+                input_node = [self.torch_layers[gap_name]['input_id'][0]]
                 se_input_shape = input_shape
+                se_input_node = input_node
                 output_shape = self.torch_layers[gap_name]['output']
+                output_node = self.torch_layers[gap_name]['output_id']
 
                 gap = {"operation": operation,
                        "shape_in": input_shape,
                        "shape_out": output_shape,
+                       "node_in": input_node,
+                       "node_out": output_node,
                        "branching": False}
 
                 conv1_name = se_module[1][1]
                 operation = self.torch_layers[conv1_name]['operation']
                 input_shape = [self.torch_layers[conv1_name]['input'][0]]
+                input_node = [self.torch_layers[conv1_name]['input_id'][0]]
                 output_shape = self.torch_layers[conv1_name]['output']
+                output_node = self.torch_layers[conv1_name]['output_id']
 
                 conv1 = {"operation": operation,
                          "shape_in": input_shape,
                          "shape_out": output_shape,
+                         "node_in": input_node,
+                         "node_out": output_node,
                          "kernel": self.torch_layers[conv1_name]['kernel'],
                          "bias": self.torch_layers[conv1_name]['bias'],
                          "padding": self.torch_layers[conv1_name]['padding'],
@@ -133,21 +159,29 @@ class ModelLayerDescriptor(OnnxModelParser):
                 relu_name = se_module[2][1]
                 operation = self.torch_layers[relu_name]['operation']
                 input_shape = [self.torch_layers[relu_name]['input'][0]]
+                input_node = [self.torch_layers[relu_name]['input_id'][0]]
                 output_shape = self.torch_layers[relu_name]['output']
+                output_node = self.torch_layers[relu_name]['output_id']
 
                 relu = {"operation": operation,
                         "shape_in": input_shape,
                         "shape_out": output_shape,
+                        "node_in": input_node,
+                        "node_out": output_node,
                         "branching": False}
 
                 conv2_name = se_module[3][1]
                 operation = self.torch_layers[conv2_name]['operation']
                 input_shape = [self.torch_layers[conv2_name]['input'][0]]
+                input_node = [self.torch_layers[conv2_name]['input_id'][0]]
                 output_shape = self.torch_layers[conv2_name]['output']
+                output_node = self.torch_layers[conv2_name]['output_id']
 
                 conv2 = {"operation": operation,
                          "shape_in": input_shape,
                          "shape_out": output_shape,
+                         "node_in": input_node,
+                         "node_out": output_node,
                          "kernel": self.torch_layers[conv2_name]['kernel'],
                          "bias": self.torch_layers[conv2_name]['bias'],
                          "padding": self.torch_layers[conv2_name]['padding'],
@@ -159,23 +193,32 @@ class ModelLayerDescriptor(OnnxModelParser):
                 sigmoid_name = se_module[4][1]
                 operation = self.torch_layers[sigmoid_name]['operation']
                 input_shape = [self.torch_layers[sigmoid_name]['input'][0]]
+                input_node = [self.torch_layers[sigmoid_name]['input_id'][0]]
                 output_shape = self.torch_layers[sigmoid_name]['output']
+                output_node = self.torch_layers[sigmoid_name]['output_id']
                 se_branch_shape = output_shape
 
                 sigmoid = {"operation": operation,
                            "shape_in": input_shape,
                            "shape_out": output_shape,
+                           "node_in": input_node,
+                           "node_out": output_node,
                            "branching": False}
 
                 mul_name = se_module[5][1]
                 operation = self.torch_layers[mul_name]['operation']
                 input_shape = self.torch_layers[mul_name]['input']
+                input_node = self.torch_layers[mul_name]['input_id']
                 output_shape = self.torch_layers[mul_name]['output']
+                output_node = self.torch_layers[mul_name]['output_id']
                 se_output_shape = output_shape
+                se_output_node = output_node
 
                 mul = {"operation": operation,
                        "shape_in": input_shape,
                        "shape_out": output_shape,
+                       "node_in": input_node,
+                       "node_out": output_node,
                        "branching": False}
 
                 name = 'Se_' + se_module[0][1].split('_')[1]
@@ -183,6 +226,8 @@ class ModelLayerDescriptor(OnnxModelParser):
                 self.layers[name] = {"operation": operation,
                                       "shape_in": se_input_shape,
                                       "shape_out": se_output_shape,
+                                      "node_in": se_input_node,
+                                      "node_out": se_output_node,
                                       "shape_branch": se_branch_shape,
                                       "branching": True,
                                       "primitive_ops": {

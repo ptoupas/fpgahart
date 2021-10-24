@@ -6,6 +6,7 @@ from .base_layer import BaseLayer
 from .convolutional_3d import Convolutional3DLayer
 from .gap import GAPLayer
 from .elemwise import ElementWiseLayer
+from .activation import ActivationLayer
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -29,7 +30,6 @@ class SqueezeExcitationLayer(BaseLayer):
             elif l_se['operation'] == 'Conv':
                 self.sequencial[n_se] = Convolutional3DLayer(l_se, optimization)
             elif l_se['operation'] == 'Relu' or l_se['operation'] == 'Sigmoid':
-                continue
                 self.sequencial[n_se] = ActivationLayer(l_se, optimization)
             elif l_se['operation'] == 'Mul':
                 self.sequencial[n_se] = ElementWiseLayer(l_se, optimization)
@@ -79,7 +79,14 @@ class SqueezeExcitationLayer(BaseLayer):
         
         return dp_info
 
-    def get_design_point(self, f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out):
+    def get_num_streams(self):
+        #TODO: Define the max_streams for input 1 and 2 as well as for the output.
+        self.max_streams_in_1 = 1
+        self.max_streams_in_2 = 1
+        self.max_streams_out = 1 
+        return self.max_streams_in_1, self.max_streams_in_2, self.max_streams_out
+
+    def get_design_point(self, f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_relu_cinout, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_sigm_cinout, f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in, mem_bw_out):
         self.update_layer()
 
         #TODO: Add an extra connection to the graph for the 2nd input of MUL operation ADD mem_bw_in1 and mem_bw_in2
@@ -95,23 +102,30 @@ class SqueezeExcitationLayer(BaseLayer):
         prev_layer_rate = mem_bw_in
 
         #TODO: Find a way to discriminate between different layers to pass them the correct configuration 
-        for n, l in enumerate(self.sequencial.keys()):
+        for n, l in enumerate(self.sequencial.values()):
             if n == len(self.sequencial) - 1:
                 curr_layer_rate = mem_bw_out
             else:
                 curr_layer_rate = 10000000
             
-            if n==0:
-                dp_info = self.sequencial[l].get_design_point(f_gap_coarsein, f_gap_coarseout, prev_layer_rate, curr_layer_rate)
-            elif n==1:
-                dp_info = self.sequencial[l].get_design_point(f_fine_1, f_coarseIn_1, f_coarseOut_1, prev_layer_rate, curr_layer_rate)
-            elif n==2:
-                dp_info = self.sequencial[l].get_design_point(f_fine_2, f_coarseIn_2, f_coarseOut_2, prev_layer_rate, curr_layer_rate)
-            elif n==3:
-                dp_info = self.sequencial[l].get_design_point(f_mul_coarseinout, mem_bw_in, prev_layer_rate, curr_layer_rate)
+            if isinstance(l, GAPLayer):
+                dp_info = l.get_design_point(f_gap_coarsein, f_gap_coarseout, prev_layer_rate, curr_layer_rate)
+                first_layer_bw_in = dp_info['memBoundedIn1']
+            elif isinstance(l, Convolutional3DLayer):
+                if n == 1:
+                    dp_info = l.get_design_point(f_fine_1, f_coarseIn_1, f_coarseOut_1, prev_layer_rate, curr_layer_rate)
+                elif n == 2:
+                    dp_info = l.get_design_point(f_fine_2, f_coarseIn_2, f_coarseOut_2, prev_layer_rate, curr_layer_rate)
+            elif isinstance(l, ActivationLayer):
+                if l.activation_type == 'Relu':
+                    dp_info = l.get_design_point(f_relu_cinout, prev_layer_rate, curr_layer_rate)
+                elif l.activation_type == 'Sigmoid':
+                    dp_info = l.get_design_point(f_sigm_cinout, prev_layer_rate, curr_layer_rate)
+            elif isinstance(l, ElementWiseLayer):
+                dp_info = l.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in, prev_layer_rate, curr_layer_rate)
             
 
-            if n==3:
+            if isinstance(l, ElementWiseLayer):
                 full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
                 # gamma_matrix[0, n+1] = -full_rate_in_1
                 gamma_matrix[n, n+1] = -full_rate_in_2
@@ -121,20 +135,23 @@ class SqueezeExcitationLayer(BaseLayer):
                 gamma_matrix[n, n+1] = -full_rate_in
                 gamma_matrix[n+1, n+1] = full_rate_out
 
-            if not dp_info['config']:
-                self.update_layer()
-                if DEBUG:
-                    print("Discarding design point.")
-                return self.get_dp_info()
-
-            if n==0:
-               first_layer_bw_in = mem_bd_in
             prev_layer_rate = full_rate_out
 
             total_muls += muls
             total_adds += adds
             total_memory += memory
             total_depth += depth
+
+            mem_kb = (total_memory * self.word_bytes) / 1e3
+            mem_bram = math.ceil(mem_kb / self.bram_bytes)
+            curr_bram_util = (mem_bram / self.bram) * 100
+            curr_dsps_util = (total_muls/self.dsp)*100
+
+            if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 90.:
+                self.update_layer()
+                if DEBUG:
+                    print("Discarding design point.")
+                return self.get_dp_info()
 
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
@@ -171,7 +188,7 @@ class SqueezeExcitationLayer(BaseLayer):
             self.mem_bd_out = mem_bounded_out
 
             #TODO: Add 2nd input
-            config = [f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_mul_coarseinout, mem_bw_in, mem_bw_out]
+            config = [f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_relu_cinout, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_sigm_cinout, f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in, mem_bw_out]
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util

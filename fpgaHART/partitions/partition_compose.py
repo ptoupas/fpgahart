@@ -1,12 +1,19 @@
 from ..onnx_parser.partition_descriptor import PartitionDescriptor
+from ..layers.convolutional_3d import Convolutional3DLayer
+from ..layers.batchnorm_3d import BatchNorm3DLayer
+from ..layers.squeeze_excitation import SqueezeExcitationLayer
+from ..layers.gap import GAPLayer
+from ..layers.elemwise import ElementWiseLayer
+from ..layers.activation import ActivationLayer
 from .layer_compose import layer_compose
 from ..utils import utils
 import os
 import csv
+import itertools
 
 class PartitionComposer():
     def __init__(self, model_name, optimization, singlethreaded, per_layer_plot):
-        self.se_full = False
+        self.se_full = True
         self.model_name = model_name
         self.optimization = optimization
         self.singlethreaded = singlethreaded
@@ -15,7 +22,10 @@ class PartitionComposer():
 
         if not os.path.exists(os.path.join(os.getcwd(), 'fpga_modeling_reports')):
             os.makedirs(os.path.join(os.getcwd(), 'fpga_modeling_reports'))
-        self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '.csv')
+        if self.se_full:
+            self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '.csv')
+        else:
+            self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_complete.csv')
 
         with open(self.layer_model_file, mode='w') as layer_dp:
             csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -24,14 +34,7 @@ class PartitionComposer():
     def model_partition(self, partition):
         #TODO: This will NOT call the model layer but will read instead from the csv file all the valid configurations for each layer and find all the combinations for each partition
         for layer in partition:
-            if self.se_full:
-                self.model_layer(layer, self.model_descriptor.layers[layer])
-            else:
-                if self.model_descriptor.layers[layer]['operation'] == 'SqueezeExcitation':
-                    for sub_layer, sub_description in self.model_descriptor.layers[layer]['primitive_ops'].items():
-                        self.model_layer(layer + '_' + sub_layer, sub_description)
-                else:
-                    self.model_layer(layer, self.model_descriptor.layers[layer])
+            pass
 
     def model_layer(self, layer, layer_description):
         print("Modeling {} layer...".format(layer))
@@ -52,7 +55,7 @@ class PartitionComposer():
             else:
                 if descriptor['operation'] == 'SqueezeExcitation':
                     for sub_layer, sub_description in descriptor['primitive_ops'].items():
-                        self.model_layer(name + '_' + sub_layer, sub_description)
+                        self.model_layer(sub_layer, sub_description)
                 else:
                     self.model_layer(name, descriptor)
 

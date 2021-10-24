@@ -1,8 +1,16 @@
+from ..layers.convolutional_3d import Convolutional3DLayer
+from ..layers.batchnorm_3d import BatchNorm3DLayer
+from ..layers.squeeze_excitation import SqueezeExcitationLayer
+from ..layers.gap import GAPLayer
+from ..layers.elemwise import ElementWiseLayer
+from ..layers.activation import ActivationLayer
 import os
+import math
 from matplotlib import pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+import json
 
 sns.set(rc={'figure.figsize':(15,8)})
 sns.set_style("whitegrid")
@@ -118,3 +126,75 @@ def plot_layers_csv(file_name, model_name, calculate_pareto=True, xaxis='volumes
         file_name = l + '.jpg'
         plt.savefig(os.path.join(plot_dir, file_name))
         plt.clf()
+
+def get_config_points(name, file_name):
+    layers_df = pd.read_csv(file_name)
+
+    curr_layer_df = layers_df.loc[layers_df['Layer'] == name].reset_index()
+
+    return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
+
+def check_configuration_validation(config, layers):
+    valid = True
+
+    layer_graph = {}
+    for i, layer in enumerate(layers.values()):
+        input_streams = []
+        if isinstance(layer['layer'], Convolutional3DLayer):
+            streams_in, streams_out = layer['layer'].get_num_streams()
+            streams_in = math.ceil(streams_in * config[i][1])
+            streams_out = math.ceil(streams_out * config[i][2])
+            input_streams.append(streams_in)
+        elif isinstance(layer['layer'], BatchNorm3DLayer):
+            streams_in, streams_out = layer['layer'].get_num_streams()
+            streams_in = math.ceil(streams_in * config[i][0])
+            streams_out = math.ceil(streams_out * config[i][0])
+            input_streams.append(streams_in)
+        elif isinstance(layer['layer'], GAPLayer):
+            streams_in, streams_out = layer['layer'].get_num_streams()
+            streams_in = math.ceil(streams_in * config[i][0])
+            streams_out = math.ceil(streams_out * config[i][1])
+            input_streams.append(streams_in)
+        elif isinstance(layer['layer'], ActivationLayer):
+            streams_in, streams_out = layer['layer'].get_num_streams()
+            streams_in = math.ceil(streams_in * config[i][0])
+            streams_out = math.ceil(streams_out * config[i][0])
+            input_streams.append(streams_in)
+        elif isinstance(layer['layer'], SqueezeExcitationLayer):
+            print("config for layer {} -> {}".format(name, comb[i]))
+        elif isinstance(layer['layer'], ElementWiseLayer):
+            streams_in1, streams_in2, streams_out = layer['layer'].get_num_streams()
+            streams_in1 = math.ceil(streams_in1 * config[i][0])
+            streams_in2 = math.ceil(streams_in2 * config[i][1])
+            streams_out = math.ceil(streams_out * config[i][2])
+            input_streams.append(streams_in1)
+            input_streams.append(streams_in2)
+        else:
+            assert False, "Layer {} is not yet supported".format(name)
+        
+        if i not in layer_graph.keys():
+            layer_graph[i] = {}
+        layer_graph[i]['node_in'] = layer['node_in']
+        layer_graph[i]['node_out'] = layer['node_out']
+        layer_graph[i]['streams_in'] = input_streams
+        layer_graph[i]['streams_out'] = streams_out
+
+    input_node = layer_graph[list(layer_graph.keys())[0]]['node_in']
+    output_node = layer_graph[list(layer_graph.keys())[-1]]['node_out']
+    for n, v in layer_graph.items():
+        for nd_in, strm_in in zip(v['node_in'], v['streams_in']):
+            if nd_in in input_node:
+                continue
+            if strm_in > get_out_streams(layer_graph, nd_in):
+                valid = False
+                break
+        if not valid:
+            break
+
+    return valid
+
+def get_out_streams(layer_graph, node_out):
+    for v in layer_graph.values():
+        if v['node_out'] == node_out:
+            return v['streams_out']
+    assert False, "Cannot find node {} in the layer graph.".format(node_out)
