@@ -24,10 +24,15 @@ class PartitionComposer():
             os.makedirs(os.path.join(os.getcwd(), 'fpga_modeling_reports'))
         if self.se_full:
             self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '.csv')
+            self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_pareto.csv')
         else:
             self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_complete.csv')
+            self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_complete_pareto.csv')
 
         with open(self.layer_model_file, mode='w') as layer_dp:
+            csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow(["Layer", "Latency(C)", "Latency(S)", "GOP/s", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn1", "RateIn2", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "MemBoundIn1", "MemBoundIn2", "MemBoundOut", "config"])
+        with open(self.layer_model_file_par, mode='w') as layer_dp:
             csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(["Layer", "Latency(C)", "Latency(S)", "GOP/s", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn1", "RateIn2", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "MemBoundIn1", "MemBoundIn2", "MemBoundOut", "config"])
 
@@ -60,6 +65,7 @@ class PartitionComposer():
                     self.model_layer(name, descriptor)
 
         utils.drop_duplicates_csv(self.layer_model_file)
+        utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
         if self.per_layer_plot:
-            utils.plot_layers_csv(self.layer_model_file, self.model_name)
+            utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
 

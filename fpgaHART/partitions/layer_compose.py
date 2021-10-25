@@ -412,7 +412,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
 
     # print("Calculating {} design points for layer {}.".format(len(gap_coarsein)*len(gap_coarseout)*len(coarsein_1)*len(coarseout_1)*len(coarsein_2)*len(coarseout_2)*len(mul_coarseinout)*len(fine_1)*len(fine_2)*len(mem_bw), name))
 
-    se_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'x3d_m_complete.csv')
+    se_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'x3d_m_pareto_complete.csv')
 
     config_points = {}
     for n, d in description['primitive_ops'].items():

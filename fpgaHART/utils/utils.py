@@ -5,6 +5,7 @@ from ..layers.gap import GAPLayer
 from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
 import os
+import csv
 import math
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -133,6 +134,41 @@ def get_config_points(name, file_name):
     curr_layer_df = layers_df.loc[layers_df['Layer'] == name].reset_index()
 
     return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
+
+def get_paretto_csv(file_name_par, file_name, xaxis='volumes/s', yaxis='DSP(%)'):
+    
+    with open(file_name_par, mode='a') as pareto_results:
+        csv_writer_par = csv.writer(pareto_results, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        layers_df = pd.read_csv(file_name)
+
+        layers = layers_df['Layer'].unique()
+        for l in layers:
+            curr_df = layers_df.loc[layers_df['Layer'] == l].reset_index()
+            if not ('Conv' in l.split('_') or 'Se' in l.split('_')):
+                for ind in curr_df.index:
+                    csv_writer_par.writerow(curr_df.iloc[ind].to_list()[1:])
+            else:
+                print('Calculating pareto front for layer {}'.format(l))
+
+                x_axis = curr_df[xaxis].to_numpy()
+                y_axis = curr_df[yaxis].to_numpy()
+
+                scores = np.zeros((x_axis.shape[0], 2))
+                scores[:,0] = x_axis
+                scores[:,1] = y_axis
+
+                pareto = find_pareto(scores)
+                pareto_front = scores[pareto]
+
+                pareto_front_df = pd.DataFrame(pareto_front)
+                pareto_front_df.sort_values(0, inplace=True)
+                pareto_front = pareto_front_df.values
+
+                pareto = find_pareto(scores)
+                
+                for p in pareto:
+                    csv_writer_par.writerow(curr_df.iloc[p].to_list()[1:])
 
 def check_configuration_validation(config, layers):
     valid = True
