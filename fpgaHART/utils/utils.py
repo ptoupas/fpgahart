@@ -135,12 +135,20 @@ def plot_layers_csv(file_name, model_name, calculate_pareto=True, pareto_type='M
         plt.savefig(os.path.join(plot_dir, file_name))
         plt.clf()
 
-def get_config_points(name, file_name):
+def get_config_points(name, file_name, is_partitioning=False):
     layers_df = pd.read_csv(file_name)
 
     curr_layer_df = layers_df.loc[layers_df['Layer'] == name].reset_index()
 
-    return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
+    if not is_partitioning:
+        return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
+    else:
+        if 'BatchNormalization' in name.split('_') or 'Swish' in name.split('_'):
+            first_point = math.floor(len(curr_layer_df['config'])*0.25)
+            second_point = math.floor(len(curr_layer_df['config'])*0.75)
+            return [json.loads(curr_layer_df['config'][first_point]), json.loads(curr_layer_df['config'][second_point])]
+        else:
+            return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
 
 def get_paretto_csv(file_name_par, file_name, pareto_type='MinMin', xaxis='Latency(C)', yaxis='DSP(%)'):
     

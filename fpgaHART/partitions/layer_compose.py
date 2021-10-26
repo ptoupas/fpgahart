@@ -84,7 +84,7 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             for (f, c1, c2, (bw_in, bw_out)) in combinations:
                 input_vars.append([f, c1, c2, conv.mem_words_per_cycle*bw_in, conv.mem_words_per_cycle*bw_out])
@@ -162,7 +162,7 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             for (cinout, (bw_in, bw_out)) in combinations:
                 input_vars.append([cinout, bn.mem_words_per_cycle*bw_in, bn.mem_words_per_cycle*bw_out])
@@ -242,7 +242,7 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             for (cin, cout, (bw_in, bw_out)) in combinations:
                 input_vars.append([cin, cout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out])
@@ -322,7 +322,7 @@ def activation_compose(name, description, model_file, optimization, singlethread
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             for (cinout, (bw_in, bw_out)) in combinations:
                 input_vars.append([cinout, activ.mem_words_per_cycle*bw_in, activ.mem_words_per_cycle*bw_out])
@@ -437,7 +437,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             # for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
             #     input_vars.append([gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out])
@@ -495,11 +495,15 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
     is_broadcasting = elem.broadcasting
 
     if optimization == 'brute_force':
-        total_size = elem.channels_1*elem.depth_in_1*elem.rows_in_1*elem.cols_in_1
-        coarse_in1 = [(elem.channels_1/total_size)*0.1, (elem.channels_1/total_size)*0.25, (elem.channels_1/total_size)*0.5, elem.channels_1/total_size, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.1, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.25, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.5, (elem.depth_in_1 * elem.channels_1)/total_size, ((elem.depth_in_1 * elem.channels_1 * elem.rows_in_1)/total_size)*0.5]
+        if elem.type == 'Add':
+            coarse_in1 = [1]
+            coarse_in2 = [1]
+        else:
+            total_size = elem.channels_1*elem.depth_in_1*elem.rows_in_1*elem.cols_in_1
+            coarse_in1 = [(elem.channels_1/total_size)*0.1, (elem.channels_1/total_size)*0.25, (elem.channels_1/total_size)*0.5, elem.channels_1/total_size, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.1, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.25, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.5, (elem.depth_in_1 * elem.channels_1)/total_size, ((elem.depth_in_1 * elem.channels_1 * elem.rows_in_1)/total_size)*0.5]
 
-        total_size = elem.channels_2*elem.depth_in_2*elem.rows_in_2*elem.cols_in_2
-        coarse_in2 = [(elem.channels_2/total_size)*0.1, (elem.channels_2/total_size)*0.25, (elem.channels_2/total_size)*0.5, elem.channels_2/total_size, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.1, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.25, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.5, (elem.depth_in_2 * elem.channels_2)/total_size, ((elem.depth_in_2 * elem.channels_2 * elem.rows_in_2)/total_size)*0.5]
+            total_size = elem.channels_2*elem.depth_in_2*elem.rows_in_2*elem.cols_in_2
+            coarse_in2 = [(elem.channels_2/total_size)*0.1, (elem.channels_2/total_size)*0.25, (elem.channels_2/total_size)*0.5, elem.channels_2/total_size, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.1, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.25, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.5, (elem.depth_in_2 * elem.channels_2)/total_size, ((elem.depth_in_2 * elem.channels_2 * elem.rows_in_2)/total_size)*0.5]
     else:
         coarse_in1 = [1]
         coarse_in2 = [1]
@@ -525,7 +529,7 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
         csv_writer = csv.writer(layer_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
         if not singlethreaded:
-            processes_pool = Pool(8)
+            processes_pool = Pool(10)
             input_vars = []
             for (cin1, cin2, cout, (bw_in1, bw_in2, bw_out)) in combinations:
                 input_vars.append([cin1, cin2, cout, elem.mem_words_per_cycle*bw_in1, elem.mem_words_per_cycle*bw_in2, elem.mem_words_per_cycle*bw_out])

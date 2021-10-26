@@ -71,6 +71,7 @@ class PartitionComposer(BaseLayer):
     def get_design_point(self, sequencial, comb, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
         self.update_layer()
 
+        mem_bw_in_1, mem_bw_in_2, mem_bw_out = mem_bw_in_1*self.mem_words_per_cycle, mem_bw_in_2*self.mem_words_per_cycle, mem_bw_out*self.mem_words_per_cycle
         num_layers = len(sequencial) + 2
 
         gamma_matrix = np.zeros( shape=(num_layers-1, num_layers) , dtype=float )

@@ -13,6 +13,11 @@ import os
 import csv
 import itertools
 import numpy as np
+from multiprocessing import Pool
+
+def multithreaded_modeling(operation, input, pool):
+    results = pool.starmap(operation, input)
+    return results
 
 class PartitionParser():
     def __init__(self, model_name, optimization, singlethreaded, per_layer_plot, detailed):
@@ -58,7 +63,7 @@ class PartitionParser():
 
         config_points = {}
         for layer in partition:
-            config_points[layer] = utils.get_config_points(layer, self.layer_model_file_par)
+            config_points[layer] = utils.get_config_points(layer, self.layer_model_file_par, is_partitioning=True)
 
         total = []
         for c in config_points.values():
@@ -81,25 +86,51 @@ class PartitionParser():
         with open(self.partition_model_file, mode='a') as partition_dp:
             csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
-            for c in combinations:
-                r = self.partition_composer.get_design_point(sequencial, c, bw_in_1, bw_in_2, bw_out)
+            if not self.singlethreaded:
+                processes_pool = Pool(10)
+                input_vars = []
 
-                if r['config']:
-                    throughput_gops.append(r['GOP/s'])
-                    throughput_vols.append(r['vols/s'])
-                    latency.append(r['latency(C)'])
-                    dsp_util.append(r['DSP'])
-                    bram_util.append(r['BRAM'])
+                for c in combinations:
+                    input_vars.append([sequencial, c, bw_in_1, bw_in_2, bw_out])
+                results = multithreaded_modeling(self.partition_composer.get_design_point, input_vars, processes_pool)
+                processes_pool.close()
+                for r in results:
+                    if r['config']:
+                        throughput_gops.append(r['GOP/s'])
+                        throughput_vols.append(r['vols/s'])
+                        latency.append(r['latency(C)'])
+                        dsp_util.append(r['DSP'])
+                        bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                        csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
 
-                    if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                        min_latency = r['latency(C)']
-                        best = r
-                    elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                        if r['DSP'] < best['DSP']:
+                        if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                             min_latency = r['latency(C)']
                             best = r
+                        elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+                            if r['DSP'] < best['DSP']:
+                                min_latency = r['latency(C)']
+                                best = r
+            else:
+                for c in combinations:
+                    r = self.partition_composer.get_design_point(sequencial, c, bw_in_1, bw_in_2, bw_out)
+
+                    if r['config']:
+                        throughput_gops.append(r['GOP/s'])
+                        throughput_vols.append(r['vols/s'])
+                        latency.append(r['latency(C)'])
+                        dsp_util.append(r['DSP'])
+                        bram_util.append(r['BRAM'])
+
+                        csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+
+                        if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+                            min_latency = r['latency(C)']
+                            best = r
+                        elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+                            if r['DSP'] < best['DSP']:
+                                min_latency = r['latency(C)']
+                                best = r
         
             print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
             print("*"*40)
