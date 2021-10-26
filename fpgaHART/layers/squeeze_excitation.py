@@ -15,6 +15,7 @@ DEBUG=False
 class SqueezeExcitationLayer(BaseLayer):
     def __init__(self, description, optimization):
         super().__init__()
+
         self.optimization = optimization
 
         self.branching = description['branching']
@@ -55,6 +56,13 @@ class SqueezeExcitationLayer(BaseLayer):
         self.throughput_ops = 0
         self.throughput_vols = 0
 
+    def get_total_workload(self):
+        total_wl = 0
+        for n, l in enumerate(self.sequencial.keys()):
+            total_wl += self.sequencial[l].get_total_workload()
+
+        return total_wl
+
     def get_dp_info(self):
         dp_info = {}
 
@@ -81,9 +89,9 @@ class SqueezeExcitationLayer(BaseLayer):
 
     def get_num_streams(self):
         #TODO: Define the max_streams for input 1 and 2 as well as for the output.
-        self.max_streams_in_1 = 1
-        self.max_streams_in_2 = 1
-        self.max_streams_out = 1 
+        self.max_streams_in_1 = int(np.prod(np.array(self.input_shape[1:])))
+        self.max_streams_in_2 = int(np.prod(np.array(self.branch_shape[1:])))
+        self.max_streams_out = int(np.prod(np.array(self.output_shape[1:])))
         return self.max_streams_in_1, self.max_streams_in_2, self.max_streams_out
 
     def get_design_point(self, f_gap_coarsein, f_gap_coarseout, f_fine_1, f_coarseIn_1, f_coarseOut_1, f_relu_cinout, f_fine_2, f_coarseIn_2, f_coarseOut_2, f_sigm_cinout, f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in, mem_bw_out):
@@ -206,13 +214,7 @@ class SqueezeExcitationLayer(BaseLayer):
                 print("Discarding design point.")
 
         return self.get_dp_info()
-        
-    def get_total_workload(self):
-        total_wl = 0
-        for n, l in enumerate(self.sequencial.keys()):
-            total_wl += self.sequencial[l].get_total_workload()
 
-        return total_wl
 
     def get_workload_matrix(self):
         #TODO: Add an extra connection to the graph for the 2nd input of MUL operation

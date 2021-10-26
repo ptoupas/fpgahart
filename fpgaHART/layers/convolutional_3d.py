@@ -102,9 +102,6 @@ class Convolutional3DLayer(BaseLayer):
 
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
-        if self.depthwise:
-            self.channels = self.channels//self.groups
-
         if self.optimization == 'Powell':
             initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
             bnds = ((0.01, 1.0), (0.01, 1.0), (0.01, 1.0), (0.01, mem_bw_in), (0.01, mem_bw_out))   
@@ -145,6 +142,8 @@ class Convolutional3DLayer(BaseLayer):
         max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
         max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
         memory = init_buffer + kernel_elems * self.channels * self.filters
+        if self.depthwise:
+            memory = init_buffer + kernel_elems * self.filters
 
         if not self.depthwise:
             # Accumulation Depth
@@ -199,7 +198,7 @@ class Convolutional3DLayer(BaseLayer):
         else:
             self.update_layer()
             if DEBUG:
-                print("Discarding design point.")
+                print("Discarding design point. DSP = {:.2f} - BRAM = {:.2f}".format(dsps_util, bram_util))
 
         return self.get_dp_info()
 
@@ -229,6 +228,8 @@ class Convolutional3DLayer(BaseLayer):
 
         max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
         max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
+        if self.depthwise:
+            memory = init_buffer + kernel_elems * self.filters
         memory = init_buffer + kernel_elems * self.channels * self.filters
 
         if not self.depthwise:

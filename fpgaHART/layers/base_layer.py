@@ -32,7 +32,7 @@ class BaseLayer():
 
         dsps_util = (muls/self.dsp)*100
 
-        latency_cycles = np.max(np.abs(ii)) # + depth
+        latency_cycles = np.max(np.abs(ii)) + depth
         latency_sec = latency_cycles/self.cycles_per_sec
 
         thr_in = workload_matrix[0,0]/latency_sec       # Input words per second

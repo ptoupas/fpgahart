@@ -17,7 +17,7 @@ sns.set(rc={'figure.figsize':(15,8)})
 sns.set_style("whitegrid")
 
 
-def find_pareto(scores):
+def find_pareto(scores, domination_type='MaxMin'):
     # Count number of items
     population_size = scores.shape[0]
     # Create a NumPy index for scores on the pareto front (zero indexed)
@@ -31,16 +31,23 @@ def find_pareto(scores):
         for j in range(population_size):
             # Check if our 'i' pint is dominated by out 'j' point
             # print("[{}][0] = {}. [{}][0] = {}. [{}][1] = {}. [{}][1] = {}.".format(j, scores[j][0], i, scores[i][0], j, scores[j][1], i, scores[i][1]))
-            if (scores[j][0] >= scores[i][0] and scores[j][1] <= scores[i][1]) and (scores[j][0] > scores[i][0] or scores[j][1] < scores[i][1]):
-                # j dominates i. Label 'i' point as not on Pareto front
-                pareto_front[i] = 0
-                # Stop further comparisons with 'i' (no more comparisons needed)
-                break
+            if domination_type == 'MaxMin':
+                if (scores[j][0] >= scores[i][0] and scores[j][1] <= scores[i][1]) and (scores[j][0] > scores[i][0] or scores[j][1] < scores[i][1]):
+                    # j dominates i. Label 'i' point as not on Pareto front
+                    pareto_front[i] = 0
+                    # Stop further comparisons with 'i' (no more comparisons needed)
+                    break
+            elif domination_type == 'MinMin':
+                if (scores[j][0] <= scores[i][0] and scores[j][1] <= scores[i][1]) and (scores[j][0] < scores[i][0] or scores[j][1] < scores[i][1]):
+                    # j dominates i. Label 'i' point as not on Pareto front
+                    pareto_front[i] = 0
+                    # Stop further comparisons with 'i' (no more comparisons needed)
+                    break
     # Return ids of scenarios on pareto front
     return population_ids[pareto_front]
 
 
-def plot_graph(throughput_ops, throughput_vols, latency, dsp_util, bram_util, layer_name, model_name, calculate_pareto):
+def plot_graph(throughput_ops, throughput_vols, latency, dsp_util, bram_util, layer_name, model_name, calculate_pareto, pareto_type='MaxMin'):
     throughput = throughput_vols
     dsps_dir = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'graphs', model_name, 'throughput_dsps')
     if not os.path.exists(dsps_dir):
@@ -51,7 +58,7 @@ def plot_graph(throughput_ops, throughput_vols, latency, dsp_util, bram_util, la
         scores[:,0] = throughput
         scores[:,1] = dsp_util
 
-        pareto = find_pareto(scores)
+        pareto = find_pareto(scores, pareto_type)
         pareto_front = scores[pareto]
 
         pareto_front_df = pd.DataFrame(pareto_front)
@@ -92,8 +99,8 @@ def drop_duplicates_csv(file_name):
     os.remove(file_name)
     layers_df.to_csv(file_name, index=False)
 
-def plot_layers_csv(file_name, model_name, calculate_pareto=True, xaxis='volumes/s', yaxis='DSP(%)'):
-    plot_dir = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'graphs_csv', model_name, 'throughput_dsps')
+def plot_layers_csv(file_name, model_name, calculate_pareto=True, pareto_type='MaxMin', xaxis='volumes/s', yaxis='DSP(%)'):
+    plot_dir = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'graphs', model_name, 'throughput_dsps')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
 
@@ -112,7 +119,7 @@ def plot_layers_csv(file_name, model_name, calculate_pareto=True, xaxis='volumes
             scores[:,0] = x_axis
             scores[:,1] = y_axis
 
-            pareto = find_pareto(scores)
+            pareto = find_pareto(scores, pareto_type)
             pareto_front = scores[pareto]
 
             pareto_front_df = pd.DataFrame(pareto_front)
@@ -135,7 +142,7 @@ def get_config_points(name, file_name):
 
     return curr_layer_df['config'].apply(lambda x: json.loads(x)).to_list()
 
-def get_paretto_csv(file_name_par, file_name, xaxis='volumes/s', yaxis='DSP(%)'):
+def get_paretto_csv(file_name_par, file_name, pareto_type='MinMin', xaxis='Latency(C)', yaxis='DSP(%)'):
     
     with open(file_name_par, mode='a') as pareto_results:
         csv_writer_par = csv.writer(pareto_results, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -158,14 +165,12 @@ def get_paretto_csv(file_name_par, file_name, xaxis='volumes/s', yaxis='DSP(%)')
                 scores[:,0] = x_axis
                 scores[:,1] = y_axis
 
-                pareto = find_pareto(scores)
+                pareto = find_pareto(scores, pareto_type)
                 pareto_front = scores[pareto]
 
                 pareto_front_df = pd.DataFrame(pareto_front)
                 pareto_front_df.sort_values(0, inplace=True)
                 pareto_front = pareto_front_df.values
-
-                pareto = find_pareto(scores)
                 
                 for p in pareto:
                     csv_writer_par.writerow(curr_df.iloc[p].to_list()[1:])

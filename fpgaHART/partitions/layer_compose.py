@@ -138,7 +138,7 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
 
     if optimization == 'brute_force':
         total_size = bn.channels*bn.depth_in*bn.rows_in*bn.cols_in
-        coarse_inout = [(bn.channels/total_size)*0.25, (bn.channels/total_size)*0.5, bn.channels/total_size, ((bn.depth_in * bn.channels)/total_size)*0.1, ((bn.depth_in * bn.channels)/total_size)*0.25, ((bn.depth_in * bn.channels)/total_size)*0.5, (bn.depth_in * bn.channels)/total_size]
+        coarse_inout = [(bn.channels/total_size)*0.1, (bn.channels/total_size)*0.25, (bn.channels/total_size)*0.5, bn.channels/total_size, ((bn.depth_in * bn.channels)/total_size)*0.1, ((bn.depth_in * bn.channels)/total_size)*0.25, ((bn.depth_in * bn.channels)/total_size)*0.5, (bn.depth_in * bn.channels)/total_size]
     else:
         coarse_inout = [1]
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
@@ -216,7 +216,7 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
 
     if optimization == 'brute_force':
         total_size = gap.channels*gap.depth_in*gap.rows_in*gap.cols_in
-        coarse_in = [(gap.channels/total_size)*0.25, (gap.channels/total_size)*0.5, gap.channels/total_size, ((gap.depth_in * gap.channels)/total_size)*0.1, ((gap.depth_in * gap.channels)/total_size)*0.25, ((gap.depth_in * gap.channels)/total_size)*0.5, (gap.depth_in * gap.channels)/total_size]
+        coarse_in = [(gap.channels/total_size)*0.1, (gap.channels/total_size)*0.25, (gap.channels/total_size)*0.5, gap.channels/total_size, ((gap.depth_in * gap.channels)/total_size)*0.1, ((gap.depth_in * gap.channels)/total_size)*0.25, ((gap.depth_in * gap.channels)/total_size)*0.5, (gap.depth_in * gap.channels)/total_size]
         coarse_out = [1]
     else:
         coarse_in = [1]
@@ -298,7 +298,7 @@ def activation_compose(name, description, model_file, optimization, singlethread
             coarse_inout = [1]
         else:
             total_size = activ.channels*activ.depth_in*activ.rows_in*activ.cols_in
-            coarse_inout = [(activ.channels/total_size)*0.25, (activ.channels/total_size)*0.5, activ.channels/total_size, ((activ.depth_in * activ.channels)/total_size)*0.1, ((activ.depth_in * activ.channels)/total_size)*0.25, ((activ.depth_in * activ.channels)/total_size)*0.5, (activ.depth_in * activ.channels)/total_size]
+            coarse_inout = [(activ.channels/total_size)*0.1, (activ.channels/total_size)*0.25, (activ.channels/total_size)*0.5, activ.channels/total_size, ((activ.depth_in * activ.channels)/total_size)*0.1, ((activ.depth_in * activ.channels)/total_size)*0.25, ((activ.depth_in * activ.channels)/total_size)*0.5, (activ.depth_in * activ.channels)/total_size]
     else:
         coarse_inout = [1]
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
@@ -412,7 +412,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
 
     # print("Calculating {} design points for layer {}.".format(len(gap_coarsein)*len(gap_coarseout)*len(coarsein_1)*len(coarseout_1)*len(coarsein_2)*len(coarseout_2)*len(mul_coarseinout)*len(fine_1)*len(fine_2)*len(mem_bw), name))
 
-    se_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'x3d_m_pareto_complete.csv')
+    se_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', 'x3d_m_detailed_pareto.csv')
 
     config_points = {}
     for n, d in description['primitive_ops'].items():
@@ -496,10 +496,10 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
 
     if optimization == 'brute_force':
         total_size = elem.channels_1*elem.depth_in_1*elem.rows_in_1*elem.cols_in_1
-        coarse_in1 = [(elem.channels_1/total_size)*0.25, (elem.channels_1/total_size)*0.5, elem.channels_1/total_size, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.1, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.25, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.5, (elem.depth_in_1 * elem.channels_1)/total_size, ((elem.depth_in_1 * elem.channels_1 * elem.rows_in_1)/total_size)*0.5]
+        coarse_in1 = [(elem.channels_1/total_size)*0.1, (elem.channels_1/total_size)*0.25, (elem.channels_1/total_size)*0.5, elem.channels_1/total_size, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.1, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.25, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.5, (elem.depth_in_1 * elem.channels_1)/total_size, ((elem.depth_in_1 * elem.channels_1 * elem.rows_in_1)/total_size)*0.5]
 
         total_size = elem.channels_2*elem.depth_in_2*elem.rows_in_2*elem.cols_in_2
-        coarse_in2 = [(elem.channels_2/total_size)*0.25, (elem.channels_2/total_size)*0.5, elem.channels_2/total_size, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.1, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.25, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.5, (elem.depth_in_2 * elem.channels_2)/total_size, ((elem.depth_in_2 * elem.channels_2 * elem.rows_in_2)/total_size)*0.5]
+        coarse_in2 = [(elem.channels_2/total_size)*0.1, (elem.channels_2/total_size)*0.25, (elem.channels_2/total_size)*0.5, elem.channels_2/total_size, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.1, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.25, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.5, (elem.depth_in_2 * elem.channels_2)/total_size, ((elem.depth_in_2 * elem.channels_2 * elem.rows_in_2)/total_size)*0.5]
     else:
         coarse_in1 = [1]
         coarse_in2 = [1]
