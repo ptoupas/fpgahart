@@ -142,16 +142,15 @@ class OnnxModelParser():
         input_shape = self.get_tensor_shape(self.onnx_model.graph.input[0].name)
 
         logging.info("Model input shape = {}".format(input_shape))
-        assert len(self.onnx_model.graph.input) == 1, "Model has multiple inputs or the initializers are duplicated to inputs as well. Aborting..."
+        # assert len(self.onnx_model.graph.input) == 1, "Model has multiple inputs or the initializers are duplicated to inputs as well. Aborting..."
 
         layers_outputs = {}
         isFirstLayer = True
         for n, v in zip(self.onnx_model.graph.node, self.onnx_model.graph.value_info):
             if n.op_type in self.supported_operations:
                 if self.model_name == 'x3d_m':
-                    if n.name == 'MatMul_401':
+                    if n.name == 'Gemm_401':
                         layers_outputs[n.input[0]] = [1,432]
-                        layers_outputs[n.input[1]] = [432,2048]
 
                 layer_input_ids = []
                 layer_input_shapes = []
