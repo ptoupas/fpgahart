@@ -44,7 +44,7 @@ class BatchNorm3DLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        return int(np.prod(np.array(self.output_shape[1:]))) * 3
+        return int(np.prod(np.array(self.output_shape[1:])))
 
     def get_dp_info(self):
         dp_info = {}
@@ -100,10 +100,10 @@ class BatchNorm3DLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 4)
-        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
+        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
         memory = 1
-        depth = 50 # This value came up from some experiments on HLS. Should revise that
+        depth = 1
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
         total_ops = self.get_total_workload()
@@ -159,10 +159,10 @@ class BatchNorm3DLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 4)
-        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
+        max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+        max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
         memory = 1
-        depth = 50 # This value came up from some experiments on HLS. Should revise that
+        depth = 1
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
 

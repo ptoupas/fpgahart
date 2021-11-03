@@ -100,6 +100,9 @@ class Convolutional3DLayer(BaseLayer):
     def get_design_point(self, f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out):
         self.update_layer()
 
+        if self.depthwise:
+            self.channels = self.channels//self.groups
+            
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         if self.optimization == 'Powell':
