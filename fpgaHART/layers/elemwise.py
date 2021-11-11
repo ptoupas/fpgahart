@@ -338,16 +338,8 @@ class ElementWiseLayer(BaseLayer):
         stream_matrix[1, 1] = 1
         if self.parrallel_dims == 'C':
             stream_matrix[1, 2] = math.ceil(channels_2 * coarse_in2)
-            # if self.broadcasting:
-            #     stream_matrix[1, 2] = channels_2
-            # else:
-            #     stream_matrix[1, 2] = math.ceil(channels_2 * coarseinout)
         elif self.parrallel_dims == 'HWDC':
             stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarse_in2)
-            # if self.broadcasting:
-            #     stream_matrix[1, 2] = min(channels_2, math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarseinout))
-            # else:
-            #     stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarseinout)
 
         if self.parrallel_dims == 'C':
             stream_matrix[2, 2] = math.ceil(self.filters * coarse_out)
