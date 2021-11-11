@@ -87,8 +87,8 @@ class ActivationLayer(BaseLayer):
         return dp_info
 
     def get_num_streams(self):
-        self.max_streams_in = self.channels * self.depth_in * self.rows_in * self.cols_in
-        self.max_streams_out = self.channels * self.depth_in * self.rows_in * self.cols_in
+        self.max_streams_in = self.channels
+        self.max_streams_out = self.channels
         return self.max_streams_in, self.max_streams_out
 
     def get_design_point(self, coarse_inout, mem_bw_in, mem_bw_out):
@@ -123,13 +123,13 @@ class ActivationLayer(BaseLayer):
             memory = 1
             depth = 1
         elif self.activation_type == 'Sigmoid':
-            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 5)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 5)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout)
             memory = 1
             depth = 25 # This value came up from some experiments on HLS. Should revise that
         elif self.activation_type == 'Swish':
-            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 6)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 6)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout)
             memory = 1
             depth = 25 # This value came up from some experiments on HLS. Should revise that
 
@@ -193,13 +193,13 @@ class ActivationLayer(BaseLayer):
             memory = 1
             depth = 1
         elif self.activation_type == 'Sigmoid':
-            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 5)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 5)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout)
             memory = 1
             depth = 25 # This value came up from some experiments on HLS. Should revise that
         elif self.activation_type == 'Swish':
-            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 6)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 6)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout)
             memory = 1
             depth = 25 # This value came up from some experiments on HLS. Should revise that
 
@@ -236,8 +236,8 @@ class ActivationLayer(BaseLayer):
 
         stream_matrix[0, 0] = 1
     
-        stream_matrix[0, 1] = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
-        stream_matrix[1, 1] = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
+        stream_matrix[0, 1] = math.ceil(self.channels * coarse_inout)
+        stream_matrix[1, 1] = math.ceil(self.channels * coarse_inout)
         stream_matrix[1, 2] = 1
 
         if DEBUG:
