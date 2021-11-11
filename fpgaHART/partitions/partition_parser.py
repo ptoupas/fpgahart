@@ -26,7 +26,7 @@ class PartitionParser():
         self.optimization = optimization
         self.singlethreaded = singlethreaded
         self.per_layer_plot = per_layer_plot
-        self.model_descriptor = PartitionDescriptor(model_name)
+        self.model_descriptor = PartitionDescriptor(model_name, detailed)
         self.partition_composer = PartitionComposer()
 
         if not os.path.exists(os.path.join(os.getcwd(), 'fpga_modeling_reports')):
@@ -164,14 +164,7 @@ class PartitionParser():
             csv_writer.writerow(["Layer", "Latency(C)", "Latency(S)", "GOP/s", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn1", "RateIn2", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "MemBoundIn1", "MemBoundIn2", "MemBoundOut", "config"])
 
         for name, descriptor in self.model_descriptor.layers.items():
-            if not self.detailed:
-                self.model_layer(name, descriptor)
-            else:
-                if descriptor['operation'] == 'SqueezeExcitation':
-                    for sub_layer, sub_description in descriptor['primitive_ops'].items():
-                        self.model_layer(sub_layer, sub_description)
-                else:
-                    self.model_layer(name, descriptor)
+            self.model_layer(name, descriptor)
 
         utils.drop_duplicates_csv(self.layer_model_file)
         utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)

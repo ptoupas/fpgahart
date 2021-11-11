@@ -5,15 +5,16 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 
 class ModelLayerDescriptor(OnnxModelParser):
-    def __init__(self, model_name):
+    def __init__(self, model_name, breakdown_se):
         super().__init__(model_name)
 
         self.layers = {}
-
+        self.breakdown_se = breakdown_se
         self.create_layers()
 
     def create_layers(self):
-        se_module = deque(maxlen=6)
+        if not self.breakdown_se:
+            se_module = deque(maxlen=6)
         swish_module = deque(maxlen=2)
         prev_output_id = -1
 
@@ -116,132 +117,133 @@ class ModelLayerDescriptor(OnnxModelParser):
                   del self.layers[sigmoid_name]
                   del self.layers[mul_name]
 
-            se_module.append([operation, name])
-            if se_module[0][0] == 'GlobalAveragePool' and se_module[1][0] == 'Conv' and se_module[2][0] == 'Relu' and se_module[3][0] == 'Conv' and se_module[4][0] == 'Sigmoid' and se_module[5][0] == 'Mul':
-                logging.debug("Creating Squeeze and Excitation Module")
+            if not self.breakdown_se:
+                se_module.append([operation, name])
+                if se_module[0][0] == 'GlobalAveragePool' and se_module[1][0] == 'Conv' and se_module[2][0] == 'Relu' and se_module[3][0] == 'Conv' and se_module[4][0] == 'Sigmoid' and se_module[5][0] == 'Mul':
+                    logging.debug("Creating Squeeze and Excitation Module")
 
-                gap_name = se_module[0][1]
-                operation = self.torch_layers[gap_name]['operation']
-                input_shape = [self.torch_layers[gap_name]['input'][0]]
-                input_node = [self.torch_layers[gap_name]['input_id'][0]]
-                se_input_shape = input_shape
-                se_input_node = input_node
-                output_shape = self.torch_layers[gap_name]['output']
-                output_node = self.torch_layers[gap_name]['output_id']
+                    gap_name = se_module[0][1]
+                    operation = self.torch_layers[gap_name]['operation']
+                    input_shape = [self.torch_layers[gap_name]['input'][0]]
+                    input_node = [self.torch_layers[gap_name]['input_id'][0]]
+                    se_input_shape = input_shape
+                    se_input_node = input_node
+                    output_shape = self.torch_layers[gap_name]['output']
+                    output_node = self.torch_layers[gap_name]['output_id']
 
-                gap = {"operation": operation,
-                       "shape_in": input_shape,
-                       "shape_out": output_shape,
-                       "node_in": input_node,
-                       "node_out": output_node,
-                       "branching": False}
-
-                conv1_name = se_module[1][1]
-                operation = self.torch_layers[conv1_name]['operation']
-                input_shape = [self.torch_layers[conv1_name]['input'][0]]
-                input_node = [self.torch_layers[conv1_name]['input_id'][0]]
-                output_shape = self.torch_layers[conv1_name]['output']
-                output_node = self.torch_layers[conv1_name]['output_id']
-
-                conv1 = {"operation": operation,
-                         "shape_in": input_shape,
-                         "shape_out": output_shape,
-                         "node_in": input_node,
-                         "node_out": output_node,
-                         "kernel": self.torch_layers[conv1_name]['kernel'],
-                         "bias": self.torch_layers[conv1_name]['bias'],
-                         "padding": self.torch_layers[conv1_name]['padding'],
-                         "stride": self.torch_layers[conv1_name]['stride'],
-                         "groups": self.torch_layers[conv1_name]['groups'],
-                         "dilation": self.torch_layers[conv1_name]['dilation'],
-                         "branching": False}
-
-                relu_name = se_module[2][1]
-                operation = self.torch_layers[relu_name]['operation']
-                input_shape = [self.torch_layers[relu_name]['input'][0]]
-                input_node = [self.torch_layers[relu_name]['input_id'][0]]
-                output_shape = self.torch_layers[relu_name]['output']
-                output_node = self.torch_layers[relu_name]['output_id']
-
-                relu = {"operation": operation,
+                    gap = {"operation": operation,
                         "shape_in": input_shape,
                         "shape_out": output_shape,
                         "node_in": input_node,
                         "node_out": output_node,
                         "branching": False}
 
-                conv2_name = se_module[3][1]
-                operation = self.torch_layers[conv2_name]['operation']
-                input_shape = [self.torch_layers[conv2_name]['input'][0]]
-                input_node = [self.torch_layers[conv2_name]['input_id'][0]]
-                output_shape = self.torch_layers[conv2_name]['output']
-                output_node = self.torch_layers[conv2_name]['output_id']
+                    conv1_name = se_module[1][1]
+                    operation = self.torch_layers[conv1_name]['operation']
+                    input_shape = [self.torch_layers[conv1_name]['input'][0]]
+                    input_node = [self.torch_layers[conv1_name]['input_id'][0]]
+                    output_shape = self.torch_layers[conv1_name]['output']
+                    output_node = self.torch_layers[conv1_name]['output_id']
 
-                conv2 = {"operation": operation,
-                         "shape_in": input_shape,
-                         "shape_out": output_shape,
-                         "node_in": input_node,
-                         "node_out": output_node,
-                         "kernel": self.torch_layers[conv2_name]['kernel'],
-                         "bias": self.torch_layers[conv2_name]['bias'],
-                         "padding": self.torch_layers[conv2_name]['padding'],
-                         "stride": self.torch_layers[conv2_name]['stride'],
-                         "groups": self.torch_layers[conv2_name]['groups'],
-                         "dilation": self.torch_layers[conv2_name]['dilation'],
-                         "branching": False}
+                    conv1 = {"operation": operation,
+                            "shape_in": input_shape,
+                            "shape_out": output_shape,
+                            "node_in": input_node,
+                            "node_out": output_node,
+                            "kernel": self.torch_layers[conv1_name]['kernel'],
+                            "bias": self.torch_layers[conv1_name]['bias'],
+                            "padding": self.torch_layers[conv1_name]['padding'],
+                            "stride": self.torch_layers[conv1_name]['stride'],
+                            "groups": self.torch_layers[conv1_name]['groups'],
+                            "dilation": self.torch_layers[conv1_name]['dilation'],
+                            "branching": False}
 
-                sigmoid_name = se_module[4][1]
-                operation = self.torch_layers[sigmoid_name]['operation']
-                input_shape = [self.torch_layers[sigmoid_name]['input'][0]]
-                input_node = [self.torch_layers[sigmoid_name]['input_id'][0]]
-                output_shape = self.torch_layers[sigmoid_name]['output']
-                output_node = self.torch_layers[sigmoid_name]['output_id']
-                se_branch_shape = output_shape
+                    relu_name = se_module[2][1]
+                    operation = self.torch_layers[relu_name]['operation']
+                    input_shape = [self.torch_layers[relu_name]['input'][0]]
+                    input_node = [self.torch_layers[relu_name]['input_id'][0]]
+                    output_shape = self.torch_layers[relu_name]['output']
+                    output_node = self.torch_layers[relu_name]['output_id']
 
-                sigmoid = {"operation": operation,
-                           "shape_in": input_shape,
-                           "shape_out": output_shape,
-                           "node_in": input_node,
-                           "node_out": output_node,
-                           "branching": False}
+                    relu = {"operation": operation,
+                            "shape_in": input_shape,
+                            "shape_out": output_shape,
+                            "node_in": input_node,
+                            "node_out": output_node,
+                            "branching": False}
 
-                mul_name = se_module[5][1]
-                operation = self.torch_layers[mul_name]['operation']
-                input_shape = self.torch_layers[mul_name]['input']
-                input_node = self.torch_layers[mul_name]['input_id']
-                output_shape = self.torch_layers[mul_name]['output']
-                output_node = self.torch_layers[mul_name]['output_id']
-                se_output_shape = output_shape
-                se_output_node = output_node
+                    conv2_name = se_module[3][1]
+                    operation = self.torch_layers[conv2_name]['operation']
+                    input_shape = [self.torch_layers[conv2_name]['input'][0]]
+                    input_node = [self.torch_layers[conv2_name]['input_id'][0]]
+                    output_shape = self.torch_layers[conv2_name]['output']
+                    output_node = self.torch_layers[conv2_name]['output_id']
 
-                mul = {"operation": operation,
-                       "shape_in": input_shape,
-                       "shape_out": output_shape,
-                       "node_in": input_node,
-                       "node_out": output_node,
-                       "branching": False}
+                    conv2 = {"operation": operation,
+                            "shape_in": input_shape,
+                            "shape_out": output_shape,
+                            "node_in": input_node,
+                            "node_out": output_node,
+                            "kernel": self.torch_layers[conv2_name]['kernel'],
+                            "bias": self.torch_layers[conv2_name]['bias'],
+                            "padding": self.torch_layers[conv2_name]['padding'],
+                            "stride": self.torch_layers[conv2_name]['stride'],
+                            "groups": self.torch_layers[conv2_name]['groups'],
+                            "dilation": self.torch_layers[conv2_name]['dilation'],
+                            "branching": False}
 
-                name = 'Se_' + se_module[0][1].split('_')[1]
-                operation = 'SqueezeExcitation'
-                self.layers[name] = {"operation": operation,
-                                      "shape_in": se_input_shape,
-                                      "shape_out": se_output_shape,
-                                      "node_in": se_input_node,
-                                      "node_out": se_output_node,
-                                      "shape_branch": se_branch_shape,
-                                      "branching": True,
-                                      "primitive_ops": {
-                                                gap_name: gap,
-                                                conv1_name: conv1,
-                                                relu_name: relu,
-                                                conv2_name: conv2,
-                                                sigmoid_name: sigmoid,
-                                                mul_name: mul}
-                                    }
+                    sigmoid_name = se_module[4][1]
+                    operation = self.torch_layers[sigmoid_name]['operation']
+                    input_shape = [self.torch_layers[sigmoid_name]['input'][0]]
+                    input_node = [self.torch_layers[sigmoid_name]['input_id'][0]]
+                    output_shape = self.torch_layers[sigmoid_name]['output']
+                    output_node = self.torch_layers[sigmoid_name]['output_id']
+                    se_branch_shape = output_shape
 
-                del self.layers[gap_name]
-                del self.layers[conv1_name]
-                del self.layers[relu_name]
-                del self.layers[conv2_name]
-                del self.layers[sigmoid_name]
-                del self.layers[mul_name]      
+                    sigmoid = {"operation": operation,
+                            "shape_in": input_shape,
+                            "shape_out": output_shape,
+                            "node_in": input_node,
+                            "node_out": output_node,
+                            "branching": False}
+
+                    mul_name = se_module[5][1]
+                    operation = self.torch_layers[mul_name]['operation']
+                    input_shape = self.torch_layers[mul_name]['input']
+                    input_node = self.torch_layers[mul_name]['input_id']
+                    output_shape = self.torch_layers[mul_name]['output']
+                    output_node = self.torch_layers[mul_name]['output_id']
+                    se_output_shape = output_shape
+                    se_output_node = output_node
+
+                    mul = {"operation": operation,
+                        "shape_in": input_shape,
+                        "shape_out": output_shape,
+                        "node_in": input_node,
+                        "node_out": output_node,
+                        "branching": False}
+
+                    name = 'Se_' + se_module[0][1].split('_')[1]
+                    operation = 'SqueezeExcitation'
+                    self.layers[name] = {"operation": operation,
+                                        "shape_in": se_input_shape,
+                                        "shape_out": se_output_shape,
+                                        "node_in": se_input_node,
+                                        "node_out": se_output_node,
+                                        "shape_branch": se_branch_shape,
+                                        "branching": True,
+                                        "primitive_ops": {
+                                                    gap_name: gap,
+                                                    conv1_name: conv1,
+                                                    relu_name: relu,
+                                                    conv2_name: conv2,
+                                                    sigmoid_name: sigmoid,
+                                                    mul_name: mul}
+                                        }
+
+                    del self.layers[gap_name]
+                    del self.layers[conv1_name]
+                    del self.layers[relu_name]
+                    del self.layers[conv2_name]
+                    del self.layers[sigmoid_name]
+                    del self.layers[mul_name]      
