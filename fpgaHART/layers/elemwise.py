@@ -13,7 +13,7 @@ class ElementWiseLayer(BaseLayer):
         super().__init__()
 
         # Available options 'C' channel parallelism, 'HWDC' channel, depth cols AND rows parallelism
-        self.parrallel_dims = 'HWDC'
+        self.parrallel_dims = 'C'
         self.optimization = optimization
         self.type = description['operation']
         self.input_shape_1 = description['shape_in'][0]

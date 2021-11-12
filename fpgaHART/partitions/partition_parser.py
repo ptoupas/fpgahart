@@ -14,6 +14,7 @@ import csv
 import itertools
 import numpy as np
 from multiprocessing import Pool
+from ..optimizer.simulated_annealing import SimulatedAnnealing
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
@@ -60,6 +61,10 @@ class PartitionParser():
                 sequencial[layer] = BatchNorm3DLayer(self.model_descriptor.layers[layer], self.optimization)
             else:
                 assert False, "{} operation in layer {} is not supported".format(self.model_descriptor.layers[layer]['operation'], layer)
+
+        # optimizer = SimulatedAnnealing(sequencial)
+        # optimizer.run_optimizer()
+        # return
 
         config_points = {}
         for layer in partition:
@@ -131,7 +136,7 @@ class PartitionParser():
                             if r['DSP'] < best['DSP']:
                                 min_latency = r['latency(C)']
                                 best = r
-        
+
             print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
             print("*"*40)
 

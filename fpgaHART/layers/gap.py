@@ -71,7 +71,7 @@ class GAPLayer(BaseLayer):
         return dp_info
 
     def get_num_streams(self):
-        self.max_streams_in = self.channels * self.depth_in * self.rows_in * self.cols_in
+        self.max_streams_in = self.channels
         self.max_streams_out = self.filters
         return self.max_streams_in, self.max_streams_out
 
@@ -109,7 +109,7 @@ class GAPLayer(BaseLayer):
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
             max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+            max_parallel_adds = math.ceil(self.channels * coarse_in)
             memory = self.channels
             #TODO: !SOS! Revise that
             depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/gamma_matrix_balanced[0,0])
@@ -177,7 +177,7 @@ class GAPLayer(BaseLayer):
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
             max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
-            max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+            max_parallel_adds = math.ceil(self.channels * coarse_in)
             memory = self.channels
             depth = 1
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
@@ -214,7 +214,7 @@ class GAPLayer(BaseLayer):
 
         stream_matrix[0, 0] = 1
     
-        stream_matrix[0, 1] = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
+        stream_matrix[0, 1] = math.ceil(self.channels * coarse_in)
         stream_matrix[1, 1] = math.ceil(self.filters * coarse_out)
         stream_matrix[1, 2] = 1
 
