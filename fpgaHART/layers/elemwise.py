@@ -36,8 +36,12 @@ class ElementWiseLayer(BaseLayer):
 
         self.broadcasting = False if self.input_shape_1 == self.input_shape_2 else True
         if self.broadcasting:
-            final_in_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            assert self.output_shape == final_in_shape, 'Elementwise layer ({}) input {} and output {} shapes does not match.'.format(self.type, final_in_shape, self.output_shape)
+            """
+                Works only in case where the broadcasting is done in the channels dimension i.e. multiplication between 2 tensors of shape c X h X w X d * c X 1 X 1 X 1 resulting in a tensor of shape c X h X w X d
+            """
+            self.full_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            self.reduced_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) < int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            assert self.output_shape == self.full_shape, 'Elementwise layer ({}) input {} and output {} shapes does not match.'.format(self.type, self.full_shape, self.output_shape)
         else:
             assert self.output_shape == self.input_shape_1 and self.output_shape == self.input_shape_2, 'Elementwise layer ({}) input 1 {}, input 2 {} and output {} shapes does not match.'.format(self.type, self.input_shape_1, self.input_shape_2, self.output_shape)
 
@@ -95,8 +99,8 @@ class ElementWiseLayer(BaseLayer):
 
     def get_num_streams(self):
         if self.broadcasting:
-            full_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            reduced_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) < int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
+            full_shape = self.full_shape
+            reduced_shape = self.reduced_shape
         else:
             full_shape = self.input_shape_1
             reduced_shape = self.input_shape_1
@@ -132,9 +136,10 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
-            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            branch_ratio = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
+            # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
+            # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
+            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+            storage_latency, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -145,14 +150,16 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        memory = 1
-        depth = 1
         if self.broadcasting:
-            final_channel = self.channels_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.channels_2
-            final_depth = self.depth_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.depth_in_2
-            final_columns = self.cols_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.cols_in_2
-            final_rows = self.rows_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.rows_in_2
+            depth = storage_latency # self.reduced_shape[1] / math.ceil(self.reduced_shape[1]*coarse_in2)
+            memory = self.reduced_shape[1]
+            final_channel = self.full_shape[1]
+            final_depth = self.full_shape[2]
+            final_columns = self.full_shape[3]
+            final_rows = self.full_shape[4]
         else:
+            depth = 1
+            memory = 1
             final_channel = self.channels_1
             final_depth = self.depth_in_1
             final_columns = self.cols_in_1
@@ -231,9 +238,10 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
-            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            branch_ratio = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
+            # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
+            # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
+            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+            storage_latency, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -243,14 +251,16 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        memory = 1
-        depth = 1
         if self.broadcasting:
-            final_channel = self.channels_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.channels_2
-            final_depth = self.depth_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.depth_in_2
-            final_columns = self.cols_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.cols_in_2
-            final_rows = self.rows_in_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.rows_in_2
+            depth = storage_latency # self.reduced_shape[1] / math.ceil(self.reduced_shape[1]*coarse_in2)
+            memory = self.reduced_shape[1]
+            final_channel = self.full_shape[1]
+            final_depth = self.full_shape[2]
+            final_columns = self.full_shape[3]
+            final_rows = self.full_shape[4]
         else:
+            depth = 1
+            memory = 1
             final_channel = self.channels_1
             final_depth = self.depth_in_1
             final_columns = self.cols_in_1
@@ -291,25 +301,31 @@ class ElementWiseLayer(BaseLayer):
         return optimization_score
 
     def get_rate_matrix(self):
-        rate_matrix = np.zeros( shape=(3,4) , dtype=float )
-
-        rate_matrix[0, 0] = 1
-        rate_matrix[0, 2] = 1
-        
-        rate_matrix[1, 1] = 1
         if self.broadcasting:
-            broadcasted_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            rate_matrix[1, 2] = 1/(int(np.prod(np.array(broadcasted_shape[2:]))))
+            rate_matrix = np.zeros( shape=(2,3) , dtype=float )
+
+            rate_matrix[0, 0] = 1
+            
+            rate_matrix[0, 1] = 1
+            rate_matrix[1, 1] = 1
+
+            rate_matrix[1, 2] = 1
         else:
+            rate_matrix = np.zeros( shape=(3,4) , dtype=float )
+
+            rate_matrix[0, 0] = 1
+            rate_matrix[0, 2] = 1
+            
+            rate_matrix[1, 1] = 1
             rate_matrix[1, 2] = 1
 
-        if self.type == 'Add' or self.type == 'Mul':
-            rate_matrix[2, 2] = 1
-        elif self.type == 'Div':
-            assert False, 'Currently not supporting ElementWise Division layer'
-            exit()
+            if self.type == 'Add' or self.type == 'Mul':
+                rate_matrix[2, 2] = 1
+            elif self.type == 'Div':
+                assert False, 'Currently not supporting ElementWise Division layer'
+                exit()
 
-        rate_matrix[2, 3] = 1
+            rate_matrix[2, 3] = 1
 
         assert np.max(rate_matrix) <= 1 and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0, "Rate matrix issue"
         if DEBUG:
@@ -317,52 +333,65 @@ class ElementWiseLayer(BaseLayer):
         return rate_matrix
 
     def get_stream_matrix(self, coarse_in1, coarse_in2, coarse_out):
-        stream_matrix = np.zeros( shape=(3,4) , dtype=float )
-
         if self.broadcasting:
-            full_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) > int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-            reduced_shape = self.input_shape_1 if int(np.prod(np.array(self.input_shape_1[1:]))) < int(np.prod(np.array(self.input_shape_2[1:]))) else self.input_shape_2
-        else:
-            full_shape = self.input_shape_1
-            reduced_shape = self.input_shape_1
-        _, channels_1, depth_1, rows_1, cols_1 = full_shape
-        _, channels_2, depth_2, rows_2, cols_2 = reduced_shape
+            stream_matrix = np.zeros( shape=(2,3) , dtype=float )
 
+            stream_matrix[0, 0] = 1
         
-        stream_matrix[0, 0] = 1
-        if self.parrallel_dims == 'C':
-            stream_matrix[0, 2] = math.ceil(channels_1 * coarse_in1)
-        elif self.parrallel_dims == 'HWDC':
-            stream_matrix[0, 2] = math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarse_in1)
+            stream_matrix[0, 1] = math.ceil(self.full_shape[1] * coarse_in1)
+            stream_matrix[1, 1] = math.ceil(self.filters * coarse_out)
+            stream_matrix[1, 2] = 1
+        else:
+            stream_matrix = np.zeros( shape=(3,4) , dtype=float )
 
-        stream_matrix[1, 1] = 1
-        if self.parrallel_dims == 'C':
-            stream_matrix[1, 2] = math.ceil(channels_2 * coarse_in2)
-        elif self.parrallel_dims == 'HWDC':
-            stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarse_in2)
+            _, channels_1, depth_1, rows_1, cols_1 = self.input_shape_1
+            _, channels_2, depth_2, rows_2, cols_2 = self.input_shape_2
 
-        if self.parrallel_dims == 'C':
-            stream_matrix[2, 2] = math.ceil(self.filters * coarse_out)
-        elif self.parrallel_dims == 'HWDC':
-            stream_matrix[2, 2] = math.ceil(self.filters * self.depth_out * self.cols_out * self.rows_out * coarse_out)
+            
+            stream_matrix[0, 0] = 1
+            if self.parrallel_dims == 'C':
+                stream_matrix[0, 2] = math.ceil(channels_1 * coarse_in1)
+            elif self.parrallel_dims == 'HWDC':
+                stream_matrix[0, 2] = math.ceil(channels_1 * depth_1 * rows_1 * cols_1 * coarse_in1)
 
-        stream_matrix[2, 3] = 1
+            stream_matrix[1, 1] = 1
+            if self.parrallel_dims == 'C':
+                stream_matrix[1, 2] = math.ceil(channels_2 * coarse_in2)
+            elif self.parrallel_dims == 'HWDC':
+                stream_matrix[1, 2] = math.ceil(channels_2 * depth_2 * rows_2 * cols_2 * coarse_in2)
+
+            if self.parrallel_dims == 'C':
+                stream_matrix[2, 2] = math.ceil(self.filters * coarse_out)
+            elif self.parrallel_dims == 'HWDC':
+                stream_matrix[2, 2] = math.ceil(self.filters * self.depth_out * self.cols_out * self.rows_out * coarse_out)
+
+            stream_matrix[2, 3] = 1
 
         if DEBUG:
             print("S:\n{}".format(stream_matrix))
         return stream_matrix
 
     def get_data_matrix(self, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
-        data_matrix = np.zeros( shape=(3,4) , dtype=float )
+        if self.broadcasting:
+            data_matrix = np.zeros( shape=(2,3) , dtype=float )
 
-        data_matrix[0, 0] = mem_bw_in_1
-        data_matrix[0, 2] = -1
-        
-        data_matrix[1, 1] = mem_bw_in_2
-        data_matrix[1, 2] = -1
+            data_matrix[0, 0] = mem_bw_in_1
+            
+            data_matrix[0, 1] = -1
+            data_matrix[1, 1] = 1
 
-        data_matrix[2, 2] = 1
-        data_matrix[2, 3] = -mem_bw_out
+            data_matrix[1, 2] = -mem_bw_out
+        else:
+            data_matrix = np.zeros( shape=(3,4) , dtype=float )
+
+            data_matrix[0, 0] = mem_bw_in_1
+            data_matrix[0, 2] = -1
+            
+            data_matrix[1, 1] = mem_bw_in_2
+            data_matrix[1, 2] = -1
+
+            data_matrix[2, 2] = 1
+            data_matrix[2, 3] = -mem_bw_out
 
         if DEBUG:
             print("D:\n{}".format(data_matrix))
@@ -373,17 +402,54 @@ class ElementWiseLayer(BaseLayer):
         in_volume_2 = self.depth_in_2 * self.rows_in_2 * self.cols_in_2 * self.channels_2
         out_volume = self.depth_out * self.rows_out * self.cols_out * self.filters
 
-        workload_matrix = np.zeros( shape=(3,4) , dtype=float )
+        if self.broadcasting:
+            workload_matrix = np.zeros( shape=(2,3) , dtype=float )
 
-        workload_matrix[0, 0] = in_volume_1
-        workload_matrix[0, 2] = in_volume_1
+            workload_matrix[0, 0] = self.full_shape[1] * self.full_shape[2] * self.full_shape[3] * self.full_shape[4]
+            
+            workload_matrix[0, 1] = self.full_shape[1] * self.full_shape[2] * self.full_shape[3] * self.full_shape[4]
+            workload_matrix[1, 1] = out_volume
 
-        workload_matrix[1, 1] = in_volume_2
-        workload_matrix[1, 2] = in_volume_2
+            workload_matrix[1, 2] = out_volume
+        else:
+            workload_matrix = np.zeros( shape=(3,4) , dtype=float )
 
-        workload_matrix[2, 2] = out_volume
-        workload_matrix[2, 3] = out_volume
+            workload_matrix[0, 0] = in_volume_1
+            workload_matrix[0, 2] = in_volume_1
+
+            workload_matrix[1, 1] = in_volume_2
+            workload_matrix[1, 2] = in_volume_2
+
+            workload_matrix[2, 2] = out_volume
+            workload_matrix[2, 3] = out_volume
 
         if DEBUG:
             print("WL:\n{}".format(workload_matrix))
         return workload_matrix
+
+    def get_storage_latency(self, coarse_in2, mem_bw_in_2):
+        gamma_matrix = np.zeros( shape=(2,3) , dtype=float )
+
+        gamma_matrix[0, 0] = mem_bw_in_2
+        
+        gamma_matrix[0, 1] = -math.ceil(self.reduced_shape[1] * coarse_in2)
+        gamma_matrix[1, 1] = math.ceil(self.reduced_shape[1] * coarse_in2)
+
+        gamma_matrix[1, 2] = -1000000
+
+        gamma_matrix_balanced, mem_bounded_in_2, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+
+        workload_matrix = np.zeros( shape=(2,3) , dtype=float )
+
+        workload_matrix[0, 0] = self.reduced_shape[1]
+        
+        workload_matrix[0, 1] = self.reduced_shape[1]
+        workload_matrix[1, 1] = self.reduced_shape[1]
+
+        workload_matrix[1, 2] = self.reduced_shape[1]
+        
+        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
+
+        latency_cycles = np.max(np.abs(ii_matrix))
+
+        return int(latency_cycles), mem_bounded_in_2

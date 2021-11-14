@@ -517,7 +517,7 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
         coarse_in2 = [1]
         coarse_out = [1]
 
-    # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
+    # mem_bw = [(0.1, 0.1, 0.8), (0.2, 0.2, 0.6), (0.3, 0.3, 0.4), (0.4, 0.4, 0.2), (0.3, 0.3, 0.4), (0.1, 0.4, 0.5), (0.4, 0.2, 0.4), (0.7, 0.2, 0.1), (0.8, 0.1, 0.1)]
     mem_bw = [(10000000, 10000000, 10000000)]
 
     total = [coarse_in1, coarse_in2, coarse_out, mem_bw]

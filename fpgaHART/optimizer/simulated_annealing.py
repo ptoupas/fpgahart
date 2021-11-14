@@ -95,7 +95,7 @@ class SimulatedAnnealing(BaseLayer):
 
     def get_mem_bw_feasible(self):
         first = random.randint(1,100)
-        second = random.randint(0,100)
+        second = random.randint(1,100)
         third = random.randint(1,100)
 
         total_sum = first + second + third

@@ -237,7 +237,7 @@ class ActivationLayer(BaseLayer):
         stream_matrix[0, 0] = 1
     
         stream_matrix[0, 1] = math.ceil(self.channels * coarse_inout)
-        stream_matrix[1, 1] = math.ceil(self.channels * coarse_inout)
+        stream_matrix[1, 1] = math.ceil(self.filters * coarse_inout)
         stream_matrix[1, 2] = 1
 
         if DEBUG:
