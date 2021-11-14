@@ -151,7 +151,7 @@ class SqueezeExcitationLayer(BaseLayer):
             total_depth += depth
 
             mem_kb = (total_memory * self.word_bytes) / 1e3
-            mem_bram = math.ceil(mem_kb / self.bram_bytes)
+            mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
             curr_bram_util = (mem_bram / self.bram) * 100
             curr_dsps_util = (total_muls/self.dsp)*100
 

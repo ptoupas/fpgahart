@@ -12,10 +12,41 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import json
+from functools import reduce
 
 sns.set(rc={'figure.figsize':(15,8)})
 sns.set_style("whitegrid")
 
+
+def get_factors(n):
+    """
+    Parameters
+    ----------
+    n: int
+    
+    Returns
+    -------
+    list
+        list of integers that are factors of `n`
+    """
+    return list(set(reduce(list.__add__, 
+                ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0))))
+
+def get_fine_feasible(kernel_size):
+    if kernel_size[0] != kernel_size[1] and kernel_size[1] == kernel_size[2]:
+        if kernel_size[0] == 1:
+            return [1, kernel_size[1], kernel_size[1]*kernel_size[2]]
+        elif kernel_size[1] == 1:
+            return [1, kernel_size[0]]
+        else:
+            return [1, kernel_size[0], kernel_size[1], kernel_size[0]*kernel_size[1], kernel_size[1]*kernel_size[2], kernel_size[0]*kernel_size[1]*kernel_size[2]]
+    elif kernel_size[0] == kernel_size[1] and kernel_size[1] == kernel_size[2]:
+        if kernel_size[0] == 1:
+            return [1]
+        else:
+            return [1, kernel_size[0], kernel_size[0]*kernel_size[1], kernel_size[0]*kernel_size[1]*kernel_size[2]]
+    else:
+        return [ 1, kernel_size[0], kernel_size[1], kernel_size[2], kernel_size[0]*kernel_size[1], kernel_size[0]*kernel_size[2], kernel_size[1]*kernel_size[2], kernel_size[0]*kernel_size[1]*kernel_size[2] ]
 
 def find_pareto(scores, domination_type='MaxMin'):
     # Count number of items
@@ -91,6 +122,7 @@ def drop_duplicates_csv(file_name):
     original_size = len(layers_df.index)
     columns = layers_df.columns.tolist()
     del(columns[-1])
+    del(columns[columns.index('Adds')])
 
     layers_df = layers_df.drop_duplicates(subset=columns, ignore_index=True)
     final_size = len(layers_df.index)

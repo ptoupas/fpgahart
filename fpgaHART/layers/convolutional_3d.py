@@ -244,7 +244,7 @@ class Convolutional3DLayer(BaseLayer):
             memory += self.channels
 
         mem_kb = (memory * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_bytes)
+        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
         bram_util = (mem_bram / self.bram) * 100
         dsps_util = (max_parallel_muls/self.dsp)*100
 

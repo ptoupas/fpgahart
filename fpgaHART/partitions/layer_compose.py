@@ -4,11 +4,13 @@ from ..layers.squeeze_excitation import SqueezeExcitationLayer
 from ..layers.gap import GAPLayer
 from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
+from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
 import itertools
 from multiprocessing import Pool
 import csv
 import os
+import numpy as np
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
@@ -55,9 +57,10 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
         convtype = '3DConv'
     
     if optimization == 'brute_force':
-        fine = [0.25, 0.5, 0.75, 1]
-        coarsein = [1/conv.channels, 0.25, 0.5, 0.75, 1]
-        coarseout = [1/conv.filters, 0.25, 0.5, 0.75, 1]
+        kernel_size = conv.kernel_shape
+        fine = utils.get_fine_feasible(kernel_size) / np.prod(np.array(kernel_size))
+        coarsein = utils.get_factors(conv.channels) / np.int64(conv.channels)
+        coarseout = utils.get_factors(conv.filters) / np.int64(conv.filters)
     else:
         fine = [1]
         coarsein = [1]
@@ -130,6 +133,10 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
     
     print("(fine={:.2f}, cIn={:.2f}, cOut={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
     print("*"*40)
+    print("Searching for optimal point with simulated annealing for layer {} ({}).".format(name, convtype))
+    optimizer = SimulatedAnnealing(None)
+    optimizer.run_optimizer_layer(conv)
+    print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
@@ -137,8 +144,7 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
     bn = BatchNorm3DLayer(description, optimization)
 
     if optimization == 'brute_force':
-        total_size = bn.channels*bn.depth_in*bn.rows_in*bn.cols_in
-        coarse_inout = [(bn.channels/total_size)*0.1, (bn.channels/total_size)*0.25, (bn.channels/total_size)*0.5, bn.channels/total_size, ((bn.depth_in * bn.channels)/total_size)*0.1, ((bn.depth_in * bn.channels)/total_size)*0.25, ((bn.depth_in * bn.channels)/total_size)*0.5, (bn.depth_in * bn.channels)/total_size]
+        coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
     else:
         coarse_inout = [1]
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
@@ -208,6 +214,10 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
     
     print("(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
     print("*"*40)
+    print("Searching for optimal point with simulated annealing for layer {}.".format(name))
+    optimizer = SimulatedAnnealing(None)
+    optimizer.run_optimizer_layer(bn)
+    print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
@@ -215,9 +225,8 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
     gap = GAPLayer(description, optimization)
 
     if optimization == 'brute_force':
-        total_size = gap.channels*gap.depth_in*gap.rows_in*gap.cols_in
-        coarse_in = [(gap.channels/total_size)*0.1, (gap.channels/total_size)*0.25, (gap.channels/total_size)*0.5, gap.channels/total_size, ((gap.depth_in * gap.channels)/total_size)*0.1, ((gap.depth_in * gap.channels)/total_size)*0.25, ((gap.depth_in * gap.channels)/total_size)*0.5, (gap.depth_in * gap.channels)/total_size]
-        coarse_out = [1]
+        coarse_in = utils.get_factors(gap.channels) / np.int64(gap.channels)
+        coarse_out = utils.get_factors(gap.filters) / np.int64(gap.filters)
     else:
         coarse_in = [1]
         coarse_out = [1]
@@ -288,17 +297,18 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
     
     print("(cin={:.2f}, cout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
     print("*"*40)
+    print("Searching for optimal point with simulated annealing for layer {}.".format(name))
+    optimizer = SimulatedAnnealing(None)
+    optimizer.run_optimizer_layer(gap)
+    print("*"*40)
+
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 def activation_compose(name, description, model_file, optimization, singlethreaded):
     activ = ActivationLayer(description, optimization)
 
     if optimization == 'brute_force':
-        if activ.activation_type == 'Relu':
-            coarse_inout = [1]
-        else:
-            total_size = activ.channels*activ.depth_in*activ.rows_in*activ.cols_in
-            coarse_inout = [(activ.channels/total_size)*0.1, (activ.channels/total_size)*0.25, (activ.channels/total_size)*0.5, activ.channels/total_size, ((activ.depth_in * activ.channels)/total_size)*0.1, ((activ.depth_in * activ.channels)/total_size)*0.25, ((activ.depth_in * activ.channels)/total_size)*0.5, (activ.depth_in * activ.channels)/total_size]
+        coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
     else:
         coarse_inout = [1]
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
@@ -367,6 +377,10 @@ def activation_compose(name, description, model_file, optimization, singlethread
                             best = r
     
     print("(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("*"*40)
+    print("Searching for optimal point with simulated annealing for layer {}.".format(name))
+    optimizer = SimulatedAnnealing(None)
+    optimizer.run_optimizer_layer(activ)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -488,26 +502,21 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
 
     print("(gapcin = {:.2f}, gapcout = {:.2f}, fine1={:.2f}, coarsein1={:.2f}, coarseout1={:.2f}, relucinout={:.2f}, fine2={:.2f}, coarsein2={:.2f}, coarseout2={:.2f}, sigmcinout={:.2f},  fmulcin1={:.6f}, fmulcin2={:.6f}, fmulcout={:.6f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['config'][6], best['config'][7], best['config'][8], best['config'][9], best['config'][10], best['config'][11], best['config'][12], best['config'][13], best['config'][14], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
     print("*"*40)
+
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
     
 def elemwise_compose(name, description, model_file, optimization, singlethreaded):
     elem = ElementWiseLayer(description, optimization)
-    is_broadcasting = elem.broadcasting
 
     if optimization == 'brute_force':
-        if elem.type == 'Add':
-            coarse_in1 = [1]
-            coarse_in2 = [1]
-        else:
-            total_size = elem.channels_1*elem.depth_in_1*elem.rows_in_1*elem.cols_in_1
-            coarse_in1 = [(elem.channels_1/total_size)*0.1, (elem.channels_1/total_size)*0.25, (elem.channels_1/total_size)*0.5, elem.channels_1/total_size, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.1, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.25, ((elem.depth_in_1 * elem.channels_1)/total_size)*0.5, (elem.depth_in_1 * elem.channels_1)/total_size, ((elem.depth_in_1 * elem.channels_1 * elem.rows_in_1)/total_size)*0.5]
-
-            total_size = elem.channels_2*elem.depth_in_2*elem.rows_in_2*elem.cols_in_2
-            coarse_in2 = [(elem.channels_2/total_size)*0.1, (elem.channels_2/total_size)*0.25, (elem.channels_2/total_size)*0.5, elem.channels_2/total_size, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.1, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.25, ((elem.depth_in_2 * elem.channels_2)/total_size)*0.5, (elem.depth_in_2 * elem.channels_2)/total_size, ((elem.depth_in_2 * elem.channels_2 * elem.rows_in_2)/total_size)*0.5]
+        coarse_in1 = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
+        coarse_in2 = utils.get_factors(elem.channels_2) / np.int64(elem.channels_2)
+        coarse_out = utils.get_factors(elem.filters) / np.int64(elem.filters)
     else:
         coarse_in1 = [1]
         coarse_in2 = [1]
-    coarse_out = coarse_in1
+        coarse_out = [1]
+
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000, 10000000)]
 
@@ -574,6 +583,10 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
                             best = r
     
     print("(cin1={:.2f}, cin2={:.2f}, cout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("*"*40)
+    print("Searching for optimal point with simulated annealing for layer {}.".format(name))
+    optimizer = SimulatedAnnealing(None)
+    optimizer.run_optimizer_layer(elem)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util

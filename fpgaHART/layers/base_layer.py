@@ -21,13 +21,13 @@ class BaseLayer():
         self.word_length = int(config.get('FPGA Specifications', 'word_length'))
         self.clock_freq = int(config.get('FPGA Specifications', 'clock_freq'))
         self.bram = int(config.get('FPGA Specifications', 'bram'))
-        self.bram_bytes = int(config.get('FPGA Specifications', 'bram_type')) / 8
+        self.bram_Kbytes = int(config.get('FPGA Specifications', 'bram_type')) / 8
         self.dsp = int(config.get('FPGA Specifications', 'dsp'))
         self.mem_bw = float(config.get('FPGA Specifications', 'mem_bw'))
 
     def get_dp_performance(self, workload_matrix, ii, muls, adds, mem, depth):
         mem_kb = (mem * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_bytes)
+        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
         bram_util = (mem_bram / self.bram) * 100
 
         dsps_util = (muls/self.dsp)*100

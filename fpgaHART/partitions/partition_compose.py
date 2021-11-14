@@ -129,7 +129,7 @@ class PartitionComposer(BaseLayer):
             total_depth += depth
 
             mem_kb = (total_memory * self.word_bytes) / 1e3
-            mem_bram = math.ceil(mem_kb / self.bram_bytes)
+            mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
             curr_bram_util = (mem_bram / self.bram) * 100
             curr_dsps_util = (total_muls/self.dsp)*100
 
@@ -214,7 +214,7 @@ class PartitionComposer(BaseLayer):
 
     def get_performance(self, workload_matrix, ii, muls, adds, mem, depth):
         mem_kb = (mem * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_bytes)
+        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
         bram_util = (mem_bram / self.bram) * 100
 
         dsps_util = (muls/self.dsp)*100

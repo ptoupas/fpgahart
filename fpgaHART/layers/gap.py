@@ -89,7 +89,7 @@ class GAPLayer(BaseLayer):
                 print("Failed to optimize. Skipping...")
                 return
 
-        gamma_matrix = self.get_rate_matrix(coarse_in) * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
@@ -105,14 +105,14 @@ class GAPLayer(BaseLayer):
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
             memory = 1
             #TODO: !SOS! Revise that
-            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/gamma_matrix_balanced[0,0])
+            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in)/math.ceil(self.depth *coarse_in))
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
             max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
             max_parallel_adds = math.ceil(self.channels * coarse_in)
             memory = self.channels
             #TODO: !SOS! Revise that
-            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/gamma_matrix_balanced[0,0])
+            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels *coarse_in))
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
@@ -158,7 +158,7 @@ class GAPLayer(BaseLayer):
         if (coarse_in>1 or coarse_out>1):
             return 1000000000000
 
-        gamma_matrix = self.get_rate_matrix(coarse_in) * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in, coarse_out) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
@@ -194,13 +194,13 @@ class GAPLayer(BaseLayer):
 
         return optimization_score
 
-    def get_rate_matrix(self, coarse_in):
+    def get_rate_matrix(self):
         rate_matrix = np.zeros( shape=(2,3) , dtype=float )
 
         rate_matrix[0, 0] = 1
         
         rate_matrix[0, 1] = 1
-        rate_matrix[1, 1] = 1/(self.depth_in * self.rows_in * self.cols_in/(math.ceil(self.depth_in * self.rows_in * self.cols_in * coarse_in)))
+        rate_matrix[1, 1] = 1/(self.depth_in * self.rows_in * self.cols_in)
 
         rate_matrix[1, 2] = 1
 
