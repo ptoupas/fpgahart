@@ -39,5 +39,5 @@ if __name__ == '__main__':
 
     parser = PartitionParser(args.model_name, args.optimization, args.singlethreaded, args.plot_layers, args.detailed)
     
-    parser.model_individual_layers()
-    # parser.parse()
+    # parser.model_individual_layers()
+    parser.parse()

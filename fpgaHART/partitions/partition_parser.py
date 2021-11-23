@@ -8,13 +8,15 @@ from ..layers.activation import ActivationLayer
 from ..layers.fully_connected import FCLayer
 from .layer_compose import layer_compose
 from .partition_compose import PartitionComposer
+from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
 import os
 import csv
 import itertools
 import numpy as np
 from multiprocessing import Pool
-from ..optimizer.simulated_annealing import SimulatedAnnealing
+import networkx as nx
+
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
@@ -40,105 +42,198 @@ class PartitionParser():
             self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '.csv')
             self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_pareto.csv')
 
-    def model_partition(self, partition, name):
+    def is_partition_input(self, partition, node_ids):
+        if len(node_ids) > 1:
+            return False
+        for layer in partition:
+            if node_ids[0] == self.model_descriptor.layers[layer]['node_out']:
+                return False
+        return True
 
-        sequencial = {}
+    def is_partition_output(self, partition, node_id):
+        for layer in partition:
+            if node_id in self.model_descriptor.layers[layer]['node_in']:
+                return False
+        return True
+
+    def connected_nodes(self, partition, node_id):
+        nodes = []
+        for layer in partition:
+            if node_id in self.model_descriptor.layers[layer]['node_in']:
+                nodes.append(layer)
+        return nodes
+    
+    @staticmethod
+    def visualize_graph(graph, path):
+        # A = nx.nx_agraph.to_agraph(graph)
+        # A.draw('graph_AGraph.png', prog='dot')
+
+        PG = nx.nx_pydot.to_pydot(graph)
+        PG.write_png(path + ".png")
+
+    def create_graph(self, partition):
+        graph = nx.DiGraph()
         for layer in partition:
             if self.model_descriptor.layers[layer]['operation'] == 'GlobalAveragePool':
-                sequencial[layer] = GAPLayer(self.model_descriptor.layers[layer], self.optimization)
+                hw_layer = GAPLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = self.model_descriptor.layers[layer]['operation']
             elif self.model_descriptor.layers[layer]['operation'] == 'Conv':
-                sequencial[layer] = Convolutional3DLayer(self.model_descriptor.layers[layer], self.optimization)
+                hw_layer = Convolutional3DLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = self.model_descriptor.layers[layer]['operation']
             elif self.model_descriptor.layers[layer]['operation'] == 'Relu' or self.model_descriptor.layers[layer]['operation'] == 'Sigmoid' or self.model_descriptor.layers[layer]['operation'] == 'Swish':
-                sequencial[layer] = ActivationLayer(self.model_descriptor.layers[layer], self.optimization)
+                hw_layer = ActivationLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = 'Activation'
             elif self.model_descriptor.layers[layer]['operation'] == 'Mul' or self.model_descriptor.layers[layer]['operation'] == 'Add':
-                sequencial[layer] = ElementWiseLayer(self.model_descriptor.layers[layer], self.optimization)
+                hw_layer = ElementWiseLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = 'ElementWise'
             elif self.model_descriptor.layers[layer]['operation'] == 'Gemm' or self.model_descriptor.layers[layer]['operation'] == 'MatMul':
                 pass
-                # sequencial[layer] = FCLayer(self.model_descriptor.layers[layer], self.optimization)
+                # layer_type = self.model_descriptor.layers[layer]['operation']
+                # hw_layer = FCLayer(self.model_descriptor.layers[layer], self.optimization)
             elif self.model_descriptor.layers[layer]['operation'] == 'SqueezeExcitation':
-                sequencial[layer] = SqueezeExcitationLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = self.model_descriptor.layers[layer]['operation']
+                hw_layer = SqueezeExcitationLayer(self.model_descriptor.layers[layer], self.optimization)
             elif self.model_descriptor.layers[layer]['operation'] == 'BatchNormalization':
-                sequencial[layer] = BatchNorm3DLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = self.model_descriptor.layers[layer]['operation']
+                hw_layer = BatchNorm3DLayer(self.model_descriptor.layers[layer], self.optimization)
             else:
                 assert False, "{} operation in layer {} is not supported".format(self.model_descriptor.layers[layer]['operation'], layer)
+            graph.add_node(layer, type=layer_type, hw=hw_layer)
 
-        # optimizer = SimulatedAnnealing(sequencial)
-        # optimizer.run_optimizer()
-        # return
+        edges = []
+        for name in graph.nodes():
+            inputs = self.model_descriptor.layers[name]['node_in']
+            outputs = self.model_descriptor.layers[name]['node_out']
 
-        config_points = {}
-        for layer in partition:
-            config_points[layer] = utils.get_config_points(layer, self.layer_model_file_par, is_partitioning=True)
+            for conn_node in self.connected_nodes(partition, outputs):
+                edges.append((name, conn_node))
+        
+        for edge in edges:
+            graph.add_edge(*edge)
+        
+        return graph
 
-        total = []
-        for c in config_points.values():
-            total.append(c)
+    @staticmethod
+    def get_split_points(graph):
+        split_points = []
+        for node in graph.nodes():
+            if graph.out_degree[node] > 1:
+                split_points.append(node)
+        return split_points
 
-        combinations = itertools.product(*total)
+    @staticmethod
+    def get_merge_points(graph):
+        merge_points = []
+        for node in graph.nodes():
+            if graph.in_degree[node] > 1:
+                merge_points.append(node)
+        return merge_points
 
-        throughput_gops = []
-        throughput_vols = []
-        latency = []
-        dsp_util = []
-        bram_util = []
+    def get_branch_edges(self, graph):
+        split_points = self.get_split_points(graph)
+        merge_points = self.get_merge_points(graph)
+        
+        combinations = itertools.product(*[split_points, merge_points])
 
-        min_latency = 1000000000000
-        best = {}
+        branch_edges = []
+        for spl, mrg in combinations:
+            if graph.has_edge(spl, mrg):
+                branch_edges.append((spl, mrg))
+    
+        return branch_edges
 
-        #TODO: Iterate over different mem bandwidth values
-        bw_in_1, bw_in_2, bw_out = 1000000, 1000000, 1000000
+    def model_partition(self, partition, name):
 
-        with open(self.partition_model_file, mode='a') as partition_dp:
-            csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        graph = self.create_graph(partition)
+        branch_edges = self.get_branch_edges(graph)
 
-            if not self.singlethreaded:
-                processes_pool = Pool(10)
-                input_vars = []
+        # Worst case scenario
+        branch_buffer = 0
+        branch_shapes = []
+        for edge in branch_edges:
+            assert graph.nodes[edge[0]]['hw'].output_shape == graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
+            branch_buffer += np.prod(np.array(graph.nodes[edge[0]]['hw'].output_shape[1:]))
+            branch_shapes.append(graph.nodes[edge[0]]['hw'].output_shape)
 
-                for c in combinations:
-                    input_vars.append([sequencial, c, bw_in_1, bw_in_2, bw_out])
-                results = multithreaded_modeling(self.partition_composer.get_design_point, input_vars, processes_pool)
-                processes_pool.close()
-                for r in results:
-                    if r['config']:
-                        throughput_gops.append(r['GOP/s'])
-                        throughput_vols.append(r['vols/s'])
-                        latency.append(r['latency(C)'])
-                        dsp_util.append(r['DSP'])
-                        bram_util.append(r['BRAM'])
+        self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + name)
 
-                        csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+        print("Partition: {}: ".format(name))
+        optimizer = SimulatedAnnealing(graph, branch_buffer, partition_name=name)
+        optimizer.run_optimizer()
 
-                        if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                            min_latency = r['latency(C)']
-                            best = r
-                        elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                            if r['DSP'] < best['DSP']:
-                                min_latency = r['latency(C)']
-                                best = r
-            else:
-                for c in combinations:
-                    r = self.partition_composer.get_design_point(sequencial, c, bw_in_1, bw_in_2, bw_out)
+        # config_points = {}
+        # for layer in partition:
+        #     config_points[layer] = utils.get_config_points(layer, self.layer_model_file_par, is_partitioning=True)
 
-                    if r['config']:
-                        throughput_gops.append(r['GOP/s'])
-                        throughput_vols.append(r['vols/s'])
-                        latency.append(r['latency(C)'])
-                        dsp_util.append(r['DSP'])
-                        bram_util.append(r['BRAM'])
+        # total = []
+        # for c in config_points.values():
+        #     total.append(c)
 
-                        csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+        # combinations = itertools.product(*total)
 
-                        if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                            min_latency = r['latency(C)']
-                            best = r
-                        elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
-                            if r['DSP'] < best['DSP']:
-                                min_latency = r['latency(C)']
-                                best = r
+        # throughput_gops = []
+        # throughput_vols = []
+        # latency = []
+        # dsp_util = []
+        # bram_util = []
 
-            print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
-            print("*"*40)
+        # min_latency = 1000000000000
+        # best = {}
+
+        # #TODO: Iterate over different mem bandwidth values
+        # bw_in_1, bw_in_2, bw_out = 1000000, 1000000, 1000000
+
+        # with open(self.partition_model_file, mode='a') as partition_dp:
+        #     csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        #     if not self.singlethreaded:
+        #         processes_pool = Pool(10)
+        #         input_vars = []
+
+        #         for c in combinations:
+        #             input_vars.append([sequencial, c, bw_in_1, bw_in_2, bw_out])
+        #         results = multithreaded_modeling(self.partition_composer.get_design_point, input_vars, processes_pool)
+        #         processes_pool.close()
+        #         for r in results:
+        #             if r['config']:
+        #                 throughput_gops.append(r['GOP/s'])
+        #                 throughput_vols.append(r['vols/s'])
+        #                 latency.append(r['latency(C)'])
+        #                 dsp_util.append(r['DSP'])
+        #                 bram_util.append(r['BRAM'])
+
+        #                 csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+
+        #                 if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+        #                     min_latency = r['latency(C)']
+        #                     best = r
+        #                 elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+        #                     if r['DSP'] < best['DSP']:
+        #                         min_latency = r['latency(C)']
+        #                         best = r
+        #     else:
+        #         for c in combinations:
+        #             r = self.partition_composer.get_design_point(sequencial, c, bw_in_1, bw_in_2, bw_out)
+
+        #             if r['config']:
+        #                 throughput_gops.append(r['GOP/s'])
+        #                 throughput_vols.append(r['vols/s'])
+        #                 latency.append(r['latency(C)'])
+        #                 dsp_util.append(r['DSP'])
+        #                 bram_util.append(r['BRAM'])
+
+        #                 csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+
+        #                 if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+        #                     min_latency = r['latency(C)']
+        #                     best = r
+        #                 elif r['latency(C)'] == min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
+        #                     if r['DSP'] < best['DSP']:
+        #                         min_latency = r['latency(C)']
+        #                         best = r
+
+        #     print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+        #     print("*"*40)
 
     def model_layer(self, layer, layer_description):
         print("Modeling {} layer...".format(layer))

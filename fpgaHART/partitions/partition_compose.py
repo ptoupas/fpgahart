@@ -6,6 +6,7 @@ from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
 from ..layers.fully_connected import FCLayer
 from ..layers.base_layer import BaseLayer
+from collections import deque
 import numpy as np
 import math
 
@@ -37,10 +38,14 @@ class PartitionComposer(BaseLayer):
         self.throughput_ops = 0
         self.throughput_vols = 0
 
-    def get_total_workload(self, sequencial):
+    def get_total_workload(self, graph):
         total_wl = 0
-        for n, l in enumerate(sequencial.keys()):
-            total_wl += sequencial[l].get_total_workload()
+        for node in graph.nodes:
+            op_type = graph.nodes[node]['type']
+            hw = graph.nodes[node]['hw']
+            
+            if not op_type == 'mem_in' and not op_type == 'mem_out':
+                total_wl += hw.get_total_workload()
 
         return total_wl
 
@@ -68,60 +73,96 @@ class PartitionComposer(BaseLayer):
         
         return dp_info
 
-    def get_design_point(self, sequencial, comb, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
+    @staticmethod
+    def find_node_idx(graph, request_node):
+        for n, node in enumerate(graph.nodes):
+            if node == request_node:
+                return n
+        return -1
+
+    def get_design_point(self, graph, comb: dict(), mem_bw_in: list(), mem_bw_out: list, read_mem_points: list, write_mem_points: list, branch_mem=0):
+        assert len(mem_bw_in) == len(read_mem_points), "Input memory break points and memory configuration does not match."
+        assert len(mem_bw_out) == len(write_mem_points), "Output memory break points and memory configuration does not match."
+
         self.update_layer()
 
-        mem_bw_in_1, mem_bw_in_2, mem_bw_out = mem_bw_in_1*self.mem_words_per_cycle, mem_bw_in_2*self.mem_words_per_cycle, mem_bw_out*self.mem_words_per_cycle
-        num_layers = len(sequencial) + 2
+        off_chip_mem_in = deque()
+        off_chip_mem_out = deque()
+        for i in range(len(mem_bw_in)):
+            off_chip_mem_in.appendleft(mem_bw_in[i]*self.mem_words_per_cycle)
+        for i in range(len(mem_bw_out)):
+            off_chip_mem_out.appendleft(mem_bw_out[i]*self.mem_words_per_cycle)
+
+
+        num_layers = graph.number_of_nodes()
 
         gamma_matrix = np.zeros( shape=(num_layers-1, num_layers) , dtype=float )
-        gamma_matrix[0, 0] = mem_bw_in_1
-        gamma_matrix[-1, -1] = -mem_bw_out
+
+        graph_idx = {}
+        for i, n in enumerate(graph.nodes()):
+            graph_idx[n] = i
 
         total_muls = 0
         total_adds = 0
-        total_memory = 0
+        total_memory = branch_mem
         total_depth = 0
-        first_layer_bw_in = False
-        prev_layer_rate = mem_bw_in_1
+        prev_layer_rate = deque(maxlen=2)
+        for n, node in enumerate(graph.nodes()):
+            op_type = graph.nodes[node]['type']
+            hw = graph.nodes[node]['hw']
 
-        for n, (l, c) in enumerate(zip(sequencial.values(), comb)):
-            if n == len(sequencial) - 1:
-                curr_layer_rate = mem_bw_out
-            else:
-                curr_layer_rate = 10000000
+            if op_type == 'mem_in':
+                assert not node in comb.keys(), f"Memory IN node: {node} cannot have configuration."
+                gamma_matrix[n, n] = off_chip_mem_in.pop()
+                prev_layer_rate.appendleft(gamma_matrix[n, n])
+                continue
             
-            if isinstance(l, GAPLayer):
-                dp_info = l.get_design_point(c[0], c[1], prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, Convolutional3DLayer):
-                dp_info = l.get_design_point(c[0], c[1], c[2], prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, ActivationLayer):
-                dp_info = l.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, ElementWiseLayer):
-                #TODO: Check this how to deal when the input comes from another layer and not from off-chip mem
-                dp_info = l.get_design_point(c[0], c[1], c[2], mem_bw_in_2, prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, BatchNorm3DLayer):
-                dp_info = l.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, SqueezeExcitationLayer):
-                dp_info = l.get_design_point(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], prev_layer_rate, curr_layer_rate)
-            elif isinstance(l, FCLayer):
+            if op_type == 'mem_out':
+                assert not node in comb.keys(), f"Memory OUT node: {node} cannot have configuration."
+                gamma_matrix[n - 1, n] = -off_chip_mem_out.pop()
+                curr_layer_rate = gamma_matrix[n - 1, n]
+                continue
+            
+            assert node in comb.keys(), f"Node: {node} does not have configuration. Please check the graph creation."
+            c = comb[node]
+
+            curr_layer_rate = 1000000
+            if isinstance(hw, GAPLayer):
+                dp_info = hw.get_design_point(c[0], c[1], prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, Convolutional3DLayer):
+                dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, ActivationLayer):
+                dp_info = hw.get_design_point(c[0], prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, ElementWiseLayer):
+                #TODO: Double check this with the list from prev_layer_rates and the case of zero branch memory
+                if branch_mem == 0:
+                    dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate[0], prev_layer_rate[1], curr_layer_rate)
+                else:
+                    dp_info = hw.get_design_point(c[0], c[1], c[2], curr_layer_rate, prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, BatchNorm3DLayer):
+                dp_info = hw.get_design_point(c[0], prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, SqueezeExcitationLayer):
+                dp_info = hw.get_design_point(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], prev_layer_rate[0], curr_layer_rate)
+            elif isinstance(hw, FCLayer):
                 pass
-                # dp_info = l.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate, curr_layer_rate)
+                # dp_info = hw.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate[0], curr_layer_rate)
             else:
                 assert False, "Not supported layer"
-            
 
-            if isinstance(l, ElementWiseLayer):
+            if isinstance(hw, ElementWiseLayer):
                 full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
-                # gamma_matrix[0, n+1] = -full_rate_in_1
-                gamma_matrix[n, n+1] = -full_rate_in_2
-                gamma_matrix[n+1, n+1] = full_rate_out
+                cp1 = graph_idx[list(graph.in_edges(node))[0][0]]
+                cp2 = graph_idx[list(graph.in_edges(node))[1][0]]
+                gamma_matrix[cp1, n] = -full_rate_in_1
+                gamma_matrix[cp2, n] = -full_rate_in_2
+                gamma_matrix[n, n] = full_rate_out
             else:
                 full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
-                gamma_matrix[n, n+1] = -full_rate_in
-                gamma_matrix[n+1, n+1] = full_rate_out
+                cp = graph_idx[list(graph.in_edges(node))[0][0]]
+                gamma_matrix[cp, n] = -full_rate_in
+                gamma_matrix[n, n] = full_rate_out
 
-            prev_layer_rate = full_rate_out
+            prev_layer_rate.appendleft(full_rate_out)
 
             total_muls += muls
             total_adds += adds
@@ -139,21 +180,116 @@ class PartitionComposer(BaseLayer):
                     print("Discarding design point.")
                 return self.get_dp_info()
 
+        assert len(off_chip_mem_in) == 0, "Off-chip memory IN points left hanging. Wrong configuration of the graph."
+        assert len(off_chip_mem_out) == 0, "Off-chip memory OUT points left hanging. Wrong configuration of the graph."
+
+        # gamma_matrix[0, 0] = mem_bw_in_1
+        # gamma_matrix[-1, -1] = -mem_bw_out
+
+        # total_muls = 0
+        # total_adds = 0
+        # total_memory = branch_mem
+        # total_depth = 0
+        # first_layer_bw_in = False
+        # prev_layer_rate = mem_bw_in_1
+
+        # for n, node in enumerate(graph.nodes):
+        #     if node in comb.keys():
+        #         c = comb[node]
+        #     else:
+        #         print("Off chip memory node. Skipping...")
+        #         continue
+
+        #     op_type = graph.nodes[node]['type']
+        #     hw = graph.nodes[node]['hw']
+
+        #     input_node = False
+        #     output_node = False
+        #     if graph.in_degree[node] == 0:
+        #         input_node = True
+        #     if graph.out_degree[node] == 0:
+        #         output_node = True
+
+        #     if output_node:
+        #         curr_layer_rate = mem_bw_out
+        #     else:
+        #         curr_layer_rate = 10000000
+
+        #     if isinstance(hw, GAPLayer):
+        #         dp_info = hw.get_design_point(c[0], c[1], prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, Convolutional3DLayer):
+        #         dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, ActivationLayer):
+        #         dp_info = hw.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, ElementWiseLayer):
+        #         #TODO: Check this how to deal when the input comes from another layer and not from off-chip mem
+        #         if branch_mem == 0:
+        #             dp_info = hw.get_design_point(c[0], c[1], c[2], mem_bw_in_2, prev_layer_rate, curr_layer_rate)
+        #         else:
+        #             dp_info = hw.get_design_point(c[0], c[1], c[2], curr_layer_rate, prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, BatchNorm3DLayer):
+        #         dp_info = hw.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, SqueezeExcitationLayer):
+        #         dp_info = hw.get_design_point(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], prev_layer_rate, curr_layer_rate)
+        #     elif isinstance(hw, FCLayer):
+        #         pass
+        #         # dp_info = hw.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate, curr_layer_rate)
+        #     else:
+        #         assert False, "Not supported layer"
+            
+        #     if isinstance(hw, ElementWiseLayer):
+        #         full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
+        #         # if graph.in_degree[node] > 1:
+        #         #     predec_nodes = [n for n in graph.predecessors(node)]
+        #         #     for pn in predec_nodes:
+        #         #         node_idx = self.find_node_idx(graph, pn)
+        #         #         if not node_idx == n-1:
+        #         #             gamma_matrix[node_idx, n+1] = -full_rate_in_1
+        #         gamma_matrix[n, n+1] = -full_rate_in_2
+        #         gamma_matrix[n+1, n+1] = full_rate_out
+        #     else:
+        #         full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
+        #         gamma_matrix[n, n+1] = -full_rate_in
+        #         gamma_matrix[n+1, n+1] = full_rate_out
+
+        #     prev_layer_rate = full_rate_out
+
+        #     total_muls += muls
+        #     total_adds += adds
+        #     total_memory += memory
+        #     total_depth += depth
+
+        #     mem_kb = (total_memory * self.word_bytes) / 1e3
+        #     mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
+        #     curr_bram_util = (mem_bram / self.bram) * 100
+        #     curr_dsps_util = (total_muls/self.dsp)*100
+
+        #     if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 90.:
+        #         self.update_layer()
+        #         if DEBUG:
+        #             print("Discarding design point.")
+        #         return self.get_dp_info()
+
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
-        gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+        # TODO: Integrate the new matrix balancing algorithm
+        # gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+        gamma_matrix_balanced = gamma_matrix.copy()
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
-        workload_matrix = self.get_workload_matrix(sequencial, num_layers)
+        workload_matrix = self.get_workload_matrix(graph, num_layers)
         if DEBUG:
             print("WL:\n{}".format(workload_matrix))
         ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        mem_bounded_in = mem_bounded_in or first_layer_bw_in
+        # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)
+        # mem_bounded_in = mem_bounded_in or first_layer_bw_in
+        mem_bounded_out = False
+        mem_bounded_in = False
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth)
-        total_ops = self.get_total_workload(sequencial)
+        total_ops = self.get_total_workload(graph)
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
@@ -193,23 +329,73 @@ class PartitionComposer(BaseLayer):
 
         return self.get_dp_info()
 
-    def get_workload_matrix(self, sequencial, num_layers):
-        #TODO: Add an extra connection to the graph for the 2nd input of MUL operation
+    def get_workload_matrix(self, graph, num_layers):
+        graph_idx = {}
+        for i, n in enumerate(graph.nodes()):
+            graph_idx[n] = i
+
         workload_matrix = np.zeros( shape=(num_layers-1, num_layers) , dtype=float )
 
-        for n, l in enumerate(sequencial.keys()):
+        for n, node in enumerate(graph.nodes):
 
-            if n == 0:
-                workload_matrix[0, 0] = np.prod(np.array(sequencial[l].input_shape[1:]))
-            if n == len(sequencial) - 1:
-                workload_matrix[-1, -1] = np.prod(np.array(sequencial[l].output_shape[1:]))
+            op_type = graph.nodes[node]['type']
+            hw = graph.nodes[node]['hw']
+
+            if op_type == 'mem_in':
+                connected_node = list(graph.out_edges(node))[0][1]
+                connected_node_op_type = graph.nodes[connected_node]['type']
+                if connected_node_op_type == 'ElementWise':
+                    # TODO: Reduced shape in case of broadcasting
+                    shared_shape = graph.nodes[connected_node]['hw'].input_shape_2[1:]
+                else:
+                    shared_shape = graph.nodes[connected_node]['hw'].input_shape[1:]
+                workload_matrix[n, n] = np.prod(np.array(shared_shape))
+                continue
             
-            if isinstance(sequencial[l], ElementWiseLayer):
-                # workload_matrix[0, n+1] = np.prod(np.array(self.sequencial[l].input_shape_1[1:]))
-                workload_matrix[n, n+1] = np.prod(np.array(sequencial[l].input_shape_2[1:]))
+            if op_type == 'mem_out':
+                connected_node = list(graph.in_edges(node))[0][0]
+                shared_shape = graph.nodes[connected_node]['hw'].output_shape[1:]
+                workload_matrix[n - 1, n] = np.prod(np.array(shared_shape))
+                continue
+            
+            if isinstance(hw, ElementWiseLayer):
+                cp1 = graph_idx[list(graph.in_edges(node))[0][0]]
+                cp2 = graph_idx[list(graph.in_edges(node))[1][0]]
+                workload_matrix[cp1, n] = np.prod(np.array(hw.input_shape_1[1:]))
+                workload_matrix[cp2, n] = np.prod(np.array(hw.input_shape_2[1:]))
+                workload_matrix[n, n] = np.prod(np.array(hw.output_shape[1:]))
             else:
-                workload_matrix[n, n+1] = np.prod(np.array(sequencial[l].input_shape[1:]))
-            workload_matrix[n+1, n+1] = np.prod(np.array(sequencial[l].output_shape[1:]))
+                cp = graph_idx[list(graph.in_edges(node))[0][0]]
+                workload_matrix[cp, n] = np.prod(np.array(hw.input_shape[1:]))
+                workload_matrix[n, n] = np.prod(np.array(hw.output_shape[1:]))
+
+            # input_node = False
+            # output_node = False
+            # if graph.in_degree[node] == 0:
+            #     input_node = True
+            # if graph.out_degree[node] == 0:
+            #     output_node = True
+
+            # op_type = graph.nodes[node]['type']
+            # hw = graph.nodes[node]['hw']
+
+            # if input_node:
+            #     workload_matrix[0, 0] = np.prod(np.array(hw.input_shape[1:]))
+            # if output_node:
+            #     workload_matrix[-1, -1] = np.prod(np.array(hw.output_shape[1:]))
+            
+            # if isinstance(hw, ElementWiseLayer):
+            #     # if graph.in_degree[node] > 1:
+            #     #     predec_nodes = [n for n in graph.predecessors(node)]
+            #     #     for pn in predec_nodes:
+            #     #         node_idx = self.find_node_idx(graph, pn)
+            #     #         if not node_idx == n-1:
+            #     #             workload_matrix[node_idx, n+1] = np.prod(np.array(hw.input_shape_1[1:]))
+            #     workload_matrix[n, n+1] = np.prod(np.array(hw.input_shape_2[1:]))
+            # else:
+            #     workload_matrix[n, n+1] = np.prod(np.array(hw.input_shape[1:]))
+            # workload_matrix[n+1, n+1] = np.prod(np.array(hw.output_shape[1:]))
+
         return workload_matrix
 
     def get_performance(self, workload_matrix, ii, muls, adds, mem, depth):
