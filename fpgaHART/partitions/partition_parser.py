@@ -65,9 +65,6 @@ class PartitionParser():
     
     @staticmethod
     def visualize_graph(graph, path):
-        # A = nx.nx_agraph.to_agraph(graph)
-        # A.draw('graph_AGraph.png', prog='dot')
-
         PG = nx.nx_pydot.to_pydot(graph)
         PG.write_png(path + ".png")
 
