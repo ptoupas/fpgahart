@@ -106,7 +106,6 @@ class PartitionComposer(BaseLayer):
         total_adds = 0
         total_memory = branch_mem
         total_depth = 0
-        prev_layer_rate = deque(maxlen=2)
         for n, node in enumerate(graph.nodes()):
             op_type = graph.nodes[node]['type']
             hw = graph.nodes[node]['hw']
@@ -114,55 +113,72 @@ class PartitionComposer(BaseLayer):
             if op_type == 'mem_in':
                 assert not node in comb.keys(), f"Memory IN node: {node} cannot have configuration."
                 gamma_matrix[n, n] = off_chip_mem_in.pop()
-                prev_layer_rate.appendleft(gamma_matrix[n, n])
+                graph.nodes[node]['prod_rate'] = gamma_matrix[n, n]
                 continue
             
             if op_type == 'mem_out':
                 assert not node in comb.keys(), f"Memory OUT node: {node} cannot have configuration."
                 gamma_matrix[n - 1, n] = -off_chip_mem_out.pop()
                 curr_layer_rate = gamma_matrix[n - 1, n]
+                graph.nodes[node]['cons_rate'] = gamma_matrix[n - 1, n]
                 continue
             
             assert node in comb.keys(), f"Node: {node} does not have configuration. Please check the graph creation."
             c = comb[node]
 
             curr_layer_rate = 1000000
+            node_predecessors = list(graph.predecessors(node))
+            if graph.in_degree(node) == 1:
+                assert len(node_predecessors) == 1, f"Node: {node} must have exactly one predecessor. Graph inconsistency."
+                prev_layer_rate_1 = graph.nodes[node_predecessors[0]]['prod_rate']
+                prev_layer_rate_2 = None
+            elif graph.in_degree(node) == 2:
+                assert len(node_predecessors) == 2, f"Node: {node} must have exactly two predecessors. Graph inconsistency."
+                prev_layer_rate_1 = graph.nodes[node_predecessors[0]]['prod_rate']
+                prev_layer_rate_2 = graph.nodes[node_predecessors[1]]['prod_rate']
+            else:
+                raise Exception(f"Node: {node} has more than 2 predecessors. This kind of connection is not yet supported.")
+
             if isinstance(hw, GAPLayer):
-                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, Convolutional3DLayer):
-                dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, ActivationLayer):
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, ElementWiseLayer):
                 #TODO: Double check this with the list from prev_layer_rates and the case of zero branch memory
                 if branch_mem == 0:
-                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=prev_layer_rate[0], mem_bw_in_2=prev_layer_rate[1], mem_bw_out=curr_layer_rate)
+                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=prev_layer_rate_1, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
                 else:
-                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, BatchNorm3DLayer):
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, SqueezeExcitationLayer):
-                dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, FCLayer):
                 pass
-                # dp_info = hw.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate[0], curr_layer_rate)
+                # dp_info = hw.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate_1, curr_layer_rate)
             else:
                 assert False, "Not supported layer"
 
             if isinstance(hw, ElementWiseLayer):
                 full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
-                cp1 = graph_idx[list(graph.in_edges(node))[0][0]]
-                cp2 = graph_idx[list(graph.in_edges(node))[1][0]]
+                cp1 = graph_idx[node_predecessors[0]]
+                cp2 = graph_idx[node_predecessors[1]]
+                #TODO: Check where the full_rate_in_1 and full_rate_in_2 should be inserted
                 gamma_matrix[cp1, n] = -full_rate_in_1
                 gamma_matrix[cp2, n] = -full_rate_in_2
                 gamma_matrix[n, n] = full_rate_out
+                graph.nodes[node]['cons_rate_1'] = full_rate_in_1
+                graph.nodes[node]['cons_rate_2'] = full_rate_in_2
+                graph.nodes[node]['prod_rate'] = full_rate_out
             else:
                 full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
-                cp = graph_idx[list(graph.in_edges(node))[0][0]]
+                cp = graph_idx[node_predecessors[0]]
                 gamma_matrix[cp, n] = -full_rate_in
                 gamma_matrix[n, n] = full_rate_out
-
-            prev_layer_rate.appendleft(full_rate_out)
+                graph.nodes[node]['cons_rate'] = full_rate_in
+                graph.nodes[node]['prod_rate'] = full_rate_out
 
             total_muls += muls
             total_adds += adds
@@ -288,8 +304,9 @@ class PartitionComposer(BaseLayer):
         # mem_bounded_in = mem_bounded_in or first_layer_bw_in
         mem_bounded_out = False
         mem_bounded_in = False
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth)
-        total_ops = self.get_total_workload(graph)
+        batch_size = 1
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth, batch=batch_size)
+        total_ops = self.get_total_workload(graph)*batch_size
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
@@ -398,17 +415,17 @@ class PartitionComposer(BaseLayer):
 
         return workload_matrix
 
-    def get_performance(self, workload_matrix, ii, muls, adds, mem, depth):
+    def get_performance(self, workload_matrix, ii, muls, adds, mem, depth, batch=1):
         mem_kb = (mem * self.word_bytes) / 1e3
         mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
         bram_util = (mem_bram / self.bram) * 100
 
         dsps_util = (muls/self.dsp)*100
 
-        latency_cycles = np.max(np.abs(ii)) + depth
+        latency_cycles = np.max(np.abs(ii))*batch + depth
         latency_sec = latency_cycles/self.cycles_per_sec
 
-        thr_in = workload_matrix[0,0]/latency_sec       # Input words per second
-        thr_out = workload_matrix[-1,-1]/latency_sec    # Output words per second
+        thr_in = (batch*workload_matrix[0,0])/latency_sec       # Input words per second
+        thr_out = (batch*workload_matrix[-1,-1])/latency_sec    # Output words per second
 
         return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, mem_kb
