@@ -10,7 +10,7 @@ from collections import deque
 import numpy as np
 import math
 
-np.set_printoptions(precision=5, suppress=True, linewidth=150)
+np.set_printoptions(precision=5, suppress=True, linewidth=250)
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG=False
@@ -128,21 +128,21 @@ class PartitionComposer(BaseLayer):
 
             curr_layer_rate = 1000000
             if isinstance(hw, GAPLayer):
-                dp_info = hw.get_design_point(c[0], c[1], prev_layer_rate[0], curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, Convolutional3DLayer):
-                dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate[0], curr_layer_rate)
+                dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, ActivationLayer):
-                dp_info = hw.get_design_point(c[0], prev_layer_rate[0], curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, ElementWiseLayer):
                 #TODO: Double check this with the list from prev_layer_rates and the case of zero branch memory
                 if branch_mem == 0:
-                    dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate[0], prev_layer_rate[1], curr_layer_rate)
+                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=prev_layer_rate[0], mem_bw_in_2=prev_layer_rate[1], mem_bw_out=curr_layer_rate)
                 else:
-                    dp_info = hw.get_design_point(c[0], c[1], c[2], curr_layer_rate, prev_layer_rate[0], curr_layer_rate)
+                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, BatchNorm3DLayer):
-                dp_info = hw.get_design_point(c[0], prev_layer_rate[0], curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, SqueezeExcitationLayer):
-                dp_info = hw.get_design_point(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], prev_layer_rate[0], curr_layer_rate)
+                dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=prev_layer_rate[0], mem_bw_out=curr_layer_rate)
             elif isinstance(hw, FCLayer):
                 pass
                 # dp_info = hw.get_design_point(f_mul_coarsein1, f_mul_coarsein2, f_mul_coarseout, mem_bw_in_1, prev_layer_rate[0], curr_layer_rate)
