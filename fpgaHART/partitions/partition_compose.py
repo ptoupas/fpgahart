@@ -146,11 +146,17 @@ class PartitionComposer(BaseLayer):
             elif isinstance(hw, ActivationLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, ElementWiseLayer):
-                #TODO: Double check this with the list from prev_layer_rates and the case of zero branch memory
+                if hw.broadcasting:
+                    prev_nodes = [pn for pn in graph.predecessors(node)]
+                    prev_nodes_out_shapes = [graph.nodes[pn]['hw'].output_shape for pn in prev_nodes]
+                    node_fs = prev_nodes[prev_nodes_out_shapes.index(max(prev_nodes_out_shapes))]
+                    node_rs = prev_nodes[prev_nodes_out_shapes.index(min(prev_nodes_out_shapes))]
+                    prev_layer_rate_1 = graph.nodes[node_fs]['prod_rate']
+                    prev_layer_rate_2 = graph.nodes[node_rs]['prod_rate']
                 if branch_mem == 0:
                     dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=prev_layer_rate_1, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
                 else:
-                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, BatchNorm3DLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
             elif isinstance(hw, SqueezeExcitationLayer):
@@ -163,9 +169,12 @@ class PartitionComposer(BaseLayer):
 
             if isinstance(hw, ElementWiseLayer):
                 full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
-                cp1 = graph_idx[node_predecessors[0]]
-                cp2 = graph_idx[node_predecessors[1]]
-                #TODO: Check where the full_rate_in_1 and full_rate_in_2 should be inserted
+                if hw.broadcasting:
+                    cp1 = graph_idx[node_fs]
+                    cp2 = graph_idx[node_rs]
+                else:
+                    cp1 = graph_idx[node_predecessors[0]]
+                    cp2 = graph_idx[node_predecessors[1]]
                 gamma_matrix[cp1, n] = -full_rate_in_1
                 gamma_matrix[cp2, n] = -full_rate_in_2
                 gamma_matrix[n, n] = full_rate_out
@@ -359,20 +368,11 @@ class PartitionComposer(BaseLayer):
             hw = graph.nodes[node]['hw']
 
             if op_type == 'mem_in':
-                connected_node = list(graph.out_edges(node))[0][1]
-                connected_node_op_type = graph.nodes[connected_node]['type']
-                if connected_node_op_type == 'ElementWise':
-                    # TODO: Reduced shape in case of broadcasting
-                    shared_shape = graph.nodes[connected_node]['hw'].input_shape_2[1:]
-                else:
-                    shared_shape = graph.nodes[connected_node]['hw'].input_shape[1:]
-                workload_matrix[n, n] = np.prod(np.array(shared_shape))
+                workload_matrix[n, n] = np.prod(np.array(hw.output_shape[1:]))
                 continue
             
             if op_type == 'mem_out':
-                connected_node = list(graph.in_edges(node))[0][0]
-                shared_shape = graph.nodes[connected_node]['hw'].output_shape[1:]
-                workload_matrix[n - 1, n] = np.prod(np.array(shared_shape))
+                workload_matrix[n - 1, n] = np.prod(np.array(hw.input_shape[1:]))
                 continue
             
             if isinstance(hw, ElementWiseLayer):

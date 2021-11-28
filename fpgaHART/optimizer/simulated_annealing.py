@@ -4,6 +4,7 @@ from ..layers.squeeze_excitation import SqueezeExcitationLayer
 from ..layers.gap import GAPLayer
 from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
+from ..layers.memory_interface import MemoryNode
 from ..layers.fully_connected import FCLayer
 from ..layers.base_layer import BaseLayer
 from ..partitions.partition_compose import PartitionComposer
@@ -119,7 +120,24 @@ class SimulatedAnnealing(BaseLayer):
             if phase_2_graph.out_degree[node] == 0:
                 mem_out_2.append(node)
 
-        return phase_1_graph, phase_2_graph, mem_in_1, mem_out_1, mem_in_2, mem_out_2
+        branch_edges_1 = utils.get_branch_edges(phase_1_graph)
+        branch_edges_2 = utils.get_branch_edges(phase_2_graph)
+        # Worst case scenario
+        branch_buffer_1 = 0
+        for edge in branch_edges_1:
+            assert phase_1_graph.nodes[edge[0]]['hw'].output_shape == phase_1_graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
+            branch_buffer_1 += np.prod(np.array(phase_1_graph.nodes[edge[0]]['hw'].output_shape[1:]))
+        branch_buffer_2 = 0
+        for edge in branch_edges_2:
+            assert phase_2_graph.nodes[edge[0]]['hw'].output_shape == phase_2_graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
+            branch_buffer_2 += np.prod(np.array(phase_2_graph.nodes[edge[0]]['hw'].output_shape[1:]))
+
+        mem_kb = ((branch_buffer_1 + branch_buffer_2) * self.word_bytes) / 1e3
+        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
+        branch_bram_util = (mem_bram / self.bram) * 100
+        if branch_bram_util > 80.:
+            raise ValueError("BRAM utilization is {}%. Buffering cant be used in one of the splitted graphs.".format(branch_bram_util))
+        return phase_1_graph, phase_2_graph, branch_buffer_1, branch_buffer_2, mem_in_1, mem_out_1, mem_in_2, mem_out_2
 
     @staticmethod
     def validate_configs(graph_1_dp, graph_2_dp):
@@ -137,35 +155,35 @@ class SimulatedAnnealing(BaseLayer):
         return True
 
     def run_optimizer_double_graph(self):
-        graph_1, graph_2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
+        graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
         nIN1 = len(mem_in_1)
         nOUT1 = len(mem_out_1)
         assert nIN1 > 0 and nOUT1 > 0, 'No memory in/out nodes found'
         config_1, mem_bw_1 = self.generate_random_config(target_graph=graph_1, n_in=nIN1, n_out=nOUT1)
-        cost_1, dp_info_1 = self.get_cost(config_1, mem_bw_1, target_graph=graph_1, branch_mem_update=0, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
+        cost_1, dp_info_1 = self.get_cost(config_1, mem_bw_1, target_graph=graph_1, branch_mem_update=bb1, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
 
         nIN2 = len(mem_in_2)
         nOUT2 = len(mem_out_2)
         assert nIN2 > 0 and nOUT2 > 0, 'No memory in/out nodes found'
         config_2, mem_bw_2 = self.generate_random_config(target_graph=graph_2, n_in=nIN2, n_out=nOUT2)
-        cost_2, dp_info_2 = self.get_cost(config_2, mem_bw_2, target_graph=graph_2, branch_mem_update=0, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
+        cost_2, dp_info_2 = self.get_cost(config_2, mem_bw_2, target_graph=graph_2, branch_mem_update=bb2, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
 
         if cost_1 is None or cost_2 is None:
             for _ in range(100):
-                graph_1, graph_2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
+                graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
                 nIN1 = len(mem_in_1)
                 nOUT1 = len(mem_out_1)
                 assert nIN1 > 0 and nOUT1 > 0, 'No memory in/out nodes found'
                 config_1, mem_bw_1 = self.generate_random_config(target_graph=graph_1, n_in=nIN1, n_out=nOUT1)
-                cost_1, dp_info_1 = self.get_cost(config_1, mem_bw_1, target_graph=graph_1, branch_mem_update=0, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
+                cost_1, dp_info_1 = self.get_cost(config_1, mem_bw_1, target_graph=graph_1, branch_mem_update=bb1, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
                 
                 nIN2 = len(mem_in_2)
                 nOUT2 = len(mem_out_2)
                 assert nIN2 > 0 and nOUT2 > 0, 'No memory in/out nodes found'
                 config_2, mem_bw_2 = self.generate_random_config(target_graph=graph_2, n_in=nIN2, n_out=nOUT2)
-                cost_2, dp_info_2 = self.get_cost(config_2, mem_bw_2, target_graph=graph_2, branch_mem_update=0, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
+                cost_2, dp_info_2 = self.get_cost(config_2, mem_bw_2, target_graph=graph_2, branch_mem_update=bb2, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
                 if cost_1 is not None and cost_2 is not None and self.validate_configs(dp_info_1, dp_info_2):
                     break
             if cost_1 is None or cost_2 is None:
@@ -185,7 +203,7 @@ class SimulatedAnnealing(BaseLayer):
         while current_temp > self.t_min:
             
             for i in range(self.iterationPerTemp):
-                graph_1, graph_2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
+                graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
                 prev_state_1 = self.fix_inconsistent_config(prev_state_1, graph_1)
                 prev_state_2 = self.fix_inconsistent_config(prev_state_2, graph_2)
@@ -194,13 +212,13 @@ class SimulatedAnnealing(BaseLayer):
                 nOUT1 =len(mem_out_1)
                 assert nIN1 > 0 and nOUT1 > 0, 'No memory in/out nodes found'
                 new_state_1, new_mem_bw_1 = self.generate_random_config(target_graph=graph_1, neighbours=True, prev_state=prev_state_1, n_in=nIN1, n_out=nOUT1)
-                new_cost_1, new_dp_info_1 = self.get_cost(new_state_1, new_mem_bw_1, target_graph=graph_1, branch_mem_update=0, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
+                new_cost_1, new_dp_info_1 = self.get_cost(new_state_1, new_mem_bw_1, target_graph=graph_1, branch_mem_update=bb1, mem_in_conns=mem_in_1, mem_out_conns=mem_out_1)
 
                 nIN2 = len(mem_in_2)
                 nOUT2 = len(mem_out_2)
                 assert nIN2 > 0 and nOUT2 > 0, 'No memory in/out nodes found'
                 new_state_2, new_mem_bw_2 = self.generate_random_config(target_graph=graph_2, neighbours=True, prev_state=prev_state_2, n_in=nIN2, n_out=nOUT2)
-                new_cost_2, new_dp_info_2 = self.get_cost(new_state_2, new_mem_bw_2, target_graph=graph_2, branch_mem_update=0, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
+                new_cost_2, new_dp_info_2 = self.get_cost(new_state_2, new_mem_bw_2, target_graph=graph_2, branch_mem_update=bb2, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
 
                 if new_cost_1 is None or new_cost_2 is None or not self.validate_configs(new_dp_info_1, new_dp_info_2):
                     continue
@@ -396,9 +414,25 @@ class SimulatedAnnealing(BaseLayer):
                 G.nodes._nodes[node] = old_nodes[node]
             else:
                 if 'Mem_in' in node:
-                    G.nodes._nodes[node] = {'type': 'mem_in', 'hw': ''}
+                    if old_nodes[edge[1]]['type'] == 'ElementWise':
+                        extra_inputs = [n for n in G.predecessors(edge[1]) if not n==node]
+                        for e in extra_inputs:
+                            assert not old_nodes[e]['type'] == 'ElementWise', "Current graph sequence cannot be handled."
+                            shape_e = old_nodes[e]['hw'].output_shape
+                            if shape_e == old_nodes[edge[1]]['hw'].input_shape_1:
+                                shape = old_nodes[edge[1]]['hw'].input_shape_2
+                            elif shape_e == old_nodes[edge[1]]['hw'].input_shape_2:
+                                shape = old_nodes[edge[1]]['hw'].input_shape_1
+                            else:
+                                raise Exception("Invalid shape for Memory in node")
+                        if not extra_inputs:
+                            shape = old_nodes[edge[1]]['hw'].input_shape_1
+                    else:
+                        shape = old_nodes[edge[1]]['hw'].input_shape
+                    G.nodes._nodes[node] = {'type': 'mem_in', 'hw': MemoryNode('in', shape)}
                 elif 'Mem_out' in node:
-                    G.nodes._nodes[node] = {'type': 'mem_out', 'hw': ''}
+                    shape = old_nodes[edge[0]]['hw'].output_shape
+                    G.nodes._nodes[node] = {'type': 'mem_out', 'hw': MemoryNode('out', shape)}
         del old_nodes
 
     @staticmethod

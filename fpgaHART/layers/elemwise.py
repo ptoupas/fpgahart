@@ -139,7 +139,7 @@ class ElementWiseLayer(BaseLayer):
             # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
             # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
-            storage_latency, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
+            storage_latency, rate2_broadcast, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -197,7 +197,10 @@ class ElementWiseLayer(BaseLayer):
         if dsps_util < 90. and bram_util < 90.:
 
             self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
-            self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
+            if self.broadcasting:
+                self.full_rate_in_2 = rate2_broadcast
+            else:
+                self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
             self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
@@ -241,7 +244,7 @@ class ElementWiseLayer(BaseLayer):
             # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
             # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
-            storage_latency, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
+            storage_latency, rate2_broadcast, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
         else:
             gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
         if DEBUG:
@@ -452,4 +455,4 @@ class ElementWiseLayer(BaseLayer):
 
         latency_cycles = np.max(np.abs(ii_matrix))
 
-        return int(latency_cycles), mem_bounded_in_2
+        return int(latency_cycles), gamma_matrix_balanced[0,0], mem_bounded_in_2

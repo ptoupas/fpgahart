@@ -110,39 +110,10 @@ class PartitionParser():
         
         return graph
 
-    @staticmethod
-    def get_split_points(graph):
-        split_points = []
-        for node in graph.nodes():
-            if graph.out_degree[node] > 1:
-                split_points.append(node)
-        return split_points
-
-    @staticmethod
-    def get_merge_points(graph):
-        merge_points = []
-        for node in graph.nodes():
-            if graph.in_degree[node] > 1:
-                merge_points.append(node)
-        return merge_points
-
-    def get_branch_edges(self, graph):
-        split_points = self.get_split_points(graph)
-        merge_points = self.get_merge_points(graph)
-        
-        combinations = itertools.product(*[split_points, merge_points])
-
-        branch_edges = []
-        for spl, mrg in combinations:
-            if graph.has_edge(spl, mrg):
-                branch_edges.append((spl, mrg))
-    
-        return branch_edges
-
     def model_partition(self, partition, name):
 
         graph = self.create_graph(partition)
-        branch_edges = self.get_branch_edges(graph)
+        branch_edges = utils.get_branch_edges(graph)
 
         # Worst case scenario
         branch_buffer = 0

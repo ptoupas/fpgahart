@@ -12,6 +12,7 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import json
+import itertools
 from functools import reduce
 
 sns.set(rc={'figure.figsize':(15,8)})
@@ -279,3 +280,30 @@ def get_out_streams(layer_graph, node_out):
         if v['node_out'] == node_out:
             return v['streams_out']
     assert False, "Cannot find node {} in the layer graph.".format(node_out)
+
+def get_split_points(graph):
+    split_points = []
+    for node in graph.nodes():
+        if graph.out_degree[node] > 1:
+            split_points.append(node)
+    return split_points
+
+def get_merge_points(graph):
+    merge_points = []
+    for node in graph.nodes():
+        if graph.in_degree[node] > 1:
+            merge_points.append(node)
+    return merge_points
+
+def get_branch_edges(graph):
+    split_points = get_split_points(graph)
+    merge_points = get_merge_points(graph)
+    
+    combinations = itertools.product(*[split_points, merge_points])
+
+    branch_edges = []
+    for spl, mrg in combinations:
+        if graph.has_edge(spl, mrg):
+            branch_edges.append((spl, mrg))
+
+    return branch_edges
