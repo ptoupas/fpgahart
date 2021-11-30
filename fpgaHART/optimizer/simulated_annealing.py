@@ -327,6 +327,8 @@ class SimulatedAnnealing(BaseLayer):
                 comb_config[k] = [v['coarse_in_1'], v['coarse_in_2'], v['coarse_out']]
             elif v['op_type'] == 'BatchNormalization':
                 comb_config[k] = [v['coarse_in']]
+            elif v['op_type'] == 'Gemm':
+                comb_config[k] = [v['coarse_in'], v['coarse_out']]
             else:
                 assert False, "Not supported layer"
         
@@ -517,7 +519,15 @@ class SimulatedAnnealing(BaseLayer):
                 elif isinstance(hw, SqueezeExcitationLayer):
                     assert False, "Not supported layer (SqueezeExcitationLayer)"
                 elif isinstance(hw, FCLayer):
-                    assert False, "Not supported layer (FCLayer)"
+                    dim_in = hw.dim_in
+                    dim_out = hw.dim_out
+                    coarse_in_feasible = utils.get_factors(dim_in)
+                    coarse_out_feasible = utils.get_factors(dim_out)
+                    coarse_in_factor = random.choice(coarse_in_feasible)/dim_in
+                    coarse_out_factor = random.choice(coarse_out_feasible)/dim_out
+                    new_config[node] = {'op_type': op_type,
+                            'coarse_in': coarse_in_factor,
+                            'coarse_out': coarse_out_factor}
                 else:
                     assert False, "Not supported layer"
         return new_config
@@ -642,7 +652,24 @@ class SimulatedAnnealing(BaseLayer):
             elif isinstance(hw, SqueezeExcitationLayer):
                 assert False, "Not supported layer (SqueezeExcitationLayer)"
             elif isinstance(hw, FCLayer):
-                assert False, "Not supported layer (FCLayer)"
+                dim_in = hw.dim_in
+                dim_out = hw.dim_out
+                coarse_in_feasible = utils.get_factors(dim_in)
+                coarse_out_feasible = utils.get_factors(dim_out)
+                coarse_in_factor = random.choice(coarse_in_feasible)/dim_in
+                coarse_out_factor = random.choice(coarse_out_feasible)/dim_out
+                if neighbours and node in config.keys():
+                    transformations = list(config[node].keys())
+                    transformations.remove('op_type')
+                    apply_transform = random.choice(transformations)
+                    if apply_transform == 'coarse_in':
+                        config[node][apply_transform] = coarse_in_factor
+                    elif apply_transform == 'coarse_out':
+                        config[node][apply_transform] = coarse_out_factor
+                else:
+                    config[node] = {'op_type': op_type,
+                            'coarse_in': coarse_in_factor,
+                            'coarse_out': coarse_out_factor}
             else:
                 assert False, "Not supported layer"
 
@@ -709,7 +736,7 @@ class SimulatedAnnealing(BaseLayer):
         elif isinstance(layer, SqueezeExcitationLayer):
             assert False, "Not supported layer (SqueezeExcitationLayer)"
         elif isinstance(layer, FCLayer):
-            assert False, "Not supported layer (FCLayer)"
+            dp_info = layer.get_design_point(config[0], config[1], layer.mem_words_per_cycle*mem_bw[0][0], layer.mem_words_per_cycle*mem_bw[-1][0])
         else:
             assert False, "Not supported layer"
 
@@ -720,6 +747,7 @@ class SimulatedAnnealing(BaseLayer):
     # TODO: Revise that to follow the changes on generate_random_config
     def generate_random_config_layer(self, l):
         config = []
+        hw = copy.deepcopy(l)
         if isinstance(hw, GAPLayer):
             channels = hw.channels
             filters = hw.filters
@@ -763,7 +791,13 @@ class SimulatedAnnealing(BaseLayer):
         elif isinstance(hw, SqueezeExcitationLayer):
             assert False, "Not supported layer (SqueezeExcitationLayer)"
         elif isinstance(hw, FCLayer):
-            assert False, "Not supported layer (FCLayer)"
+            dim_in = hw.dim_in
+            dim_out = hw.dim_out
+            coarse_in_feasible = utils.get_factors(dim_in)
+            coarse_out_feasible = utils.get_factors(dim_out)
+            coarse_in_factor = random.choice(coarse_in_feasible)/dim_in
+            coarse_out_factor = random.choice(coarse_out_feasible)/dim_out
+            config = [coarse_in_factor, coarse_out_factor]
         else:
             assert False, "Not supported layer"
 

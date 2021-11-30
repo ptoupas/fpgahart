@@ -84,9 +84,8 @@ class PartitionParser():
                 hw_layer = ElementWiseLayer(self.model_descriptor.layers[layer], self.optimization)
                 layer_type = 'ElementWise'
             elif self.model_descriptor.layers[layer]['operation'] == 'Gemm' or self.model_descriptor.layers[layer]['operation'] == 'MatMul':
-                pass
-                # layer_type = self.model_descriptor.layers[layer]['operation']
-                # hw_layer = FCLayer(self.model_descriptor.layers[layer], self.optimization)
+                layer_type = self.model_descriptor.layers[layer]['operation']
+                hw_layer = FCLayer(self.model_descriptor.layers[layer], self.optimization)
             elif self.model_descriptor.layers[layer]['operation'] == 'SqueezeExcitation':
                 layer_type = self.model_descriptor.layers[layer]['operation']
                 hw_layer = SqueezeExcitationLayer(self.model_descriptor.layers[layer], self.optimization)

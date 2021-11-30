@@ -4,6 +4,7 @@ from ..layers.squeeze_excitation import SqueezeExcitationLayer
 from ..layers.gap import GAPLayer
 from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
+from ..layers.fully_connected import FCLayer
 from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
 import itertools
@@ -11,6 +12,7 @@ from multiprocessing import Pool
 import csv
 import os
 import numpy as np
+import networkx as nx
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
@@ -592,4 +594,13 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 def fc_compose(name, description, model_file, optimization, singlethreaded):
+    fc = FCLayer(description, optimization)
+    
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=fc)
+
+    print("Searching for optimal point with simulated annealing for layer {}.".format(name))
+    optimizer = SimulatedAnnealing(graph=graph, branch_mem=0)
+    optimizer.run_optimizer_layer(fc)
+    print("*"*40)
     return [], [], [], [], []

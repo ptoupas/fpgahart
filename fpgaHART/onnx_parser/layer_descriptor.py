@@ -30,6 +30,8 @@ class ModelLayerDescriptor(OnnxModelParser):
             input_shape = [self.torch_layers[k]['input'][0]]
             output_shape = self.torch_layers[k]['output']
             input_node = [self.torch_layers[k]['input_id'][0]]
+            if name == 'Gemm_401':
+                input_node = self.torch_layers['GlobalAveragePool_391']['output_id']
             output_node = self.torch_layers[k]['output_id']
 
             self.layers[name] = {"operation": operation,
