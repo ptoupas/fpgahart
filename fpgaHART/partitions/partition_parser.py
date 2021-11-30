@@ -12,6 +12,7 @@ from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
 import os
 import csv
+import time
 import itertools
 import numpy as np
 from multiprocessing import Pool
@@ -126,7 +127,48 @@ class PartitionParser():
 
         print("Partition: {}: ".format(name))
         optimizer = SimulatedAnnealing(graph, branch_buffer, partition_name=name)
-        optimizer.run_optimizer()
+        mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
+        num_graphs = len(solution_mem)
+
+        with open(self.partition_model_file, mode='a') as res_file:
+            csv_writer = csv.writer(res_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            
+            if num_graphs == 1:
+                mem_config = (list(np.array(solution_mem[0][0]) * mwpc), list(np.array(solution_mem[0][1]) * mwpc))
+                csv_row = [name, solution_dp[0]['latency(C)']-solution_dp[0]['depth'], solution_dp[0]['latency(C)'], solution_dp[0]['latency(S)'], solution_dp[0]['GOP/s'], solution_dp[0]['vols/s'], solution_dp[0]['DSP'], solution_dp[0]['BRAM'], solution_dp[0]['rateIn'], solution_dp[0]['rateOut'], solution_dp[0]['depth'], solution_dp[0]['muls'], solution_dp[0]['adds'], solution_dp[0]['memWords'], solution_dp[0]['memKBs'], solution_dp[0]['memBoundedIn'], solution_dp[0]['memBoundedOut'], solution_dp[0]['config'], mem_config]
+                csv_writer.writerow(csv_row)
+            else:
+                f_name = name
+                f_latency_c = 0
+                f_latency_s = 0
+                f_dsps = 0
+                f_brams = 0
+                f_depth = 0
+                f_muls = 0
+                f_adds = 0
+                f_mem_words = 0
+                f_mem_kbs = 0
+                f_total_ops = 0
+                sub_rows = []
+                for i in range(num_graphs):
+                    mem_config = (list(np.array(solution_mem[i][0]) * mwpc), list(np.array(solution_mem[i][1]) * mwpc))
+                    csv_row = [name+'_{}'.format(i), solution_dp[i]['latency(C)']-solution_dp[i]['depth'], solution_dp[i]['latency(C)'], solution_dp[i]['latency(S)'], solution_dp[i]['GOP/s'], solution_dp[i]['vols/s'], solution_dp[i]['DSP'], solution_dp[i]['BRAM'], solution_dp[i]['rateIn'], solution_dp[i]['rateOut'], solution_dp[i]['depth'], solution_dp[i]['muls'], solution_dp[i]['adds'], solution_dp[i]['memWords'], solution_dp[i]['memKBs'], solution_dp[i]['memBoundedIn'], solution_dp[i]['memBoundedOut'], solution_dp[i]['config'], mem_config]
+                    sub_rows.append(csv_row)
+                    f_latency_c += solution_dp[i]['latency(C)']
+                    f_latency_s += solution_dp[i]['latency(S)']
+                    f_dsps += solution_dp[i]['DSP']
+                    f_brams += solution_dp[i]['BRAM']
+                    f_depth += solution_dp[i]['depth']
+                    f_muls += solution_dp[i]['muls']
+                    f_adds += solution_dp[i]['adds']
+                    f_mem_words += solution_dp[i]['memWords']
+                    f_mem_kbs += solution_dp[i]['memKBs']
+                    f_total_ops += solution_dp[i]['GOPs']
+
+                csv_row = [f_name, f_latency_c-f_depth, f_latency_c, f_latency_s, f_total_ops/f_latency_s, 1/f_latency_s, f_dsps, f_brams, '', '', f_depth, f_muls, f_adds, f_mem_words, f_mem_kbs, '', '', '', '']
+                csv_writer.writerow(csv_row)
+                for sub_row in sub_rows:
+                    csv_writer.writerow(sub_row)
 
         # config_points = {}
         # for layer in partition:
@@ -211,16 +253,15 @@ class PartitionParser():
 
         with open(self.partition_model_file, mode='w') as partition_dp:
             csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerow(["Layer", "Latency(C)", "Latency(S)", "GOP/s", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn1", "RateIn2", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "MemBoundIn1", "MemBoundIn2", "MemBoundOut", "config"])
+            csv_writer.writerow(["Part", "Latency(C)-No-Depth", "Latency(C)", "Latency(S)", "GOP/s", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "MemBoundIn", "MemBoundOut", "config", "memconfig"])
 
+        start = time.time()
         for i, partition in enumerate(self.model_descriptor.partitions):
             part_name = 'part_{}'.format(i)
             self.model_partition(partition, name=part_name)
-
-        utils.drop_duplicates_csv(self.partition_model_file)
-        if self.per_layer_plot:
-            utils.plot_layers_csv(self.partition_model_file, self.model_name)
-
+        end = time.time()
+        print("Partition modeling took {:.2f} seconds".format(end - start))
+        
     def model_individual_layers(self):
 
         with open(self.layer_model_file, mode='w') as layer_dp:

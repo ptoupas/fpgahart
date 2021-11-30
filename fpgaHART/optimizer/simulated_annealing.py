@@ -21,7 +21,7 @@ import os
 
 
 class SimulatedAnnealing(BaseLayer):
-    def __init__(self, graph, branch_mem, t_min=0.0001, t_max=25, iterationPerTemp=15, cooling_rate=0.99, partition_name=''):
+    def __init__(self, graph, branch_mem, t_min=0.0001, t_max=25, iterationPerTemp=20, cooling_rate=0.99, partition_name=''):
         super().__init__()
         self.part_name = partition_name
 
@@ -246,10 +246,11 @@ class SimulatedAnnealing(BaseLayer):
             current_temp *= self.cooling_rate
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end='\r')
 
-        print(f"\n\nLatency: {prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.mem_words_per_cycle)}. Solution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.mem_words_per_cycle)}.")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp_1['latency(C)'], solution_dp_1['latency(S)'], solution_dp_1['GOP/s'], solution_dp_1['vols/s'], solution_dp_1['DSP'], solution_dp_1['BRAM'], solution_dp_1['rateIn1'], solution_dp_1['rateOut'], solution_dp_1['depth'], solution_dp_1['muls'], solution_dp_1['adds'], solution_dp_1['memWords'], solution_dp_1['memKBs'], solution_dp_1['memBoundedIn1'], solution_dp_1['memBoundedOut'], solution_dp_1['config']))
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp_2['latency(C)'], solution_dp_2['latency(S)'], solution_dp_2['GOP/s'], solution_dp_2['vols/s'], solution_dp_2['DSP'], solution_dp_2['BRAM'], solution_dp_2['rateIn1'], solution_dp_2['rateOut'], solution_dp_2['depth'], solution_dp_2['muls'], solution_dp_2['adds'], solution_dp_2['memWords'], solution_dp_2['memKBs'], solution_dp_2['memBoundedIn1'], solution_dp_2['memBoundedOut'], solution_dp_2['config']))
+        print(f"\n\nLatency: {prev_cost}. volumes/s: {1/prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.mem_words_per_cycle)}.")
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp_1['latency(C)'], solution_dp_1['latency(S)'], solution_dp_1['GOP/s'], solution_dp_1['vols/s'], solution_dp_1['DSP'], solution_dp_1['BRAM'], solution_dp_1['rateIn'], solution_dp_1['rateOut'], solution_dp_1['depth'], solution_dp_1['muls'], solution_dp_1['adds'], solution_dp_1['memWords'], solution_dp_1['memKBs'], solution_dp_1['memBoundedIn'], solution_dp_1['memBoundedOut'], solution_dp_1['config']))
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp_2['latency(C)'], solution_dp_2['latency(S)'], solution_dp_2['GOP/s'], solution_dp_2['vols/s'], solution_dp_2['DSP'], solution_dp_2['BRAM'], solution_dp_2['rateIn'], solution_dp_2['rateOut'], solution_dp_2['depth'], solution_dp_2['muls'], solution_dp_2['adds'], solution_dp_2['memWords'], solution_dp_2['memKBs'], solution_dp_2['memBoundedIn'], solution_dp_2['memBoundedOut'], solution_dp_2['config']))
         print("*"*40)
+        return self.mem_words_per_cycle, [solution_mem_1, solution_mem_2], [solution_dp_1, solution_dp_2]
 
     def run_optimizer(self):
         if self.has_gap() and self.branch_bram_util > 80:
@@ -299,8 +300,9 @@ class SimulatedAnnealing(BaseLayer):
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end='\r')
         
         print(f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}.")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn1'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn1'], solution_dp['memBoundedOut'], solution_dp['config']))
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
         print("*"*40)
+        return self.mem_words_per_cycle, [solution_mem], [solution_dp]
 
     def get_cost(self, config, mem_bw, target_graph=None, branch_mem_update=None, mem_in_conns=[], mem_out_conns=[]):
         """
@@ -718,7 +720,7 @@ class SimulatedAnnealing(BaseLayer):
             print(f"{current_temp:.5e}\t{prev_cost:.5e}",end='\r')
 
         print(f"\n\nFinal Memory Solution: {list(np.array(solution_mem) * self.mem_words_per_cycle)}. Latency: {prev_cost}")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn1'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn1'], solution_dp['memBoundedOut'], solution_dp['config']))
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
         print("*"*40)
 
     # TODO: Revise that to follow the changes on get_cost

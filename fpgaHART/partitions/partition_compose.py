@@ -6,6 +6,7 @@ from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
 from ..layers.fully_connected import FCLayer
 from ..layers.base_layer import BaseLayer
+from ..utils.matrix_balancing import balance_multiport_rates, balance_matrix
 from collections import deque
 import numpy as np
 import math
@@ -19,17 +20,15 @@ class PartitionComposer(BaseLayer):
         super().__init__()
 
     def update_layer(self):
-        self.full_rate_in_1 = 0
-        self.full_rate_in_2 = 0
-        self.full_rate_out = 0
+        self.full_rate_in = []
+        self.full_rate_out = []
         self.max_parallel_muls = 0
         self.max_parallel_adds = 0
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
-        self.mem_bd_in_1 = False
-        self.mem_bd_in_2 = False
-        self.mem_bd_out = False
+        self.mem_bd_in = []
+        self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
         self.bram_util = 0
@@ -37,6 +36,7 @@ class PartitionComposer(BaseLayer):
         self.latency_cycles = 0
         self.throughput_ops = 0
         self.throughput_vols = 0
+        self.total_ops = 0
 
     def get_total_workload(self, graph):
         total_wl = 0
@@ -56,18 +56,17 @@ class PartitionComposer(BaseLayer):
         dp_info['latency(S)'] = self.latency_sec
         dp_info['GOP/s'] = self.throughput_ops*1e-9
         dp_info['vols/s'] = self.throughput_vols
+        dp_info['GOPs'] = self.total_ops*1e-9
         dp_info['DSP'] = self.dsps_util
         dp_info['BRAM'] = self.bram_util
-        dp_info['rateIn1'] = self.full_rate_in_1
-        dp_info['rateIn2'] = self.full_rate_in_2
+        dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
         dp_info['muls'] = self.max_parallel_muls
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
         dp_info['memKBs'] = self.memoryKB
-        dp_info['memBoundedIn1'] = self.mem_bd_in_1
-        dp_info['memBoundedIn2'] = self.mem_bd_in_2
+        dp_info['memBoundedIn'] = self.mem_bd_in
         dp_info['memBoundedOut'] = self.mem_bd_out
         dp_info['config'] = self.config
         
@@ -295,9 +294,36 @@ class PartitionComposer(BaseLayer):
 
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
-        # TODO: Integrate the new matrix balancing algorithm
-        # gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
+        # gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
+        # gamma_matrix_balanced = balance_matrix(gamma_matrix_balanced)
         gamma_matrix_balanced = gamma_matrix.copy()
+        # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)
+        mem_bounded_out = []
+        mem_bounded_in = []
+        rates_in = []
+        rates_out = []
+        for n, node in enumerate(graph.nodes()):
+            if graph.nodes[node]['type'] == 'mem_in':
+                nn = graph_idx[list(graph.successors(node))[0]]
+                if gamma_matrix_balanced[n,n] < abs(gamma_matrix_balanced[n,nn]):
+                    mem_bounded_in.append(True)
+                    if DEBUG:
+                        print(f"Memory in node {n} with rate {gamma_matrix_balanced[n,n]} -> {gamma_matrix_balanced[n,nn]}")
+                else:
+                    mem_bounded_in.append(False)
+                    gamma_matrix_balanced[n,n] = abs(gamma_matrix_balanced[n,nn])
+                rates_in.append(gamma_matrix_balanced[n,n])
+            if graph.nodes[node]['type'] == 'mem_out':
+                pn = graph_idx[list(graph.predecessors(node))[0]]
+                if abs(gamma_matrix_balanced[n-1,n]) < gamma_matrix_balanced[n-1,pn]:
+                    mem_bounded_out.append(True)
+                    if DEBUG:
+                        print(f"Memory out node {n} with rate {gamma_matrix_balanced[n-1,n]} -> {gamma_matrix_balanced[n-1,pn]}")
+                else:
+                    mem_bounded_out.append(False)
+                    gamma_matrix_balanced[n-1,n] = -gamma_matrix_balanced[n-1,pn]
+                rates_out.append(abs(gamma_matrix_balanced[n-1,n]))
+
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
         workload_matrix = self.get_workload_matrix(graph, num_layers)
@@ -307,10 +333,6 @@ class PartitionComposer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)
-        # mem_bounded_in = mem_bounded_in or first_layer_bw_in
-        mem_bounded_out = False
-        mem_bounded_in = False
         batch_size = 1
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth, batch=batch_size)
         total_ops = self.get_total_workload(graph)*batch_size
@@ -320,21 +342,17 @@ class PartitionComposer(BaseLayer):
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
         if dsps_util < 90. and bram_util < 90.:
-            #TODO: Add 2nd input
-            self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
-            self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
-            self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+            self.full_rate_in = rates_in
+            self.full_rate_out = rates_out
             self.max_parallel_muls = total_muls
             self.max_parallel_adds = total_adds
             self.memory = total_memory
             self.depth = total_depth
-            #TODO: Add 2nd input
-            self.mem_bd_in_1 = mem_bounded_in
-            self.mem_bd_in_2 = mem_bounded_in
+            self.mem_bd_in = mem_bounded_in
             self.mem_bd_out = mem_bounded_out
 
-            #TODO: Add 2nd input
             config = comb
+            self.total_ops = total_ops
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
