@@ -201,7 +201,7 @@ class SimulatedAnnealing(BaseLayer):
 
         print(f"Temperature  |  Latency")
         while current_temp > self.t_min:
-            
+            #TODO: Investigate whether we should search and optimize each of the graphs after we split them and get a valid configuration. And then at another point split again and search again for optimized points for each graph.
             for i in range(self.iterationPerTemp):
                 graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
