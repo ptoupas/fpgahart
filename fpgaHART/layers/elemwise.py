@@ -46,17 +46,15 @@ class ElementWiseLayer(BaseLayer):
             assert self.output_shape == self.input_shape_1 and self.output_shape == self.input_shape_2, 'Elementwise layer ({}) input 1 {}, input 2 {} and output {} shapes does not match.'.format(self.type, self.input_shape_1, self.input_shape_2, self.output_shape)
 
     def update_layer(self):
-        self.full_rate_in_1 = 0
-        self.full_rate_in_2 = 0
-        self.full_rate_out = 0
+        self.full_rate_in = []
+        self.full_rate_out = []
         self.max_parallel_muls = 0
         self.max_parallel_adds = 0
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
-        self.mem_bd_in_1 = False
-        self.mem_bd_in_2 = False
-        self.mem_bd_out = False
+        self.mem_bd_in = []
+        self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
         self.bram_util = 0
@@ -82,16 +80,14 @@ class ElementWiseLayer(BaseLayer):
         dp_info['vols/s'] = self.throughput_vols
         dp_info['DSP'] = self.dsps_util
         dp_info['BRAM'] = self.bram_util
-        dp_info['rateIn1'] = self.full_rate_in_1
-        dp_info['rateIn2'] = self.full_rate_in_2
+        dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
         dp_info['muls'] = self.max_parallel_muls
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
         dp_info['memKBs'] = self.memoryKB
-        dp_info['memBoundedIn1'] = self.mem_bd_in_1
-        dp_info['memBoundedIn2'] = self.mem_bd_in_2
+        dp_info['memBoundedIn'] = self.mem_bd_in
         dp_info['memBoundedOut'] = self.mem_bd_out
         dp_info['config'] = self.config
         
@@ -196,19 +192,19 @@ class ElementWiseLayer(BaseLayer):
 
         if dsps_util < 90. and bram_util < 90.:
 
-            self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
+            self.full_rate_in.append(gamma_matrix_balanced[0, 0])
             if self.broadcasting:
-                self.full_rate_in_2 = rate2_broadcast
+                self.full_rate_in.append(rate2_broadcast)
             else:
-                self.full_rate_in_2 = gamma_matrix_balanced[1, 1]
-            self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+                self.full_rate_in.append(gamma_matrix_balanced[1, 1])
+            self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
             self.memory = memory
             self.depth = depth
-            self.mem_bd_in_1 = mem_bounded_in_1
-            self.mem_bd_in_2 = mem_bounded_in_2
-            self.mem_bd_out = mem_bounded_out
+            self.mem_bd_in.append(mem_bounded_in_1)
+            self.mem_bd_in.append(mem_bounded_in_2)
+            self.mem_bd_out = [mem_bounded_out]
 
             config = [coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
             self.config = config

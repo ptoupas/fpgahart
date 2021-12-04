@@ -166,7 +166,10 @@ class PartitionComposer(BaseLayer):
                 assert False, "Not supported layer"
 
             if isinstance(hw, ElementWiseLayer):
-                full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
+                if not dp_info['config']:
+                    self.update_layer()
+                    return self.get_dp_info()
+                full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn'][0], dp_info['rateIn'][1], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedIn'][0], dp_info['memBoundedOut']
                 if hw.broadcasting:
                     cp1 = graph_idx[node_fs]
                     cp2 = graph_idx[node_rs]
@@ -180,7 +183,10 @@ class PartitionComposer(BaseLayer):
                 graph.nodes[node]['cons_rate_2'] = full_rate_in_2
                 graph.nodes[node]['prod_rate'] = full_rate_out
             else:
-                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
+                if not dp_info['config']:
+                    self.update_layer()
+                    return self.get_dp_info()
+                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn'][0], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedOut'][0]
                 cp = graph_idx[node_predecessors[0]]
                 gamma_matrix[cp, n] = -full_rate_in
                 gamma_matrix[n, n] = full_rate_out

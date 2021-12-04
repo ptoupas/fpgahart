@@ -41,22 +41,22 @@ class Convolutional3DLayer(BaseLayer):
 
         self.depthwise = False
         self.pointwise = False
-        if self.groups == self.channels:
+        if self.groups == self.channels and self.channels == self.filters:
             self.depthwise = True
         elif np.prod(np.array(self.kernel_shape)) == 1:
             self.pointwise = True
 
     def update_layer(self):
         self.channels = self.input_shape[1]
-        self.full_rate_in = 0
-        self.full_rate_out = 0
+        self.full_rate_in = []
+        self.full_rate_out = []
         self.max_parallel_muls = 0
         self.max_parallel_adds = 0
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
-        self.mem_bd_in = False
-        self.mem_bd_out = False
+        self.mem_bd_in = []
+        self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
         self.bram_util = 0
@@ -77,16 +77,14 @@ class Convolutional3DLayer(BaseLayer):
         dp_info['vols/s'] = self.throughput_vols
         dp_info['DSP'] = self.dsps_util
         dp_info['BRAM'] = self.bram_util
-        dp_info['rateIn1'] = self.full_rate_in
-        dp_info['rateIn2'] = -1
+        dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
         dp_info['muls'] = self.max_parallel_muls
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
         dp_info['memKBs'] = self.memoryKB
-        dp_info['memBoundedIn1'] = self.mem_bd_in
-        dp_info['memBoundedIn2'] = -1
+        dp_info['memBoundedIn'] = self.mem_bd_in
         dp_info['memBoundedOut'] = self.mem_bd_out
         dp_info['config'] = self.config
         
@@ -177,14 +175,14 @@ class Convolutional3DLayer(BaseLayer):
 
         if dsps_util < 90. and bram_util < 90.:
             
-            self.full_rate_in = gamma_matrix_balanced[0, 0]
-            self.full_rate_out = abs(gamma_matrix_balanced[-1, -1])
+            self.full_rate_in = [gamma_matrix_balanced[0, 0]]
+            self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
             self.memory = memory
             self.depth = depth
-            self.mem_bd_in = mem_bounded_in
-            self.mem_bd_out = mem_bounded_out
+            self.mem_bd_in = [mem_bounded_in]
+            self.mem_bd_out = [mem_bounded_out]
 
             config = [f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out]
             self.config = config

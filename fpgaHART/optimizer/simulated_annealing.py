@@ -719,26 +719,26 @@ class SimulatedAnnealing(BaseLayer):
             current_temp *= self.cooling_rate
             print(f"{current_temp:.5e}\t{prev_cost:.5e}",end='\r')
 
-        print(f"\n\nFinal Memory Solution: {list(np.array(solution_mem) * self.mem_words_per_cycle)}. Latency: {prev_cost}")
+        print(f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}.")
         print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
         print("*"*40)
 
-    # TODO: Revise that to follow the changes on get_cost
     def get_cost_layer(self, config, mem_bw, layer):
-        if isinstance(layer, GAPLayer):
-            dp_info = layer.get_design_point(config[0], config[1], layer.mem_words_per_cycle*mem_bw[0], layer.mem_words_per_cycle*mem_bw[-1])
-        elif isinstance(layer, Convolutional3DLayer):
-            dp_info = layer.get_design_point(config[0], config[1], config[2], layer.mem_words_per_cycle*mem_bw[0], layer.mem_words_per_cycle*mem_bw[-1])
-        elif isinstance(layer, ActivationLayer):
-            dp_info = layer.get_design_point(config[0], layer.mem_words_per_cycle*mem_bw[0], layer.mem_words_per_cycle*mem_bw[-1])
-        elif isinstance(layer, ElementWiseLayer):
-            dp_info = layer.get_design_point(config[0], config[1], config[2], layer.mem_words_per_cycle*mem_bw[0], layer.mem_words_per_cycle*mem_bw[1], layer.mem_words_per_cycle*mem_bw[-1])
-        elif isinstance(layer, BatchNorm3DLayer):
-            dp_info = layer.get_design_point(config[0], layer.mem_words_per_cycle*mem_bw[0], layer.mem_words_per_cycle*mem_bw[-1])
-        elif isinstance(layer, SqueezeExcitationLayer):
+        hw = self.graph.nodes[layer]['hw']
+        if isinstance(hw, GAPLayer):
+            dp_info = hw.get_design_point(config[0], config[1], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
+        elif isinstance(hw, Convolutional3DLayer):
+            dp_info = hw.get_design_point(config[0], config[1], config[2], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
+        elif isinstance(hw, ActivationLayer):
+            dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
+        elif isinstance(hw, ElementWiseLayer):
+            dp_info = hw.get_design_point(config[0], config[1], config[2], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[0][1], hw.mem_words_per_cycle*mem_bw[1][0])
+        elif isinstance(hw, BatchNorm3DLayer):
+            dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], layhwer.mem_words_per_cycle*mem_bw[1][0])
+        elif isinstance(hw, SqueezeExcitationLayer):
             assert False, "Not supported layer (SqueezeExcitationLayer)"
-        elif isinstance(layer, FCLayer):
-            dp_info = layer.get_design_point(config[0], config[1], layer.mem_words_per_cycle*mem_bw[0][0], layer.mem_words_per_cycle*mem_bw[-1][0])
+        elif isinstance(hw, FCLayer):
+            dp_info = hw.get_design_point(config[0], config[1], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
         else:
             assert False, "Not supported layer"
 
@@ -746,10 +746,9 @@ class SimulatedAnnealing(BaseLayer):
             return dp_info['latency(S)'], dp_info
         return None, None
 
-    # TODO: Revise that to follow the changes on generate_random_config
     def generate_random_config_layer(self, l):
         config = []
-        hw = copy.deepcopy(l)
+        hw = self.graph.nodes[l]['hw']
         if isinstance(hw, GAPLayer):
             channels = hw.channels
             filters = hw.filters
@@ -803,6 +802,9 @@ class SimulatedAnnealing(BaseLayer):
         else:
             assert False, "Not supported layer"
 
-        mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=1, n_out=1)
+        if isinstance(hw, ElementWiseLayer):
+            mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=2, n_out=1)
+        else:
+            mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=1, n_out=1)
 
         return config, [mem_config_in, mem_config_out]

@@ -103,7 +103,7 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -123,7 +123,7 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -133,11 +133,14 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
     
-    print("(fine={:.2f}, cIn={:.2f}, cOut={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(fine={:.2f}, cIn={:.2f}, cOut={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {} ({}).".format(name, convtype))
-    optimizer = SimulatedAnnealing(None)
-    optimizer.run_optimizer_layer(conv)
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=conv)
+    
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -184,7 +187,7 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -204,7 +207,7 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -214,11 +217,14 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
                             min_latency = r['latency(C)']
                             best = r
     
-    print("(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
-    optimizer = SimulatedAnnealing(None)
-    optimizer.run_optimizer_layer(bn)
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=bn)
+    
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -267,7 +273,7 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -287,7 +293,7 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -297,11 +303,14 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
     
-    print("(cin={:.2f}, cout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(cin={:.2f}, cout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
-    optimizer = SimulatedAnnealing(None)
-    optimizer.run_optimizer_layer(gap)
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=gap)
+    
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -348,7 +357,7 @@ def activation_compose(name, description, model_file, optimization, singlethread
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -368,7 +377,7 @@ def activation_compose(name, description, model_file, optimization, singlethread
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -378,11 +387,14 @@ def activation_compose(name, description, model_file, optimization, singlethread
                             min_latency = r['latency(C)']
                             best = r
     
-    print("(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
-    optimizer = SimulatedAnnealing(None)
-    optimizer.run_optimizer_layer(activ)
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=activ)
+    
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -470,7 +482,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -492,7 +504,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -502,7 +514,7 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
 
-    print("(gapcin = {:.2f}, gapcout = {:.2f}, fine1={:.2f}, coarsein1={:.2f}, coarseout1={:.2f}, relucinout={:.2f}, fine2={:.2f}, coarsein2={:.2f}, coarseout2={:.2f}, sigmcinout={:.2f},  fmulcin1={:.6f}, fmulcin2={:.6f}, fmulcout={:.6f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['config'][6], best['config'][7], best['config'][8], best['config'][9], best['config'][10], best['config'][11], best['config'][12], best['config'][13], best['config'][14], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(gapcin = {:.2f}, gapcout = {:.2f}, fine1={:.2f}, coarsein1={:.2f}, coarseout1={:.2f}, relucinout={:.2f}, fine2={:.2f}, coarsein2={:.2f}, coarseout2={:.2f}, sigmcinout={:.2f},  fmulcin1={:.6f}, fmulcin2={:.6f}, fmulcout={:.6f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['config'][6], best['config'][7], best['config'][8], best['config'][9], best['config'][10], best['config'][11], best['config'][12], best['config'][13], best['config'][14], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -554,7 +566,7 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -574,7 +586,7 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
                     dsp_util.append(r['DSP'])
                     bram_util.append(r['BRAM'])
 
-                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn1'], -1, r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn1'], -1, r['memBoundedOut'], r['config']])
+                    csv_writer.writerow([name, r['latency(C)'], r['latency(S)'], r['GOP/s'], r['vols/s'], r['DSP'], r['BRAM'], r['rateIn'], r['rateOut'], r['depth'], r['muls'], r['adds'], r['memWords'], r['memKBs'], r['memBoundedIn'], r['memBoundedOut'], r['config']])
 
                     if r['latency(C)'] < min_latency and (r['DSP'] < 90. and r['BRAM'] < 90.):
                         min_latency = r['latency(C)']
@@ -584,11 +596,14 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
                             min_latency = r['latency(C)']
                             best = r
     
-    print("(cin1={:.2f}, cin2={:.2f}, cout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn1={:.2f}, RateOut={:.2f}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn1'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn1'], best['memBoundedOut']))
+    print("Latency: {}.\n(cin1={:.2f}, cin2={:.2f}, cout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
-    optimizer = SimulatedAnnealing(None)
-    optimizer.run_optimizer_layer(elem)
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description['operation'], hw=elem)
+    
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
@@ -601,6 +616,6 @@ def fc_compose(name, description, model_file, optimization, singlethreaded):
 
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
     optimizer = SimulatedAnnealing(graph=graph, branch_mem=0)
-    optimizer.run_optimizer_layer(fc)
+    optimizer.run_optimizer_layer(name)
     print("*"*40)
     return [], [], [], [], []
