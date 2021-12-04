@@ -200,10 +200,11 @@ class SimulatedAnnealing(BaseLayer):
         current_temp = self.t_max
 
         print(f"Temperature  |  Latency")
+        split_graph_count = 0
         while current_temp > self.t_min:
-            #TODO: Investigate whether we should search and optimize each of the graphs after we split them and get a valid configuration. And then at another point split again and search again for optimized points for each graph.
             for i in range(self.iterationPerTemp):
-                graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
+                if split_graph_count % 1000 == 0:
+                    graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
                 prev_state_1 = self.fix_inconsistent_config(prev_state_1, graph_1)
                 prev_state_2 = self.fix_inconsistent_config(prev_state_2, graph_2)
@@ -222,6 +223,7 @@ class SimulatedAnnealing(BaseLayer):
 
                 if new_cost_1 is None or new_cost_2 is None or not self.validate_configs(new_dp_info_1, new_dp_info_2):
                     continue
+                split_graph_count += 1
 
                 new_cost = new_cost_1 + new_cost_2
                 cost_diff = prev_cost - new_cost
@@ -244,6 +246,8 @@ class SimulatedAnnealing(BaseLayer):
                         self.visualize_graph(graph_2, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_phase_2')
 
             current_temp *= self.cooling_rate
+            # current_temp -= self.cooling_rate
+            # current_temp = current_temp/(1 + self.cooling_rate*current_temp)
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end='\r')
 
         print(f"\n\nLatency: {prev_cost}. volumes/s: {1/prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.mem_words_per_cycle)}.")
@@ -338,7 +342,7 @@ class SimulatedAnnealing(BaseLayer):
         mem_out = mem_out_conns
         read_points, write_points = self.add_off_chip_connections(graph, mem_in, mem_out)
         # self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_int')
-        dp_info = self.partition_composer.get_design_point(graph, comb_config, mem_bw[0], mem_bw[1], read_points, write_points, branch_mem)
+        dp_info = self.partition_composer.get_design_point(graph.copy(), comb_config, mem_bw[0], mem_bw[1], read_points, write_points, branch_mem)
         if dp_info['config']:
             return dp_info['latency(S)'], dp_info
         return None, None
@@ -530,6 +534,8 @@ class SimulatedAnnealing(BaseLayer):
                     new_config[node] = {'op_type': op_type,
                             'coarse_in': coarse_in_factor,
                             'coarse_out': coarse_out_factor}
+                elif isinstance(hw, MemoryNode):
+                    continue
                 else:
                     assert False, "Not supported layer"
         return new_config
@@ -541,7 +547,7 @@ class SimulatedAnnealing(BaseLayer):
             graph = target_graph
 
         if neighbours:
-            number_of_new_configs = math.ceil(graph.order() * 0.3)
+            number_of_new_configs = math.ceil(graph.order() * 0.25)
 
             # without replacement
             config_nodes = random.sample(list(graph.nodes), number_of_new_configs)
@@ -672,6 +678,8 @@ class SimulatedAnnealing(BaseLayer):
                     config[node] = {'op_type': op_type,
                             'coarse_in': coarse_in_factor,
                             'coarse_out': coarse_out_factor}
+            elif isinstance(hw, MemoryNode):
+                continue
             else:
                 assert False, "Not supported layer"
 
