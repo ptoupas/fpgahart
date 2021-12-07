@@ -523,9 +523,9 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
     elem = ElementWiseLayer(description, optimization)
 
     if optimization == 'brute_force':
-        coarse_in1 = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
-        coarse_in2 = utils.get_factors(elem.channels_2) / np.int64(elem.channels_2)
-        coarse_out = utils.get_factors(elem.filters) / np.int64(elem.filters)
+        coarse_in1 = utils.get_conbinations(utils.get_factors(elem.channels_1), utils.get_factors(elem.depth_in_1)) / (np.int64(elem.channels_1)*np.int64(elem.depth_in_1))
+        coarse_in2 = utils.get_conbinations(utils.get_factors(elem.channels_2), utils.get_factors(elem.depth_in_2)) / (np.int64(elem.channels_2)*np.int64(elem.depth_in_2))
+        coarse_out = utils.get_conbinations(utils.get_factors(elem.filters), utils.get_factors(elem.depth_out))  / (np.int64(elem.filters)*np.int64(elem.depth_out))
     else:
         coarse_in1 = [1]
         coarse_in2 = [1]

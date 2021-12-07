@@ -93,6 +93,7 @@ class OnnxModelParser():
         self.fix_classifier_shapes()
         self.get_config()
         self.parse_layers()
+        onnx.save(self.onnx_model, os.path.join(os.getcwd(), 'models', self.model_name + '_optimized.onnx'))
 
 
     def fix_classifier_shapes(self):
