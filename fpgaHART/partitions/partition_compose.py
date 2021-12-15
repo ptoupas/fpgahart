@@ -27,6 +27,8 @@ class PartitionComposer(BaseLayer):
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
+        self.data_size_in = 0
+        self.data_size_out = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
         self.config = []
@@ -66,6 +68,8 @@ class PartitionComposer(BaseLayer):
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
         dp_info['memKBs'] = self.memoryKB
+        dp_info['dataSizeIn'] = (self.data_size_in * self.word_bytes) / 1e6
+        dp_info['dataSizeOut'] = (self.data_size_out * self.word_bytes) / 1e6
         dp_info['memBoundedIn'] = self.mem_bd_in
         dp_info['memBoundedOut'] = self.mem_bd_out
         dp_info['config'] = self.config
@@ -300,12 +304,14 @@ class PartitionComposer(BaseLayer):
 
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
-        # gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
+        gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
         # gamma_matrix_balanced = balance_matrix(gamma_matrix_balanced)
-        gamma_matrix_balanced = gamma_matrix.copy()
+
         # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)
         mem_bounded_out = []
         mem_bounded_in = []
+        shapes_in = []
+        shapes_out = []
         rates_in = []
         rates_out = []
         for n, node in enumerate(graph.nodes()):
@@ -319,6 +325,7 @@ class PartitionComposer(BaseLayer):
                     mem_bounded_in.append(False)
                     gamma_matrix_balanced[n,n] = abs(gamma_matrix_balanced[n,nn])
                 rates_in.append(gamma_matrix_balanced[n,n])
+                shapes_in.append(graph.nodes[node]['hw'].output_shape)
             if graph.nodes[node]['type'] == 'mem_out':
                 pn = graph_idx[list(graph.predecessors(node))[0]]
                 if abs(gamma_matrix_balanced[n-1,n]) < gamma_matrix_balanced[n-1,pn]:
@@ -329,6 +336,7 @@ class PartitionComposer(BaseLayer):
                     mem_bounded_out.append(False)
                     gamma_matrix_balanced[n-1,n] = -gamma_matrix_balanced[n-1,pn]
                 rates_out.append(abs(gamma_matrix_balanced[n-1,n]))
+                shapes_out.append(graph.nodes[node]['hw'].input_shape)
 
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
@@ -356,6 +364,8 @@ class PartitionComposer(BaseLayer):
             self.depth = total_depth
             self.mem_bd_in = mem_bounded_in
             self.mem_bd_out = mem_bounded_out
+            self.data_size_in = sum(map(lambda x: np.prod(np.array(x[1:])), shapes_in))
+            self.data_size_out = sum(map(lambda x: np.prod(np.array(x[1:])), shapes_out))
 
             config = comb
             self.total_ops = total_ops
