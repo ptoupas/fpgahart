@@ -307,3 +307,7 @@ def get_branch_edges(graph):
             branch_edges.append((spl, mrg))
 
     return branch_edges
+
+def get_conbinations(list1, list2):
+    combs = [x * y for x, y in itertools.product(list1, list2)]
+    return list(np.unique(np.array(combs)))

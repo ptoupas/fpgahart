@@ -621,14 +621,17 @@ class SimulatedAnnealing(BaseLayer):
                         'coarse_in': coarse_in_factor}
             elif isinstance(hw, ElementWiseLayer):
                 channels_1 = hw.channels_1
+                depth_1 = hw.depth_in_1
                 channels_2 = hw.channels_2
+                depth_2 = hw.depth_in_2
                 filters = hw.filters
-                coarse_in1_feasible = utils.get_factors(channels_1)
-                coarse_in2_feasible = utils.get_factors(channels_2)
-                coarse_out_feasible = utils.get_factors(filters)
-                coarse_in1_factor = random.choice(coarse_in1_feasible)/channels_1
-                coarse_in2_factor = random.choice(coarse_in2_feasible)/channels_2
-                coarse_out_factor = random.choice(coarse_out_feasible)/filters
+                depth_out = hw.depth_out
+                coarse_in1_feasible = utils.get_conbinations(utils.get_factors(channels_1), utils.get_factors(depth_1))
+                coarse_in2_feasible = utils.get_conbinations(utils.get_factors(channels_2), utils.get_factors(depth_2))
+                coarse_out_feasible = utils.get_conbinations(utils.get_factors(filters), utils.get_factors(depth_out))
+                coarse_in1_factor = random.choice(coarse_in1_feasible)/(channels_1*depth_1)
+                coarse_in2_factor = random.choice(coarse_in2_feasible)/(channels_2*depth_2)
+                coarse_out_factor = random.choice(coarse_out_feasible)/(filters*depth_out)
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove('op_type')
@@ -783,14 +786,17 @@ class SimulatedAnnealing(BaseLayer):
             config = [coarse_in_factor]
         elif isinstance(hw, ElementWiseLayer):
             channels_1 = hw.channels_1
+            depth_1 = hw.depth_in_1
             channels_2 = hw.channels_2
+            depth_2 = hw.depth_in_2
             filters = hw.filters
-            coarse_in1_feasible = utils.get_factors(channels_1)
-            coarse_in2_feasible = utils.get_factors(channels_2)
-            coarse_out_feasible = utils.get_factors(filters)
-            coarse_in1_factor = random.choice(coarse_in1_feasible)/channels_1
-            coarse_in2_factor = random.choice(coarse_in2_feasible)/channels_2
-            coarse_out_factor = random.choice(coarse_out_feasible)/filters
+            depth_out = hw.depth_out
+            coarse_in1_feasible = utils.get_conbinations(utils.get_factors(channels_1), utils.get_factors(depth_1))
+            coarse_in2_feasible = utils.get_conbinations(utils.get_factors(channels_2), utils.get_factors(depth_2))
+            coarse_out_feasible = utils.get_conbinations(utils.get_factors(filters), utils.get_factors(depth_out))
+            coarse_in1_factor = random.choice(coarse_in1_feasible)/(channels_1*depth_1)
+            coarse_in2_factor = random.choice(coarse_in2_feasible)/(channels_2*depth_2)
+            coarse_out_factor = random.choice(coarse_out_feasible)/(filters*depth_out)
             config = [coarse_in1_factor, coarse_in2_factor, coarse_out_factor]
         elif isinstance(hw, BatchNorm3DLayer):
             channels = hw.channels
