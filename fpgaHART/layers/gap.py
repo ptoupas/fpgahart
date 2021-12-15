@@ -99,14 +99,14 @@ class GAPLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         if self.data_format == 'NCHWD':
-            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_muls = math.ceil(self.channels * coarse_in * 2) # math.ceil(self.filters * coarse_out * 2)
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
             memory = 1
             #TODO: !SOS! Revise that
             depth = math.ceil((self.depth_in * self.rows_in * self.cols_in)/math.ceil(self.depth *coarse_in))
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
-            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_muls = math.ceil(self.channels * coarse_in * 2) # math.ceil(self.filters * coarse_out * 2)
             max_parallel_adds = math.ceil(self.channels * coarse_in)
             memory = self.channels
             #TODO: !SOS! Revise that
@@ -168,16 +168,16 @@ class GAPLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         if self.data_format == 'NCHWD':
-            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_muls = math.ceil(self.channels * coarse_in * 2) # math.ceil(self.filters * coarse_out * 2)
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in)
             memory = 1
-            depth = 1
+            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in)/math.ceil(self.depth *coarse_in))
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
         else:
-            max_parallel_muls = math.ceil(self.filters * coarse_out * 2)
+            max_parallel_muls = math.ceil(self.channels * coarse_in * 2) # math.ceil(self.filters * coarse_out * 2)
             max_parallel_adds = math.ceil(self.channels * coarse_in)
             memory = self.channels
-            depth = 1
+            depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels *coarse_in))
             # depth = math.ceil((self.depth_in * self.rows_in * self.cols_in * self.channels)/math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_in))
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
@@ -198,7 +198,7 @@ class GAPLayer(BaseLayer):
         rate_matrix[0, 0] = 1
         
         rate_matrix[0, 1] = 1
-        rate_matrix[1, 1] = 1/(self.depth_in * self.rows_in * self.cols_in)
+        rate_matrix[1, 1] = 1#/(self.depth_in * self.rows_in * self.cols_in)
 
         rate_matrix[1, 2] = 1
 
@@ -213,7 +213,7 @@ class GAPLayer(BaseLayer):
         stream_matrix[0, 0] = 1
     
         stream_matrix[0, 1] = math.ceil(self.channels * coarse_in)
-        stream_matrix[1, 1] = math.ceil(self.filters * coarse_out)
+        stream_matrix[1, 1] = math.ceil(self.channels * coarse_in) #math.ceil(self.filters * coarse_out)
         stream_matrix[1, 2] = 1
 
         if DEBUG:

@@ -187,7 +187,7 @@ class SimulatedAnnealing(BaseLayer):
                 if cost_1 is not None and cost_2 is not None and self.validate_configs(dp_info_1, dp_info_2):
                     break
             if cost_1 is None or cost_2 is None:
-                return None
+                return None, None, None
 
         prev_state_1 = config_1
         prev_state_2 = config_2
@@ -270,7 +270,7 @@ class SimulatedAnnealing(BaseLayer):
                 if cost is not None:
                     break
             if cost is None:
-                return None
+                return None, None, None
 
         prev_state = config
         prev_cost = cost

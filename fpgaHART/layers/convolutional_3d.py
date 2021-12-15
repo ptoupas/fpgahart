@@ -66,7 +66,10 @@ class Convolutional3DLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        return self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
+        if not self.depthwise:
+            return self.depth_out*self.rows_out*self.cols_out*self.kd*self.kw*self.kh*self.channels*self.filters
+        else:
+            return self.depth_out*self.rows_out*self.cols_out*self.kd*self.kh*self.kw*self.channels
 
     def get_dp_info(self):
         dp_info = {}
@@ -358,14 +361,14 @@ class Convolutional3DLayer(BaseLayer):
         
         # Sliding Window
         data_matrix[0, 1] = -1
-        data_matrix[1, 1] = 1
+        data_matrix[1, 1] = self.kd * self.kw * self.kh
 
         # Fork
-        data_matrix[1, 2] = -1
-        data_matrix[2, 2] = 1
+        data_matrix[1, 2] = -self.kd * self.kw * self.kh
+        data_matrix[2, 2] = self.kd * self.kw * self.kh
 
         # Convolution 3D
-        data_matrix[2, 3] = -1
+        data_matrix[2, 3] = -self.kd * self.kw * self.kh
         data_matrix[3, 3] = 1
 
         if not self.depthwise:
