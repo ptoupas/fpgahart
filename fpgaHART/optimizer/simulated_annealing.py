@@ -58,15 +58,16 @@ class SimulatedAnnealing(BaseLayer):
         mem_in_1, mem_out_1, mem_in_2, mem_out_2 = [] , [], [], []
 
         merge_nodes = [n for n in self.graph.nodes if self.graph.in_degree[n] > 1]
-        split_node = ''
+        split_nodes = [n for n in self.graph.nodes if self.graph.out_degree[n] > 1]
+        break_node_gap = ''
         for node in self.graph.nodes:
             op_type = self.graph.nodes[node]['type']
             hw = self.graph.nodes[node]['hw']
             if op_type == 'ElementWise' and self.graph.in_degree[node] > 1 and hw.type == 'Mul':
-                split_node = node
+                break_node_gap = node
 
         phase_1 = deque()
-        check_node = split_node
+        check_node = break_node_gap
         predec_nodes = [n for n in self.graph.predecessors(check_node)]
         while predec_nodes:
             if len(predec_nodes) > 1:
@@ -103,13 +104,23 @@ class SimulatedAnnealing(BaseLayer):
         phase_2_graph.remove_edges_from(phase_1_edges[gap_index-1:])
 
         phase_2_read_point = random.choice([*[-1], *list(range(gap_index))])
+        split_graph_start_point = 0
+        split_nodes_ind = [i for i, n in enumerate(list(phase_1)) if n in split_nodes]
+        for i in split_nodes_ind:
+            if i < phase_2_read_point:
+                split_graph_start_point = i
+                #TODO: What if we have more than 1 point before the phase_2_read_point node?
+                break
         if phase_2_read_point >= 0:
             phase_2_read_node = [n for i, n in enumerate(list(phase_1)) if phase_2_read_point==i][0]
             mem_out_1.append(phase_2_read_node)
 
-        phase_2_graph.remove_nodes_from(list(phase_1)[:phase_2_read_point+1])
-        phase_2_graph.remove_edges_from(phase_1_edges[:phase_2_read_point+1])
-
+        if split_graph_start_point > 0:
+            phase_2_graph.remove_nodes_from(list(phase_1)[split_graph_start_point+1:phase_2_read_point+1])
+            phase_2_graph.remove_edges_from(phase_1_edges[split_graph_start_point+1:phase_2_read_point+1])
+        else:
+            phase_2_graph.remove_nodes_from(list(phase_1)[:phase_2_read_point+1])
+            phase_2_graph.remove_edges_from(phase_1_edges[:phase_2_read_point+1])
 
         mem_in_2_count = 1
         for node in list(phase_2_graph.nodes()):

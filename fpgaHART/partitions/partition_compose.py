@@ -6,7 +6,7 @@ from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
 from ..layers.fully_connected import FCLayer
 from ..layers.base_layer import BaseLayer
-from ..utils.matrix_balancing import balance_multiport_rates, balance_matrix
+from ..utils.matrix_balancing import balance_memory_rates, balance_multiport_rates, balance_matrix
 from collections import deque
 import numpy as np
 import math
@@ -304,7 +304,8 @@ class PartitionComposer(BaseLayer):
 
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
-        gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
+        gamma_matrix_balanced = balance_memory_rates(gamma_matrix.copy())
+        # gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
         # gamma_matrix_balanced = balance_matrix(gamma_matrix_balanced)
 
         # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)

@@ -1,12 +1,30 @@
 import numpy as np
 
+def get_connection_points(matrix, node, debug=False):
+  consume_points = get_consume_points(matrix, node)
+  produce_points = get_produce_points(matrix, node)
+  points_left = []
+  points_right = []
+  for c in consume_points:
+    non_zero_points = list(np.where(matrix[c, :] != 0)[0])
+    for p in non_zero_points:
+        if matrix[c, p] > 0:
+          points_left.append(p)
+  if produce_points is not None:
+    non_zero_points = list(np.where(matrix[produce_points, :] != 0)[0])
+    for p in non_zero_points:
+        if matrix[produce_points, p] < 0:
+          points_right.append(p)
+
+  return points_left, points_right
+
 def get_produce_points(matrix, node, debug=False):
   points = []
-  for i in range(0, matrix.shape[0]):
+  for i in range(0, matrix.shape[1]):
     if i == node:
-      non_zero_points = list(np.where(matrix[i, :] != 0)[0])
+      non_zero_points = list(np.where(matrix[:, i] != 0)[0])
       for p in non_zero_points:
-        if matrix[i, p] > 0:
+        if matrix[p, i] > 0:
           points.append(p)
 
   if len(points) == 1:
@@ -17,41 +35,66 @@ def get_produce_points(matrix, node, debug=False):
     return None
 
 def get_consume_points(matrix, node):
-    points = []
-    for i in range(0, matrix.shape[1]):
-        if i == node:
-            non_zero_points = list(np.where(matrix[:, i] != 0)[0])
-            for p in non_zero_points:
-                if matrix[p, i] < 0:
-                    points.append(p)
+  points = []
+  for i in range(0, matrix.shape[1]):
+    if i == node:
+      non_zero_points = list(np.where(matrix[:, i] != 0)[0])
+      for p in non_zero_points:
+        if matrix[p, i] < 0:
+          points.append(p)
 
-    return points
+  return points
 
 def get_rate_ratio(matrix):
-    rate_ratio = []
-    for i in range(matrix.shape[1] -1):
-        consume_points = get_consume_points(matrix, i)
-        produce_points = get_produce_points(matrix, i)
-        if len(consume_points) > 0:
-            min_rate = 100000000
-            for c in consume_points:
-                min_rate = min(abs(matrix[c, i]), min_rate)
-            rate_ratio.append(matrix[produce_points, i] / min_rate)
-        else:
-            rate_ratio.append(-1)
-    rate_ratio.append(-1)
-    return rate_ratio
+  rate_ratio = []
+  for i in range(matrix.shape[1] -1):
+    consume_points = get_consume_points(matrix, i)
+    produce_points = get_produce_points(matrix, i)
+    if len(consume_points) > 0:
+      min_rate = 100000000
+      for c in consume_points:
+        min_rate = min(abs(matrix[c, i]), min_rate)
+      rate_ratio.append(matrix[produce_points, i] / min_rate)
+    else:
+      rate_ratio.append(-1)
+  rate_ratio.append(-1)
+  return rate_ratio
+
+def get_memory_nodes(matrix):
+  mem_nodes = []
+  for i in range(0, matrix.shape[1]):
+    non_zero_points = list(np.where(matrix[:, i] != 0)[0])
+    if len(non_zero_points) == 1:
+      memtype = ''
+      if matrix[non_zero_points[0],i] < 0:
+        memtype = 'mem_out'
+      else:
+        memtype = 'mem_in'
+      mem_nodes.append((non_zero_points[0], i, memtype))
+  return mem_nodes
+
+def balance_memory_rates(matrix):
+  mem_nodes = get_memory_nodes(matrix)
+  for node in mem_nodes:
+    if node[2] == 'mem_in':
+      _, p_right = get_connection_points(matrix, node[1])
+      matrix[node[0],node[1]] = abs(matrix[node[0],p_right[0]])
+    elif node[2] == 'mem_out':
+      p_left, _ = get_connection_points(matrix, node[1])
+      matrix[node[0],node[1]] = - matrix[node[0],p_left[0]]
+  
+  return matrix
 
 def balance_multiport_rates(matrix):
-    for i in range(matrix.shape[1] -1):
-        consume_points = get_consume_points(matrix, i)
-        if len(consume_points) > 1:
-            min_rate = 100000000
-            for c in consume_points:
-                min_rate = min(abs(matrix[c, i]), min_rate)
-            for c in consume_points:
-                matrix[c, i] = -min_rate
-    return matrix
+  for i in range(matrix.shape[1] -1):
+    consume_points = get_consume_points(matrix, i)
+    if len(consume_points) > 1:
+      min_rate = 100000000
+      for c in consume_points:
+        min_rate = min(abs(matrix[c, i]), min_rate)
+      for c in consume_points:
+        matrix[c, i] = -min_rate
+  return matrix
 
 def connected_with_node(matrix, layer, prev_layer):
   produce_edge_point = None
