@@ -296,15 +296,11 @@ def get_merge_points(graph):
     return merge_points
 
 def get_branch_edges(graph):
-    split_points = get_split_points(graph)
     merge_points = get_merge_points(graph)
     
-    combinations = itertools.product(*[split_points, merge_points])
-
     branch_edges = []
-    for spl, mrg in combinations:
-        if graph.has_edge(spl, mrg):
-            branch_edges.append((spl, mrg))
+    for mrg in merge_points:
+        branch_edges.append(list(graph.in_edges(mrg)))
 
     return branch_edges
 

@@ -136,12 +136,19 @@ class SimulatedAnnealing(BaseLayer):
         # Worst case scenario
         branch_buffer_1 = 0
         for edge in branch_edges_1:
-            assert phase_1_graph.nodes[edge[0]]['hw'].output_shape == phase_1_graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
-            branch_buffer_1 += np.prod(np.array(phase_1_graph.nodes[edge[0]]['hw'].output_shape[1:]))
+            max_shape = 0
+            for pair in edge:
+                assert phase_1_graph.nodes[pair[0]]['hw'].output_shape == phase_1_graph.nodes[pair[1]]['hw'].input_shape_1 or phase_1_graph.nodes[pair[0]]['hw'].output_shape == phase_1_graph.nodes[pair[1]]['hw'].input_shape_2, "Layers input and output shapes does not match"
+                max_shape = max(max_shape, np.prod(np.array(phase_1_graph.nodes[pair[0]]['hw'].output_shape[1:])))
+            branch_buffer_1 += max_shape
+        # Worst case scenario
         branch_buffer_2 = 0
         for edge in branch_edges_2:
-            assert phase_2_graph.nodes[edge[0]]['hw'].output_shape == phase_2_graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
-            branch_buffer_2 += np.prod(np.array(phase_2_graph.nodes[edge[0]]['hw'].output_shape[1:]))
+            max_shape = 0
+            for pair in edge:
+                assert phase_2_graph.nodes[pair[0]]['hw'].output_shape == phase_2_graph.nodes[pair[1]]['hw'].input_shape_1 or phase_2_graph.nodes[pair[0]]['hw'].output_shape == phase_2_graph.nodes[pair[1]]['hw'].input_shape_2, "Layers input and output shapes does not match"
+                max_shape = max(max_shape, np.prod(np.array(phase_2_graph.nodes[pair[0]]['hw'].output_shape[1:])))
+            branch_buffer_2 += max_shape
 
         mem_kb = ((branch_buffer_1 + branch_buffer_2) * self.word_bytes) / 1e3
         mem_bram = math.ceil(mem_kb / self.bram_Kbytes)

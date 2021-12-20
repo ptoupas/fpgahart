@@ -117,11 +117,14 @@ class PartitionParser():
 
         # Worst case scenario
         branch_buffer = 0
-        branch_shapes = []
         for edge in branch_edges:
-            assert graph.nodes[edge[0]]['hw'].output_shape == graph.nodes[edge[1]]['hw'].input_shape_1, "Layers input and output shapes does not match"
-            branch_buffer += np.prod(np.array(graph.nodes[edge[0]]['hw'].output_shape[1:]))
-            branch_shapes.append(graph.nodes[edge[0]]['hw'].output_shape)
+            max_shape = 0
+            for pair in edge:
+                if (graph.nodes[pair[0]]['type'] == 'ElementWise' and graph.nodes[pair[0]]['hw'].type == 'Mul') or (graph.nodes[pair[1]]['type'] == 'ElementWise' and graph.nodes[pair[1]]['hw'].type == 'Mul'):
+                    continue
+                assert graph.nodes[pair[0]]['hw'].output_shape == graph.nodes[pair[1]]['hw'].input_shape_1 or graph.nodes[pair[0]]['hw'].output_shape == graph.nodes[pair[1]]['hw'].input_shape_2, "Layers input and output shapes does not match"
+                max_shape = max(max_shape, np.prod(np.array(graph.nodes[pair[0]]['hw'].output_shape[1:])))
+            branch_buffer += max_shape
 
         self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + name)
 
