@@ -216,92 +216,6 @@ class PartitionComposer(BaseLayer):
         assert len(off_chip_mem_in) == 0, "Off-chip memory IN points left hanging. Wrong configuration of the graph."
         assert len(off_chip_mem_out) == 0, "Off-chip memory OUT points left hanging. Wrong configuration of the graph."
 
-        # gamma_matrix[0, 0] = mem_bw_in_1
-        # gamma_matrix[-1, -1] = -mem_bw_out
-
-        # total_muls = 0
-        # total_adds = 0
-        # total_memory = branch_mem
-        # total_depth = 0
-        # first_layer_bw_in = False
-        # prev_layer_rate = mem_bw_in_1
-
-        # for n, node in enumerate(graph.nodes):
-        #     if node in comb.keys():
-        #         c = comb[node]
-        #     else:
-        #         print("Off chip memory node. Skipping...")
-        #         continue
-
-        #     op_type = graph.nodes[node]['type']
-        #     hw = graph.nodes[node]['hw']
-
-        #     input_node = False
-        #     output_node = False
-        #     if graph.in_degree[node] == 0:
-        #         input_node = True
-        #     if graph.out_degree[node] == 0:
-        #         output_node = True
-
-        #     if output_node:
-        #         curr_layer_rate = mem_bw_out
-        #     else:
-        #         curr_layer_rate = 10000000
-
-        #     if isinstance(hw, GAPLayer):
-        #         dp_info = hw.get_design_point(c[0], c[1], prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, Convolutional3DLayer):
-        #         dp_info = hw.get_design_point(c[0], c[1], c[2], prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, ActivationLayer):
-        #         dp_info = hw.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, ElementWiseLayer):
-        #         #TODO: Check this how to deal when the input comes from another layer and not from off-chip mem
-        #         if branch_mem == 0:
-        #             dp_info = hw.get_design_point(c[0], c[1], c[2], mem_bw_in_2, prev_layer_rate, curr_layer_rate)
-        #         else:
-        #             dp_info = hw.get_design_point(c[0], c[1], c[2], curr_layer_rate, prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, BatchNorm3DLayer):
-        #         dp_info = hw.get_design_point(c[0], prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, SqueezeExcitationLayer):
-        #         dp_info = hw.get_design_point(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], prev_layer_rate, curr_layer_rate)
-        #     elif isinstance(hw, FCLayer):
-        #         dp_info = hw.get_design_point(c[0], c[1], prev_layer_rate, curr_layer_rate)
-        #     else:
-        #         assert False, "Not supported layer"
-            
-        #     if isinstance(hw, ElementWiseLayer):
-        #         full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn1'], dp_info['rateIn2'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedIn2'], dp_info['memBoundedOut']
-        #         # if graph.in_degree[node] > 1:
-        #         #     predec_nodes = [n for n in graph.predecessors(node)]
-        #         #     for pn in predec_nodes:
-        #         #         node_idx = self.find_node_idx(graph, pn)
-        #         #         if not node_idx == n-1:
-        #         #             gamma_matrix[node_idx, n+1] = -full_rate_in_1
-        #         gamma_matrix[n, n+1] = -full_rate_in_2
-        #         gamma_matrix[n+1, n+1] = full_rate_out
-        #     else:
-        #         full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn1'], dp_info['rateOut'], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn1'], dp_info['memBoundedOut']
-        #         gamma_matrix[n, n+1] = -full_rate_in
-        #         gamma_matrix[n+1, n+1] = full_rate_out
-
-        #     prev_layer_rate = full_rate_out
-
-        #     total_muls += muls
-        #     total_adds += adds
-        #     total_memory += memory
-        #     total_depth += depth
-
-        #     mem_kb = (total_memory * self.word_bytes) / 1e3
-        #     mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
-        #     curr_bram_util = (mem_bram / self.bram) * 100
-        #     curr_dsps_util = (total_muls/self.dsp)*100
-
-        #     if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 90.:
-        #         self.update_layer()
-        #         if DEBUG:
-        #             print("Discarding design point.")
-        #         return self.get_dp_info()
-
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced = balance_memory_rates(gamma_matrix.copy())
@@ -418,33 +332,6 @@ class PartitionComposer(BaseLayer):
                 cp = graph_idx[list(graph.in_edges(node))[0][0]]
                 workload_matrix[cp, n] = np.prod(np.array(hw.input_shape[1:]))
                 workload_matrix[n, n] = np.prod(np.array(hw.output_shape[1:]))
-
-            # input_node = False
-            # output_node = False
-            # if graph.in_degree[node] == 0:
-            #     input_node = True
-            # if graph.out_degree[node] == 0:
-            #     output_node = True
-
-            # op_type = graph.nodes[node]['type']
-            # hw = graph.nodes[node]['hw']
-
-            # if input_node:
-            #     workload_matrix[0, 0] = np.prod(np.array(hw.input_shape[1:]))
-            # if output_node:
-            #     workload_matrix[-1, -1] = np.prod(np.array(hw.output_shape[1:]))
-            
-            # if isinstance(hw, ElementWiseLayer):
-            #     # if graph.in_degree[node] > 1:
-            #     #     predec_nodes = [n for n in graph.predecessors(node)]
-            #     #     for pn in predec_nodes:
-            #     #         node_idx = self.find_node_idx(graph, pn)
-            #     #         if not node_idx == n-1:
-            #     #             workload_matrix[node_idx, n+1] = np.prod(np.array(hw.input_shape_1[1:]))
-            #     workload_matrix[n, n+1] = np.prod(np.array(hw.input_shape_2[1:]))
-            # else:
-            #     workload_matrix[n, n+1] = np.prod(np.array(hw.input_shape[1:]))
-            # workload_matrix[n+1, n+1] = np.prod(np.array(hw.output_shape[1:]))
 
         return workload_matrix
 
