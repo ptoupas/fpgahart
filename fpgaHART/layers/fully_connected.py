@@ -9,10 +9,9 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG=False
 
 class FCLayer(BaseLayer):
-    def __init__(self, description, optimization):
+    def __init__(self, description):
         super().__init__()
 
-        self.optimization = optimization
         self.input_shape = description['shape_in'][0]
         self.output_shape = description['shape_out']
         self.weights_shape = description['kernel']

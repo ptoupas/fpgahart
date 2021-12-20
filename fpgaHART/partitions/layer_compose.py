@@ -18,21 +18,21 @@ def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
     return results
 
-def layer_compose(name, description, model_file, optimization, singlethreaded):
+def layer_compose(name, description, model_file, singlethreaded):
     if description['operation'] == 'Conv':
-        return conv_compose(name, description, model_file, optimization, singlethreaded)
+        return conv_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'BatchNormalization':
-        return batchnorm_compose(name, description, model_file, optimization, singlethreaded)
+        return batchnorm_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'GlobalAveragePool':
-        return gap_compose(name, description, model_file, optimization, singlethreaded)
+        return gap_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'Relu' or description['operation'] == 'Sigmoid' or description['operation'] == 'Swish':
-        return activation_compose(name, description, model_file, optimization, singlethreaded)
+        return activation_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'SqueezeExcitation':
-        return se_compose(name, description, model_file, optimization, singlethreaded)
+        return se_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'Add' or description['operation'] == 'Mul':
-        return elemwise_compose(name, description, model_file, optimization, singlethreaded)
+        return elemwise_compose(name, description, model_file, singlethreaded)
     elif description['operation'] == 'Gemm' or description['operation'] == 'MatMul':
-        return fc_compose(name, description, model_file, optimization, singlethreaded)
+        return fc_compose(name, description, model_file, singlethreaded)
     else:
         assert False, "{} operation in layer {} is not supported".format(description['operation'], name)
 
@@ -48,8 +48,8 @@ def contains_list(part, whole):
     else:
         return False
 
-def conv_compose(name, description, model_file, optimization, singlethreaded):
-    conv = Convolutional3DLayer(description, optimization)
+def conv_compose(name, description, model_file, singlethreaded):
+    conv = Convolutional3DLayer(description)
     
     if conv.depthwise:
         convtype = 'DepthWise'
@@ -58,15 +58,11 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
     else:
         convtype = '3DConv'
     
-    if optimization == 'brute_force':
-        kernel_size = conv.kernel_shape
-        fine = utils.get_fine_feasible(kernel_size) / np.prod(np.array(kernel_size))
-        coarsein = utils.get_factors(conv.channels) / np.int64(conv.channels)
-        coarseout = utils.get_factors(conv.filters) / np.int64(conv.filters)
-    else:
-        fine = [1]
-        coarsein = [1]
-        coarseout = [1]
+    kernel_size = conv.kernel_shape
+    fine = utils.get_fine_feasible(kernel_size) / np.prod(np.array(kernel_size))
+    coarsein = utils.get_factors(conv.channels) / np.int64(conv.channels)
+    coarseout = utils.get_factors(conv.filters) / np.int64(conv.filters)
+
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
 
@@ -145,13 +141,11 @@ def conv_compose(name, description, model_file, optimization, singlethreaded):
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
-def batchnorm_compose(name, description, model_file, optimization, singlethreaded):
-    bn = BatchNorm3DLayer(description, optimization)
+def batchnorm_compose(name, description, model_file, singlethreaded):
+    bn = BatchNorm3DLayer(description)
 
-    if optimization == 'brute_force':
-        coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
-    else:
-        coarse_inout = [1]
+    coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
+
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
 
@@ -229,15 +223,12 @@ def batchnorm_compose(name, description, model_file, optimization, singlethreade
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
-def gap_compose(name, description, model_file, optimization, singlethreaded):
-    gap = GAPLayer(description, optimization)
+def gap_compose(name, description, model_file, singlethreaded):
+    gap = GAPLayer(description)
 
-    if optimization == 'brute_force':
-        coarse_in = utils.get_factors(gap.channels) / np.int64(gap.channels)
-        coarse_out = utils.get_factors(gap.filters) / np.int64(gap.filters)
-    else:
-        coarse_in = [1]
-        coarse_out = [1]
+    coarse_in = utils.get_factors(gap.channels) / np.int64(gap.channels)
+    coarse_out = utils.get_factors(gap.filters) / np.int64(gap.filters)
+
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
 
@@ -315,13 +306,11 @@ def gap_compose(name, description, model_file, optimization, singlethreaded):
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
-def activation_compose(name, description, model_file, optimization, singlethreaded):
-    activ = ActivationLayer(description, optimization)
+def activation_compose(name, description, model_file, singlethreaded):
+    activ = ActivationLayer(description)
 
-    if optimization == 'brute_force':
-        coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
-    else:
-        coarse_inout = [1]
+    coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
+
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
 
@@ -399,8 +388,8 @@ def activation_compose(name, description, model_file, optimization, singlethread
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
-def se_compose(name, description, model_file, optimization, singlethreaded):
-    se = SqueezeExcitationLayer(description, optimization)
+def se_compose(name, description, model_file, singlethreaded):
+    se = SqueezeExcitationLayer(description)
 
     # layers_in_shape = []
     # layers_out_shape = []
@@ -411,24 +400,15 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
     #         layers_in_shape.append(layers.input_shape)
     #     layers_out_shape.append(layers.output_shape)
 
-    # if optimization == 'brute_force':
-    #     gap_total_size = layers_in_shape[0][1]*layers_in_shape[0][2]*layers_in_shape[0][3]*layers_in_shape[0][4]
-    #     gap_coarsein = [1/gap_total_size, (layers_in_shape[0][1]/total_size)*0.1, (layers_in_shape[0][1]/total_size)*0.25, (layers_in_shape[0][1]/total_size)*0.5, layers_in_shape[0][1]/total_size, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.1, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.25, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.5, (layers_in_shape[0][2] * layers_in_shape[0][1])/total_size, ((layers_in_shape[0][2] * layers_in_shape[0][1] * layers_in_shape[0][3])/total_size)*0.25]
-    #     gap_coarseout = [1]
-    #     coarsein_1 = [1/layers_in_shape[1][1], 0.25, 0.5, 1]
-    #     coarseout_1 = [1/layers_out_shape[1][1], 0.25, 0.5, 1]
-    #     coarsein_2 = [1/layers_in_shape[2][1], 0.25, 0.5, 1]
-    #     coarseout_2 = [1/layers_out_shape[2][1], 0.25, 0.5, 1]
-    #     mul_total_size = layers_out_shape[3][1] * layers_out_shape[3][2] * layers_out_shape[3][3] * layers_out_shape[3][4]
-    #     mul_coarseinout = [(layers_out_shape[3][1]/mul_total_size)*0.1, (layers_out_shape[3][1]/mul_total_size)*0.25, (layers_out_shape[3][1]/mul_total_size)*0.5, layers_out_shape[3][1]/mul_total_size, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.1, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.25, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.5, (layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size, (layers_out_shape[3][3] * layers_out_shape[3][2] * layers_out_shape[3][1])/total_size]
-    # else:
-    #     gap_coarsein = [1]
-    #     gap_coarseout = [1]
-    #     coarsein_1 = [1]
-    #     coarseout_1 = [1]
-    #     coarsein_2 = [1]
-    #     coarseout_2 = [1]
-    #     mul_coarseinout = [1]
+    # gap_total_size = layers_in_shape[0][1]*layers_in_shape[0][2]*layers_in_shape[0][3]*layers_in_shape[0][4]
+    # gap_coarsein = [1/gap_total_size, (layers_in_shape[0][1]/total_size)*0.1, (layers_in_shape[0][1]/total_size)*0.25, (layers_in_shape[0][1]/total_size)*0.5, layers_in_shape[0][1]/total_size, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.1, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.25, ((layers_in_shape[0][2] * layers_in_shape[0][1])/total_size)*0.5, (layers_in_shape[0][2] * layers_in_shape[0][1])/total_size, ((layers_in_shape[0][2] * layers_in_shape[0][1] * layers_in_shape[0][3])/total_size)*0.25]
+    # gap_coarseout = [1]
+    # coarsein_1 = [1/layers_in_shape[1][1], 0.25, 0.5, 1]
+    # coarseout_1 = [1/layers_out_shape[1][1], 0.25, 0.5, 1]
+    # coarsein_2 = [1/layers_in_shape[2][1], 0.25, 0.5, 1]
+    # coarseout_2 = [1/layers_out_shape[2][1], 0.25, 0.5, 1]
+    # mul_total_size = layers_out_shape[3][1] * layers_out_shape[3][2] * layers_out_shape[3][3] * layers_out_shape[3][4]
+    # mul_coarseinout = [(layers_out_shape[3][1]/mul_total_size)*0.1, (layers_out_shape[3][1]/mul_total_size)*0.25, (layers_out_shape[3][1]/mul_total_size)*0.5, layers_out_shape[3][1]/mul_total_size, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.1, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.25, ((layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size)*0.5, (layers_out_shape[3][2] * layers_out_shape[3][1])/mul_total_size, (layers_out_shape[3][3] * layers_out_shape[3][2] * layers_out_shape[3][1])/total_size]
 
     # fine_1 = [1]
     # fine_2 = [1]
@@ -519,17 +499,12 @@ def se_compose(name, description, model_file, optimization, singlethreaded):
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
     
-def elemwise_compose(name, description, model_file, optimization, singlethreaded):
-    elem = ElementWiseLayer(description, optimization)
+def elemwise_compose(name, description, model_file, singlethreaded):
+    elem = ElementWiseLayer(description)
 
-    if optimization == 'brute_force':
-        coarse_in1 = utils.get_conbinations(utils.get_factors(elem.channels_1), utils.get_factors(elem.depth_in_1)) / (np.int64(elem.channels_1)*np.int64(elem.depth_in_1))
-        coarse_in2 = utils.get_conbinations(utils.get_factors(elem.channels_2), utils.get_factors(elem.depth_in_2)) / (np.int64(elem.channels_2)*np.int64(elem.depth_in_2))
-        coarse_out = utils.get_conbinations(utils.get_factors(elem.filters), utils.get_factors(elem.depth_out))  / (np.int64(elem.filters)*np.int64(elem.depth_out))
-    else:
-        coarse_in1 = [1]
-        coarse_in2 = [1]
-        coarse_out = [1]
+    coarse_in1 = utils.get_conbinations(utils.get_factors(elem.channels_1), utils.get_factors(elem.depth_in_1)) / (np.int64(elem.channels_1)*np.int64(elem.depth_in_1))
+    coarse_in2 = utils.get_conbinations(utils.get_factors(elem.channels_2), utils.get_factors(elem.depth_in_2)) / (np.int64(elem.channels_2)*np.int64(elem.depth_in_2))
+    coarse_out = utils.get_conbinations(utils.get_factors(elem.filters), utils.get_factors(elem.depth_out))  / (np.int64(elem.filters)*np.int64(elem.depth_out))
 
     # mem_bw = [(0.1, 0.1, 0.8), (0.2, 0.2, 0.6), (0.3, 0.3, 0.4), (0.4, 0.4, 0.2), (0.3, 0.3, 0.4), (0.1, 0.4, 0.5), (0.4, 0.2, 0.4), (0.7, 0.2, 0.1), (0.8, 0.1, 0.1)]
     mem_bw = [(10000000, 10000000, 10000000)]
@@ -608,8 +583,8 @@ def elemwise_compose(name, description, model_file, optimization, singlethreaded
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
-def fc_compose(name, description, model_file, optimization, singlethreaded):
-    fc = FCLayer(description, optimization)
+def fc_compose(name, description, model_file, singlethreaded):
+    fc = FCLayer(description)
     
     graph = nx.DiGraph()
     graph.add_node(name, type=description['operation'], hw=fc)

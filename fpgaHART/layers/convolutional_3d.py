@@ -9,10 +9,9 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG=False
 
 class Convolutional3DLayer(BaseLayer):
-    def __init__(self, description, optimization):
+    def __init__(self, description):
         super().__init__()
 
-        self.optimization = optimization
         self.input_shape = description['shape_in'][0]
         self.depth_in = self.input_shape[2]
         self.rows_in = self.input_shape[3]
@@ -107,28 +106,6 @@ class Convolutional3DLayer(BaseLayer):
             
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
-        if self.optimization == 'Powell':
-            initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
-            bnds = ((0.01, 1.0), (0.01, 1.0), (0.01, 1.0), (0.01, mem_bw_in), (0.01, mem_bw_out))   
-            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
-            if result.success:
-                f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = result.x
-            else:
-                print("Failed to optimize. Skipping...")
-                return
-        elif self.optimization == 'trust-constr':
-            initial_guess = [0.5, 0.5, 0.5, mem_bw_in, mem_bw_out]
-            bnds = Bounds([0.001, 0.001, 0.001, 0.001, 0.001], [1.0, 1.0, 1.0, mem_bw_in, mem_bw_out])  
-            cons_f = lambda x: np.array([((math.ceil(kernel_elems * x[0]) * math.ceil(self.channels * x[1]) * math.ceil(self.filters * x[2]))/self.dsp) * 100 + 0*x[3] + 0*x[4]])
-            cons_J = lambda x: np.array([[((kernel_elems * math.ceil(self.channels * x[1]) * math.ceil(self.filters * x[2]))/8)*100, ((math.ceil(kernel_elems * x[0]) * self.channels * math.ceil(self.filters * x[2]))/8)*100, ((math.ceil(kernel_elems * x[0]) * math.ceil(self.channels * x[1]) * self.filters)/8)*100]])
-            non_linear_constraint = NonlinearConstraint(cons_f, 0.001, 90.)
-            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, constraints=[non_linear_constraint], bounds=bnds)
-            if result.success:
-                f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = result.x
-            else:
-                print("Failed to optimize. Skipping...")
-                return
-
         if self.pointwise:
             # Sliding Window Depth
             depth = 1
@@ -211,67 +188,6 @@ class Convolutional3DLayer(BaseLayer):
                 print("Discarding design point. DSP = {:.2f} - BRAM = {:.2f}".format(dsps_util, bram_util))
 
         return self.get_dp_info()
-
-    def get_latency(self, params):
-        f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out = params
-        if not (f_fine>0 and f_coarseIn>0 and f_coarseOut>0 and mem_bw_in>0 and mem_bw_out>0):
-            return 1000000000000
-        if (f_fine>1 or f_coarseIn>1 or f_coarseOut>1):
-            return 1000000000000
-
-        kernel_elems = int(np.prod(np.array(self.kernel_shape)))
-
-        if self.pointwise:
-            # Sliding Window Depth
-            depth = 1
-            # Convolution 3D Depth
-            depth += 1
-            # Sliding Window buffer in words/elements
-            init_buffer = 1
-        else:
-            # Sliding Window Depth
-            depth = self.depth_in * self.rows_in * max(self.kw - 1, 1) * math.ceil(self.channels * f_coarseIn) + math.ceil(self.channels * f_coarseIn) * self.kd * self.kh * max(self.kw - 1, 1)
-            # Convolution 3D Depth
-            depth += math.ceil(1/f_fine)
-            # Sliding Window buffer in words/elements
-            init_buffer = self.depth_in * self.rows_in * max(self.kw - 1, 1) * self.channels + self.channels * self.kd * self.kh * max(self.kw - 1, 1)
-
-        if not self.depthwise:
-            max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-            max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
-        else:
-            max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn)
-            max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn)
-
-        memory = init_buffer + kernel_elems
-
-        if not self.depthwise:
-            # Accumulation Depth
-            depth += (math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut))
-            # Accumulation Additions
-            max_parallel_adds += ((math.ceil(self.channels * f_coarseIn) - 1) * math.ceil(self.filters * f_coarseOut))
-            # Accumulation Buffer
-            memory += self.channels * self.filters
-
-        mem_kb = (memory * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
-        bram_util = (mem_bram / self.bram) * 100
-        dsps_util = (max_parallel_muls/self.dsp)*100
-
-        gamma_matrix = self.get_rate_matrix(f_fine, f_coarseIn, f_coarseOut) * self.get_stream_matrix(f_coarseIn, f_coarseOut) * self.get_data_matrix(mem_bw_in, mem_bw_out)
-        gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
-        workload_matrix = self.get_workload_matrix()
-        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
-        
-        latency_cycles = np.max(np.abs(ii_matrix)) + depth
-        penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
-
-        if self.optimization == 'Powell':
-            optimization_score = latency_cycles + penalize_factor
-        elif self.optimization == 'trust-constr':
-            optimization_score = latency_cycles
-
-        return optimization_score
 
     def get_rate_matrix(self, f_fine, f_coarseIn, f_coarseOut):
         if not self.depthwise:

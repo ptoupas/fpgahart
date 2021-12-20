@@ -13,10 +13,8 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG=False
 
 class SqueezeExcitationLayer(BaseLayer):
-    def __init__(self, description, optimization):
+    def __init__(self, description):
         super().__init__()
-
-        self.optimization = optimization
 
         self.branching = description['branching']
         if self.branching:
@@ -27,13 +25,13 @@ class SqueezeExcitationLayer(BaseLayer):
         self.sequencial = {}
         for n_se, l_se in description['primitive_ops'].items():
             if l_se['operation'] == 'GlobalAveragePool':
-                self.sequencial[n_se] = GAPLayer(l_se, optimization)
+                self.sequencial[n_se] = GAPLayer(l_se)
             elif l_se['operation'] == 'Conv':
-                self.sequencial[n_se] = Convolutional3DLayer(l_se, optimization)
+                self.sequencial[n_se] = Convolutional3DLayer(l_se)
             elif l_se['operation'] == 'Relu' or l_se['operation'] == 'Sigmoid':
-                self.sequencial[n_se] = ActivationLayer(l_se, optimization)
+                self.sequencial[n_se] = ActivationLayer(l_se)
             elif l_se['operation'] == 'Mul':
-                self.sequencial[n_se] = ElementWiseLayer(l_se, optimization)
+                self.sequencial[n_se] = ElementWiseLayer(l_se)
         self.num_layers = len(self.sequencial) + 2
 
     def update_layer(self):

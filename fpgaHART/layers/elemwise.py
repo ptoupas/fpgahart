@@ -9,12 +9,11 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG=False
 
 class ElementWiseLayer(BaseLayer):
-    def __init__(self, description, optimization):
+    def __init__(self, description):
         super().__init__()
 
         # Available options 'C' channel parallelism, 'DC' channel AND depth parallelism
         self.parrallel_dims = 'DC'
-        self.optimization = optimization
         self.type = description['operation']
         self.input_shape_1 = description['shape_in'][0]
         self.depth_in_1 = self.input_shape_1[2]
@@ -118,18 +117,6 @@ class ElementWiseLayer(BaseLayer):
     def get_design_point(self, coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
         self.update_layer()
 
-
-        if self.optimization == 'Powell':
-            initial_guess = [0.5, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
-            lower_bound = 1/(self.filters*self.depth_out*self.rows_out*self.cols_out)
-            bnds = ((lower_bound, 1), (0.001, mem_bw_in_1), (0.001, mem_bw_in_2), (0.001, mem_bw_out))   
-            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
-            if result.success:
-                coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out = result.x
-            else:
-                print("Failed to optimize. Skipping...")
-                return
-
         gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in1, coarse_in2, coarse_out) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
@@ -227,79 +214,6 @@ class ElementWiseLayer(BaseLayer):
                 print("Discarding design point.")
         
         return self.get_dp_info()
-
-    def get_latency(self, params):
-        coarse_in1, coarse_in2, coarse_out, mem_bw_in_1, mem_bw_in_2, mem_bw_out = params
-        if not (coarse_in1>0 and coarse_in2>0 and coarse_out>0 and mem_bw_in_1>0 and mem_bw_in_2>0 and mem_bw_out>0):
-            return 1000000000000
-        if (coarse_in1>1 or coarse_in2>1 or coarse_out>1):
-            return 1000000000000
-
-        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_in1, coarse_in2, coarse_out) * self.get_data_matrix(mem_bw_in_1, mem_bw_in_2, mem_bw_out)
-        if DEBUG:
-            print("Γ:\n{}".format(gamma_matrix))
-        if self.broadcasting:
-            # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
-            # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
-            storage_latency, rate2_broadcast, mem_bounded_in_2 = self.get_storage_latency(coarse_in2, mem_bw_in_2)
-        else:
-            gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise(gamma_matrix.copy(), 2)
-        if DEBUG:
-            print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
-        workload_matrix = self.get_workload_matrix()
-        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
-        if DEBUG:
-            print("II:\n{}".format(ii_matrix))
-
-        if self.broadcasting:
-            depth = storage_latency # self.reduced_shape[1] / math.ceil(self.reduced_shape[1]*coarse_in2)
-            memory = self.reduced_shape[1]
-            final_channel = self.full_shape[1]
-            final_depth = self.full_shape[2]
-            final_columns = self.full_shape[3]
-            final_rows = self.full_shape[4]
-        else:
-            depth = 1
-            memory = 1
-            final_channel = self.channels_1
-            final_depth = self.depth_in_1
-            final_columns = self.cols_in_1
-            final_rows = self.rows_in_1
-            
-        if self.type == 'Add':
-            if self.parrallel_dims == 'C':
-                max_parallel_adds = math.ceil(final_channel  * coarse_in1)
-                max_parallel_muls = 0
-            elif self.parrallel_dims == 'DC':
-                max_parallel_adds = math.ceil(final_channel * final_depth * coarse_in1)
-                max_parallel_muls = 0
-        elif self.type == 'Mul':
-            if self.parrallel_dims == 'C':
-                max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel  * coarse_in1)
-            elif self.parrallel_dims == 'DC':
-                max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * coarse_in1)
-        elif self.type == 'Div':
-            if self.parrallel_dims == 'C':
-                max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * coarse_in1) * 2
-            elif self.parrallel_dims == 'DC':
-                max_parallel_adds = 0
-                max_parallel_muls = math.ceil(final_channel * final_depth * coarse_in1) * 2
-
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
-
-        latency_cycles = np.max(np.abs(ii_matrix)) + depth
-        penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
-
-        if self.optimization == 'Powell':
-            optimization_score = latency_cycles + penalize_factor
-        elif self.optimization == 'trust-constr':
-            optimization_score = latency_cycles
-
-        return optimization_score
 
     def get_rate_matrix(self):
         if self.broadcasting:
