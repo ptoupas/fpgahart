@@ -207,10 +207,10 @@ class PartitionComposer(BaseLayer):
             curr_bram_util = (mem_bram / self.bram) * 100
             curr_dsps_util = (total_muls/self.dsp)*100
 
-            if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 90.:
+            if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 92.:
                 self.update_layer()
                 if DEBUG:
-                    print("Discarding design point.")
+                    print(f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}")
                 return self.get_dp_info()
 
         assert len(off_chip_mem_in) == 0, "Off-chip memory IN points left hanging. Wrong configuration of the graph."
@@ -270,7 +270,7 @@ class PartitionComposer(BaseLayer):
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90. and bram_util < 90.:
+        if dsps_util < 90. and bram_util < 92.:
             self.full_rate_in = rates_in
             self.full_rate_out = rates_out
             self.max_parallel_muls = total_muls
@@ -298,7 +298,7 @@ class PartitionComposer(BaseLayer):
         else:
             self.update_layer()
             if DEBUG:
-                print("Discarding design point.")
+                print(f"Discarding design point. DSPS={dsps_util}, BRAM={bram_util}")
 
         return self.get_dp_info()
 
