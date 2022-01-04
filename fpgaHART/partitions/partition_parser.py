@@ -24,20 +24,20 @@ def multithreaded_modeling(operation, input, pool):
     return results
 
 class PartitionParser():
-    def __init__(self, model_name, singlethreaded, per_layer_plot, detailed):
-        self.detailed = detailed
+    def __init__(self, model_name, singlethreaded, per_layer_plot, se_block):
+        self.se_block = se_block
         self.model_name = model_name
         self.singlethreaded = singlethreaded
         self.per_layer_plot = per_layer_plot
-        self.model_descriptor = PartitionDescriptor(model_name, detailed)
+        self.model_descriptor = PartitionDescriptor(model_name, se_block)
         self.partition_composer = PartitionComposer()
 
         if not os.path.exists(os.path.join(os.getcwd(), 'fpga_modeling_reports')):
             os.makedirs(os.path.join(os.getcwd(), 'fpga_modeling_reports'))
 
-        if self.detailed:
-            self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_detailed.csv')
-            self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_detailed_pareto.csv')
+        if self.se_block:
+            self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_se.csv')
+            self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_se_pareto.csv')
         else:
             self.layer_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '.csv')
             self.layer_model_file_par = os.path.join(os.getcwd(), 'fpga_modeling_reports', model_name + '_pareto.csv')
@@ -128,7 +128,7 @@ class PartitionParser():
         self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + name)
 
         print("Partition: {}: ".format(name))
-        optimizer = SimulatedAnnealing(graph, int(branch_buffer*0.75), partition_name=name)
+        optimizer = SimulatedAnnealing(graph, branch_buffer, partition_name=name)
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
             raise Exception("Optimization failed")

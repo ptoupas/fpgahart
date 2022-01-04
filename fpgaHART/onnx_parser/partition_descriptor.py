@@ -5,8 +5,8 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 
 class PartitionDescriptor(ModelLayerDescriptor):
-    def __init__(self, model_name, breakdown_se):
-        super().__init__(model_name, breakdown_se)
+    def __init__(self, model_name, se_block):
+        super().__init__(model_name, se_block)
 
         self.partitions = self.create_partitions(self.layers)
 
@@ -14,7 +14,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
         final_layers = []
 
         if self.model_name == 'x3d_m':
-            if self.breakdown_se:
+            if not self.se_block:
                 layer_type_1 = ['Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv', 'Conv', 'Add']
                 layer_type_2 = ['Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv', 'Add']
                 layer_type_3 = ['Relu', 'Conv', 'Relu', 'Conv', 'Swish', 'Conv', 'Add']
