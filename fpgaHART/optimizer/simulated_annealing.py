@@ -21,8 +21,9 @@ import os
 
 
 class SimulatedAnnealing(BaseLayer):
-    def __init__(self, graph, branch_mem, t_min=0.0001, t_max=25, iterationPerTemp=20, cooling_rate=0.99, partition_name=''):
+    def __init__(self, graph, branch_mem, t_min=0.0001, t_max=25, iterationPerTemp=15, cooling_rate=0.99, partition_name='', gap_approx=False):
         super().__init__()
+        self.gap_approx = gap_approx
         self.part_name = partition_name
 
         self.partition_composer = PartitionComposer()
@@ -39,7 +40,9 @@ class SimulatedAnnealing(BaseLayer):
         self.t_max      = t_max
         self.cooling_rate       = cooling_rate
         self.iterationPerTemp   = iterationPerTemp
-    
+        self.param_changes = 0
+        self.freeze_param = False
+
     def has_gap(self):
         result = False
         for node in self.graph.nodes:
@@ -188,7 +191,7 @@ class SimulatedAnnealing(BaseLayer):
         cost_2, dp_info_2 = self.get_cost(config_2, mem_bw_2, target_graph=graph_2, branch_mem_update=bb2, mem_in_conns=mem_in_2, mem_out_conns=mem_out_2)
 
         if cost_1 is None or cost_2 is None:
-            for _ in range(100):
+            for _ in range(500):
                 graph_1, graph_2, bb1, bb2, mem_in_1, mem_out_1, mem_in_2, mem_out_2 = self.split_graph()
 
                 nIN1 = len(mem_in_1)
@@ -274,20 +277,20 @@ class SimulatedAnnealing(BaseLayer):
         print("*"*40)
         return self.mem_words_per_cycle, [solution_mem_1, solution_mem_2], [solution_dp_1, solution_dp_2]
 
-    def run_optimizer(self):
-        if self.has_gap() and self.branch_bram_util > 80:
-            return self.run_optimizer_double_graph()
+    def initialize_optimizer(self):
+        self.freeze_param = True
 
-        config, mem_bw = self.generate_random_config()
+        config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9)
         cost, dp_info = self.get_cost(config, mem_bw)
 
         if cost is None:
-            for _ in range(100):
-                config, mem_bw = self.generate_random_config()
+            for _ in range(500):
+                config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9)
                 cost, dp_info = self.get_cost(config, mem_bw)
                 if cost is not None:
                     break
             if cost is None:
+                print("No configuration found in 100 iterations. Exiting...")
                 return None, None, None
 
         prev_state = config
@@ -295,13 +298,50 @@ class SimulatedAnnealing(BaseLayer):
         solution_dp = dp_info
         solution_mem = mem_bw
 
-        current_temp = self.t_max
+        current_temp = 12.5
+        for i in range(1000):
+            new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(param_perc=0.9)
+            new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
 
-        print(f"Temperature  |  Latency")
+            if new_cost is None:
+                continue
+
+            cost_diff = prev_cost - new_cost
+            if cost_diff >= 0:
+                prev_state = copy.deepcopy(new_state)
+                prev_cost = copy.deepcopy(new_cost)
+                solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
+            else:
+                if random.uniform(0, 1) < math.exp((cost_diff/(self.k*current_temp))):
+                    prev_state = copy.deepcopy(new_state)
+                    prev_cost = copy.deepcopy(new_cost)
+                    solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
+
+            current_temp *= self.cooling_rate
+            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{param_count:5d}\t{param_perc:.3f}", end='\r')
+        self.freeze_param = False
+
+        return prev_state, prev_cost, solution_dp, solution_mem
+
+    def run_optimizer(self):
+        if self.has_gap() and self.branch_bram_util > 80:
+            return self.run_optimizer_double_graph()
+
+        config, cost, dp_info, mem_bw = self.initialize_optimizer()
+
+        prev_state = config
+        prev_cost = cost
+        solution_dp = dp_info
+        solution_mem = mem_bw
+
+        current_temp = self.t_max
+        count = 0
+        print(f"Temperature  |  Latency     |  Count  |  Param Count  |  Param %")
         while current_temp > self.t_min:
             
             for i in range(self.iterationPerTemp):
-                new_state, new_mem_bw = self.generate_random_config(neighbours=True, prev_state=prev_state)
+                count += 1
+                new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(neighbours=True, prev_state=prev_state)
                 new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
 
                 if new_cost is None:
@@ -319,10 +359,10 @@ class SimulatedAnnealing(BaseLayer):
                         solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
 
             current_temp *= self.cooling_rate
-            print(f"{current_temp:.5e}\t{prev_cost:.5e}", end='\r')
+            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}", end='\r')
         
         print(f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}.")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP_RAW'], solution_dp['DSP'], solution_dp['BRAM_RAW'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['branch_depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
         print("*"*40)
         return self.mem_words_per_cycle, [solution_mem], [solution_dp]
 
@@ -342,15 +382,15 @@ class SimulatedAnnealing(BaseLayer):
         comb_config = {}
         for k, v in config.items():
             if v['op_type'] == 'GlobalAveragePool':
-                comb_config[k] = [v['coarse_in'], v['coarse_out']]
+                comb_config[k] = [v['coarse_inout']]
             elif v['op_type'] == 'Conv':
                 comb_config[k] = [v['fine'], v['coarse_in'], v['coarse_out']]
             elif v['op_type'] == 'Activation':
-                comb_config[k] = [v['coarse_in']]
+                comb_config[k] = [v['coarse_inout']]
             elif v['op_type'] == 'ElementWise':
-                comb_config[k] = [v['coarse_in_1'], v['coarse_in_2'], v['coarse_out']]
+                comb_config[k] = [v['coarse_inout']]
             elif v['op_type'] == 'BatchNormalization':
-                comb_config[k] = [v['coarse_in']]
+                comb_config[k] = [v['coarse_inout']]
             elif v['op_type'] == 'Gemm':
                 comb_config[k] = [v['coarse_in'], v['coarse_out']]
             else:
@@ -359,8 +399,8 @@ class SimulatedAnnealing(BaseLayer):
         mem_in = mem_in_conns
         mem_out = mem_out_conns
         read_points, write_points = self.add_off_chip_connections(graph, mem_in, mem_out)
+        dp_info = self.partition_composer.get_design_point(graph.copy(), comb_config, mem_bw[0], mem_bw[1], read_points, write_points, gap_approx=self.gap_approx, branch_mem=branch_mem)
         # self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_int')
-        dp_info = self.partition_composer.get_design_point(graph.copy(), comb_config, mem_bw[0], mem_bw[1], read_points, write_points, branch_mem)
         if dp_info['config']:
             return dp_info['latency(S)'], dp_info
         return None, None
@@ -401,7 +441,24 @@ class SimulatedAnnealing(BaseLayer):
             self.add_node_to_position(G=graph, new_node='Mem_out{}'.format(mem_out_count), connect_node=con_out, connect_pos='post')
             write_points.append(con_out)
             mem_out_count += 1
-        
+
+        # if self.gap_approx:
+        #     next_nodes = []
+        #     gap_nodes = []
+        #     for n in graph.nodes():
+        #         if graph.nodes[n]['type'] == 'GlobalAveragePool':
+        #             next_nodes.append(list(graph.successors(n))[0])
+        #             gap_nodes.append(n)
+        #             graph.remove_edge(n, list(graph.successors(n))[0])
+            
+        #     for n, g in zip(next_nodes, gap_nodes):
+        #         read_points.append(n)
+        #         self.add_node_to_position(G=graph, new_node='Mem_in{}'.format(mem_in_count), connect_node=n, connect_pos='pre')
+        #         mem_in_count += 1 
+        #         write_points.append(g)
+        #         self.add_node_to_position(G=graph, new_node='Mem_out{}'.format(mem_out_count), connect_node=g, connect_pos='post')
+        #         mem_out_count += 1
+
         return read_points, write_points
 
     @staticmethod
@@ -462,7 +519,11 @@ class SimulatedAnnealing(BaseLayer):
         del old_nodes
 
     @staticmethod
-    def get_mem_bw_feasible(n_in=0, n_out=0):
+    def get_mem_bw_feasible(n_in=0, n_out=0, gap_approx=False):
+        # if gap_approx:
+        #     n_in += 1
+        #     n_out += 1
+
         rand_vals = []
         for i in range(n_in+n_out):
             rand_vals.append(random.randint(1,100))
@@ -492,14 +553,10 @@ class SimulatedAnnealing(BaseLayer):
                 hw = graph.nodes[node]['hw']
                 if isinstance(hw, GAPLayer):
                     channels = hw.channels
-                    filters = hw.filters
-                    coarse_in_feasible = utils.get_factors(channels)
-                    coarse_out_feasible = utils.get_factors(filters)
-                    coarse_in_factor = random.choice(coarse_in_feasible)/channels
-                    coarse_out_factor = random.choice(coarse_out_feasible)/filters
+                    coarse_inout_feasible = utils.get_factors(channels)
+                    coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                     new_config[node] = {'op_type': op_type,
-                                'coarse_in': coarse_in_factor,
-                                'coarse_out': coarse_out_factor}
+                                        'coarse_inout': coarse_inout_factor}
                 elif isinstance(hw, Convolutional3DLayer):
                     channels = hw.channels
                     filters = hw.filters
@@ -516,30 +573,22 @@ class SimulatedAnnealing(BaseLayer):
                                 'coarse_out': coarse_out_factor}
                 elif isinstance(hw, ActivationLayer):
                     channels = hw.channels
-                    coarse_in_feasible = utils.get_factors(channels)
-                    coarse_in_factor = random.choice(coarse_in_feasible)/channels
+                    coarse_inout_feasible = utils.get_factors(channels)
+                    coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                     new_config[node] = {'op_type': op_type,
-                        'coarse_in': coarse_in_factor}
+                                        'coarse_inout': coarse_inout_factor}
                 elif isinstance(hw, ElementWiseLayer):
-                    channels_1 = hw.channels_1
-                    channels_2 = hw.channels_2
-                    filters = hw.filters
-                    coarse_in1_feasible = utils.get_factors(channels_1)
-                    coarse_in2_feasible = utils.get_factors(channels_2)
-                    coarse_out_feasible = utils.get_factors(filters)
-                    coarse_in1_factor = random.choice(coarse_in1_feasible)/channels_1
-                    coarse_in2_factor = random.choice(coarse_in2_feasible)/channels_2
-                    coarse_out_factor = random.choice(coarse_out_feasible)/filters
+                    channels = hw.channels_1
+                    coarse_inout_feasible = utils.get_factors(channels)
+                    coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                     new_config[node] = {'op_type': op_type,
-                                'coarse_in_1': coarse_in1_factor,
-                                'coarse_in_2': coarse_in2_factor,
-                                'coarse_out': coarse_out_factor}
+                                        'coarse_inout': coarse_inout_factor}
                 elif isinstance(hw, BatchNorm3DLayer):
                     channels = hw.channels
-                    coarse_in_feasible = utils.get_factors(channels)
-                    coarse_in_factor = random.choice(coarse_in_feasible)/channels
+                    coarse_inout_feasible = utils.get_factors(channels)
+                    coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                     new_config[node] = {'op_type': op_type,
-                        'coarse_in': coarse_in_factor}
+                                        'coarse_inout': coarse_inout_factor}
                 elif isinstance(hw, SqueezeExcitationLayer):
                     assert False, "Not supported layer (SqueezeExcitationLayer)"
                 elif isinstance(hw, FCLayer):
@@ -558,14 +607,25 @@ class SimulatedAnnealing(BaseLayer):
                     assert False, "Not supported layer"
         return new_config
 
-    def generate_random_config(self, target_graph=None, neighbours=False, prev_state=None, n_in=1, n_out=1):
+    def generate_random_config(self, target_graph=None, neighbours=False, prev_state=None, param_perc=0.3, n_in=1, n_out=1):
         if target_graph is None:
             graph = self.graph.copy()
         else:
             graph = target_graph
 
         if neighbours:
-            number_of_new_configs = math.ceil(graph.order() * 0.25)
+            if not self.freeze_param:
+                self.param_changes += 1
+                param_perc = math.cos(self.param_changes/1500)
+                if param_perc > 0.6:
+                    param_perc = 0.6
+                elif param_perc < 0.3:
+                    param_perc = 0.3
+                    self.freeze_param = True
+            else:
+                param_perc = param_perc
+
+            number_of_new_configs = math.ceil(graph.order() * param_perc)
 
             # without replacement
             config_nodes = random.sample(list(graph.nodes), number_of_new_configs)
@@ -582,23 +642,17 @@ class SimulatedAnnealing(BaseLayer):
             hw = graph.nodes[node]['hw']
             if isinstance(hw, GAPLayer):
                 channels = hw.channels
-                filters = hw.filters
-                coarse_in_feasible = utils.get_factors(channels)
-                coarse_out_feasible = utils.get_factors(filters)
-                coarse_in_factor = random.choice(coarse_in_feasible)/channels
-                coarse_out_factor = random.choice(coarse_out_feasible)/filters
+                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove('op_type')
                     apply_transform = random.choice(transformations)
-                    if apply_transform == 'coarse_in':
-                        config[node][apply_transform] = coarse_in_factor
-                    elif apply_transform == 'coarse_out':
-                        config[node][apply_transform] = coarse_out_factor
+                    if apply_transform == 'coarse_inout':
+                        config[node][apply_transform] = coarse_inout_factor
                 else:
                     config[node] = {'op_type': op_type,
-                                'coarse_in': coarse_in_factor,
-                                'coarse_out': coarse_out_factor}
+                                    'coarse_inout': coarse_inout_factor}
             elif isinstance(hw, Convolutional3DLayer):
                 channels = hw.channels
                 filters = hw.filters
@@ -626,58 +680,43 @@ class SimulatedAnnealing(BaseLayer):
                                 'coarse_out': coarse_out_factor}
             elif isinstance(hw, ActivationLayer):
                 channels = hw.channels
-                coarse_in_feasible = utils.get_factors(channels)
-                coarse_in_factor = random.choice(coarse_in_feasible)/channels
+                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove('op_type')
                     apply_transform = random.choice(transformations)
-                    if apply_transform == 'coarse_in':
-                        config[node][apply_transform] = coarse_in_factor
+                    if apply_transform == 'coarse_inout':
+                        config[node][apply_transform] = coarse_inout_factor
                 else:
                     config[node] = {'op_type': op_type,
-                        'coarse_in': coarse_in_factor}
+                                    'coarse_inout': coarse_inout_factor}
             elif isinstance(hw, ElementWiseLayer):
-                channels_1 = hw.channels_1
-                depth_1 = hw.depth_in_1
-                channels_2 = hw.channels_2
-                depth_2 = hw.depth_in_2
-                filters = hw.filters
-                depth_out = hw.depth_out
-                coarse_in1_feasible = utils.get_conbinations(utils.get_factors(channels_1), utils.get_factors(depth_1))
-                coarse_in2_feasible = utils.get_conbinations(utils.get_factors(channels_2), utils.get_factors(depth_2))
-                coarse_out_feasible = utils.get_conbinations(utils.get_factors(filters), utils.get_factors(depth_out))
-                coarse_in1_factor = random.choice(coarse_in1_feasible)/(channels_1*depth_1)
-                coarse_in2_factor = random.choice(coarse_in2_feasible)/(channels_2*depth_2)
-                coarse_out_factor = random.choice(coarse_out_feasible)/(filters*depth_out)
+                channels = hw.channels_1
+                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove('op_type')
                     apply_transform = random.choice(transformations)
-                    if apply_transform == 'coarse_in_1':
-                        config[node][apply_transform] = coarse_in1_factor
-                    elif apply_transform == 'coarse_in_2':
-                        config[node][apply_transform] = coarse_in2_factor
-                    elif apply_transform == 'coarse_out':
-                        config[node][apply_transform] = coarse_out_factor
+                    if apply_transform == 'coarse_inout':
+                        config[node][apply_transform] = coarse_inout_factor
                 else:
                     config[node] = {'op_type': op_type,
-                                'coarse_in_1': coarse_in1_factor,
-                                'coarse_in_2': coarse_in2_factor,
-                                'coarse_out': coarse_out_factor}
+                                    'coarse_inout': coarse_inout_factor}
             elif isinstance(hw, BatchNorm3DLayer):
                 channels = hw.channels
-                coarse_in_feasible = utils.get_factors(channels)
-                coarse_in_factor = random.choice(coarse_in_feasible)/channels
+                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove('op_type')
                     apply_transform = random.choice(transformations)
-                    if apply_transform == 'coarse_in':
-                        config[node][apply_transform] = coarse_in_factor
+                    if apply_transform == 'coarse_inout':
+                        config[node][apply_transform] = coarse_inout_factor
                 else:
                     config[node] = {'op_type': op_type,
-                        'coarse_in': coarse_in_factor}
+                                    'coarse_inout': coarse_inout_factor}
             elif isinstance(hw, SqueezeExcitationLayer):
                 assert False, "Not supported layer (SqueezeExcitationLayer)"
             elif isinstance(hw, FCLayer):
@@ -703,10 +742,9 @@ class SimulatedAnnealing(BaseLayer):
                 continue
             else:
                 assert False, "Not supported layer"
+        mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=n_in, n_out=n_out, gap_approx=self.gap_approx)
 
-        mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=n_in, n_out=n_out)
-
-        return config, [mem_config_in, mem_config_out]
+        return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
     
     # TODO: Revise that to follow the changes on run_optimizer
     def run_optimizer_layer(self, layer):
@@ -749,19 +787,19 @@ class SimulatedAnnealing(BaseLayer):
             print(f"{current_temp:.5e}\t{prev_cost:.5e}",end='\r')
 
         print(f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}.")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], int((solution_dp['DSP']/100)*self.graph.nodes[layer]['hw'].dsp), solution_dp['DSP'], int((solution_dp['BRAM']/100)*self.graph.nodes[layer]['hw'].bram), solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
         print("*"*40)
 
     def get_cost_layer(self, config, mem_bw, layer):
         hw = self.graph.nodes[layer]['hw']
         if isinstance(hw, GAPLayer):
-            dp_info = hw.get_design_point(config[0], config[1], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
+            dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
         elif isinstance(hw, Convolutional3DLayer):
             dp_info = hw.get_design_point(config[0], config[1], config[2], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
         elif isinstance(hw, ActivationLayer):
             dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[1][0])
         elif isinstance(hw, ElementWiseLayer):
-            dp_info = hw.get_design_point(config[0], config[1], config[2], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[0][1], hw.mem_words_per_cycle*mem_bw[1][0])
+            dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], hw.mem_words_per_cycle*mem_bw[0][1], hw.mem_words_per_cycle*mem_bw[1][0])
         elif isinstance(hw, BatchNorm3DLayer):
             dp_info = hw.get_design_point(config[0], hw.mem_words_per_cycle*mem_bw[0][0], layhwer.mem_words_per_cycle*mem_bw[1][0])
         elif isinstance(hw, SqueezeExcitationLayer):
@@ -781,11 +819,9 @@ class SimulatedAnnealing(BaseLayer):
         if isinstance(hw, GAPLayer):
             channels = hw.channels
             filters = hw.filters
-            coarse_in_feasible = utils.get_factors(channels)
-            coarse_out_feasible = utils.get_factors(filters)
-            coarse_in_factor = random.choice(coarse_in_feasible)/channels
-            coarse_out_factor = random.choice(coarse_out_feasible)/filters
-            config = [coarse_in_factor, coarse_out_factor]
+            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
+            config = [coarse_inout_factor]
         elif isinstance(hw, Convolutional3DLayer):
             channels = hw.channels
             filters = hw.filters
@@ -799,28 +835,19 @@ class SimulatedAnnealing(BaseLayer):
             config = [coarse_in_factor, coarse_out_factor, fine_factor]
         elif isinstance(hw, ActivationLayer):
             channels = hw.channels
-            coarse_in_feasible = utils.get_factors(channels)
-            coarse_in_factor = random.choice(coarse_in_feasible)/channels
-            config = [coarse_in_factor]
+            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
+            config = [coarse_inout_factor]
         elif isinstance(hw, ElementWiseLayer):
-            channels_1 = hw.channels_1
-            depth_1 = hw.depth_in_1
-            channels_2 = hw.channels_2
-            depth_2 = hw.depth_in_2
-            filters = hw.filters
-            depth_out = hw.depth_out
-            coarse_in1_feasible = utils.get_conbinations(utils.get_factors(channels_1), utils.get_factors(depth_1))
-            coarse_in2_feasible = utils.get_conbinations(utils.get_factors(channels_2), utils.get_factors(depth_2))
-            coarse_out_feasible = utils.get_conbinations(utils.get_factors(filters), utils.get_factors(depth_out))
-            coarse_in1_factor = random.choice(coarse_in1_feasible)/(channels_1*depth_1)
-            coarse_in2_factor = random.choice(coarse_in2_feasible)/(channels_2*depth_2)
-            coarse_out_factor = random.choice(coarse_out_feasible)/(filters*depth_out)
-            config = [coarse_in1_factor, coarse_in2_factor, coarse_out_factor]
+            channels = hw.channels_1
+            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
+            config = [coarse_inout_factor]
         elif isinstance(hw, BatchNorm3DLayer):
             channels = hw.channels
-            coarse_in_feasible = utils.get_factors(channels)
-            coarse_in_factor = random.choice(coarse_in_feasible)/channels
-            config = [coarse_in_factor, coarse_out_factor]
+            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_factor = random.choice(coarse_inout_feasible)/channels
+            config = [coarse_inout_factor]
         elif isinstance(hw, SqueezeExcitationLayer):
             assert False, "Not supported layer (SqueezeExcitationLayer)"
         elif isinstance(hw, FCLayer):

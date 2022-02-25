@@ -24,7 +24,8 @@ def multithreaded_modeling(operation, input, pool):
     return results
 
 class PartitionParser():
-    def __init__(self, model_name, singlethreaded, per_layer_plot, se_block):
+    def __init__(self, model_name, singlethreaded, per_layer_plot, se_block, gap_approx):
+        self.gap_approx = gap_approx
         self.se_block = se_block
         self.model_name = model_name
         self.singlethreaded = singlethreaded
@@ -71,6 +72,7 @@ class PartitionParser():
     def create_graph(self, partition):
         graph = nx.DiGraph()
         for layer in partition:
+            print("Adding {} layer to graph...".format(layer))
             if self.model_descriptor.layers[layer]['operation'] == 'GlobalAveragePool':
                 hw_layer = GAPLayer(self.model_descriptor.layers[layer])
                 layer_type = self.model_descriptor.layers[layer]['operation']
@@ -95,6 +97,7 @@ class PartitionParser():
             else:
                 assert False, "{} operation in layer {} is not supported".format(self.model_descriptor.layers[layer]['operation'], layer)
             graph.add_node(layer, type=layer_type, hw=hw_layer)
+        print("*"*40)
 
         edges = []
         for name in graph.nodes():
@@ -128,7 +131,8 @@ class PartitionParser():
         self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + name)
 
         print("Partition: {}: ".format(name))
-        optimizer = SimulatedAnnealing(graph, branch_buffer, partition_name=name)
+        # optimizer = SimulatedAnnealing(graph, branch_buffer, partition_name=name, gap_approx=self.gap_approx)
+        optimizer = SimulatedAnnealing(graph, 0, partition_name=name, gap_approx=self.gap_approx)
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
             raise Exception("Optimization failed")
@@ -139,7 +143,7 @@ class PartitionParser():
             
             if num_graphs == 1:
                 mem_config = (list(np.array(solution_mem[0][0]) * mwpc), list(np.array(solution_mem[0][1]) * mwpc))
-                csv_row = [name, solution_dp[0]['latency(C)']-solution_dp[0]['depth'], solution_dp[0]['latency(C)'], solution_dp[0]['latency(S)'], solution_dp[0]['GOP/s'], solution_dp[0]['GOPs'], solution_dp[0]['vols/s'], solution_dp[0]['DSP'], solution_dp[0]['BRAM'], solution_dp[0]['rateIn'], solution_dp[0]['rateOut'], solution_dp[0]['depth'], solution_dp[0]['muls'], solution_dp[0]['adds'], solution_dp[0]['memWords'], solution_dp[0]['memKBs'], solution_dp[0]['dataSizeIn'], solution_dp[0]['dataSizeOut'], solution_dp[0]['memBoundedIn'], solution_dp[0]['memBoundedOut'], solution_dp[0]['config'], mem_config]
+                csv_row = [name, solution_dp[0]['latency(C)']-solution_dp[0]['depth'], solution_dp[0]['latency(C)'], solution_dp[0]['latency(S)'], solution_dp[0]['GOP/s'], solution_dp[0]['GOPs'], solution_dp[0]['vols/s'], solution_dp[0]['DSP'], solution_dp[0]['BRAM'], solution_dp[0]['rateIn'], solution_dp[0]['rateOut'], solution_dp[0]['depth'], solution_dp[0]['branch_depth'], solution_dp[0]['muls'], solution_dp[0]['adds'], solution_dp[0]['memWords'], solution_dp[0]['memKBs'], solution_dp[0]['dataSizeIn'], solution_dp[0]['dataSizeOut'], solution_dp[0]['memBoundedIn'], solution_dp[0]['memBoundedOut'], solution_dp[0]['config'], mem_config]
                 csv_writer.writerow(csv_row)
             else:
                 f_name = name
@@ -158,7 +162,7 @@ class PartitionParser():
                 sub_rows = []
                 for i in range(num_graphs):
                     mem_config = (list(np.array(solution_mem[i][0]) * mwpc), list(np.array(solution_mem[i][1]) * mwpc))
-                    csv_row = [name+'_{}'.format(i), solution_dp[i]['latency(C)']-solution_dp[i]['depth'], solution_dp[i]['latency(C)'], solution_dp[i]['latency(S)'], solution_dp[i]['GOP/s'], solution_dp[i]['GOPs'], solution_dp[i]['vols/s'], solution_dp[i]['DSP'], solution_dp[i]['BRAM'], solution_dp[i]['rateIn'], solution_dp[i]['rateOut'], solution_dp[i]['depth'], solution_dp[i]['muls'], solution_dp[i]['adds'], solution_dp[i]['memWords'], solution_dp[i]['memKBs'], solution_dp[i]['dataSizeIn'], solution_dp[i]['dataSizeOut'], solution_dp[i]['memBoundedIn'], solution_dp[i]['memBoundedOut'], solution_dp[i]['config'], mem_config]
+                    csv_row = [name+'_{}'.format(i), solution_dp[i]['latency(C)']-solution_dp[i]['depth'], solution_dp[i]['latency(C)'], solution_dp[i]['latency(S)'], solution_dp[i]['GOP/s'], solution_dp[i]['GOPs'], solution_dp[i]['vols/s'], solution_dp[i]['DSP'], solution_dp[i]['BRAM'], solution_dp[i]['rateIn'], solution_dp[i]['rateOut'], solution_dp[i]['depth'], solution_dp[i]['branch_depth'], solution_dp[i]['muls'], solution_dp[i]['adds'], solution_dp[i]['memWords'], solution_dp[i]['memKBs'], solution_dp[i]['dataSizeIn'], solution_dp[i]['dataSizeOut'], solution_dp[i]['memBoundedIn'], solution_dp[i]['memBoundedOut'], solution_dp[i]['config'], mem_config]
                     sub_rows.append(csv_row)
                     f_latency_c += solution_dp[i]['latency(C)']
                     f_latency_s += solution_dp[i]['latency(S)']
@@ -182,12 +186,41 @@ class PartitionParser():
         print("Modeling {} layer...".format(layer))
         throughput_gops, throughput_vols, latency, dsp_util, bram_util = layer_compose(layer, layer_description, self.layer_model_file, self.singlethreaded)
 
+    def idetify_duplicates(self):
+        partitions = {}
+        for i, partition in enumerate(self.model_descriptor.partitions):
+            graph = self.create_graph(partition)
+            nodes_list = []
+            for node in graph.nodes():
+                hw = graph.nodes[node]['hw']
+                if graph.nodes[node]['type'] == 'Conv':
+                    nodes_list.append([hw.input_shape, hw.output_shape, hw.kernel_shape, hw.padding, hw.stride, hw.groups])
+                elif graph.nodes[node]['type'] == 'ElementWise':
+                    nodes_list.append([hw.input_shape_1, hw.input_shape_2, hw.output_shape])
+                else:
+                    nodes_list.append([hw.input_shape, hw.output_shape])
+            partitions[i] = nodes_list
+
+        prev_partition = None
+        remove_duplicates = []
+        for i, partition in enumerate(self.model_descriptor.partitions):
+            v = partitions[i]
+            if prev_partition is not None:
+                if v == prev_partition:
+                    remove_duplicates.append(i)
+            prev_partition = v
+        
+        for index in sorted(remove_duplicates, reverse=True):
+            del self.model_descriptor.partitions[index]
+
     def parse(self):
+        self.idetify_duplicates()
+
         self.partition_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', self.model_name + '_partitions.csv')
 
         with open(self.partition_model_file, mode='w') as partition_dp:
             csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerow(["Part", "Latency(C)-No-Depth", "Latency(C)", "Latency(S)", "GOP/s", "GOPs", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn", "RateOut", "Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "DataSizeIn(MB)", "DataSizeOut(MB)", "MemBoundIn", "MemBoundOut", "config", "memconfig"])
+            csv_writer.writerow(["Part", "Latency(C)-No-Depth", "Latency(C)", "Latency(S)", "GOP/s", "GOPs", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn", "RateOut", "Depth", "Branch Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "DataSizeIn(MB)", "DataSizeOut(MB)", "MemBoundIn", "MemBoundOut", "config", "memconfig"])
 
         start = time.time()
         for i, partition in enumerate(self.model_descriptor.partitions):
@@ -208,8 +241,57 @@ class PartitionParser():
         for name, descriptor in self.model_descriptor.layers.items():
             self.model_layer(name, descriptor)
 
-        utils.drop_duplicates_csv(self.layer_model_file)
-        utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
-        if self.per_layer_plot:
-            utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
+        # utils.drop_duplicates_csv(self.layer_model_file)
+        # utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
+        # if self.per_layer_plot:
+        #     utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
 
+    def model_custom_partition(self):
+
+        custom_partition = ['Custom_Conv_1', 'Custom_Relu', 'Custom_Conv_2', 'Custom_Sigmoid']
+
+        self.model_descriptor.layers['Custom_Conv_1'] = {'operation': 'Conv',
+                                                         'shape_in': [[1, 54, 16, 32, 32]],
+                                                         'shape_out': [1, 8, 16, 32, 32],
+                                                         'node_in': ['input.1'],
+                                                         'node_out': '1',
+                                                         'branching': False,
+                                                         'kernel': [8, 54, 1, 1, 1],
+                                                         'bias': [],
+                                                         'padding': [0, 0, 0],
+                                                         'stride': [1, 1, 1],
+                                                         'groups': 1,
+                                                         'dilation': [1, 1, 1]}
+
+
+        self.model_descriptor.layers['Custom_Relu'] = {'operation': 'Relu',
+                                                         'shape_in': [[1, 8, 16, 32, 32]],
+                                                         'shape_out': [1, 8, 16, 32, 32],
+                                                         'node_in': ['1'],
+                                                         'node_out': '2',
+                                                         'branching': False}
+
+        self.model_descriptor.layers['Custom_Conv_2'] = {'operation': 'Conv',
+                                                         'shape_in': [[1, 8, 16, 32, 32]],
+                                                         'shape_out': [1, 54, 16, 32, 32],
+                                                         'node_in': ['2'],
+                                                         'node_out': '3',
+                                                         'branching': False,
+                                                         'kernel': [54, 8, 1, 1, 1],
+                                                         'bias': [],
+                                                         'padding': [0, 0, 0],
+                                                         'stride': [1, 1, 1],
+                                                         'groups': 1,
+                                                         'dilation': [1, 1, 1]}
+
+
+        self.model_descriptor.layers['Custom_Sigmoid'] = {'operation': 'Sigmoid',
+                                                         'shape_in': [[1, 54, 16, 32, 32]],
+                                                         'shape_out': [1, 54, 16, 32, 32],
+                                                         'node_in': ['3'],
+                                                         'node_out': '4',
+                                                         'branching': False}
+
+        custom_partition = ['Relu_22', 'Conv_23', 'Relu_25', 'Conv_26', 'Swish_28', 'Conv_30', 'Add_32']
+
+        self.model_partition(custom_partition, name="Custom_Partition")

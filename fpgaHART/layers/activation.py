@@ -47,7 +47,9 @@ class ActivationLayer(BaseLayer):
         self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
+        self.dsp_raw = 0
         self.bram_util = 0
+        self.bram_raw = 0
         self.latency_sec = 0
         self.latency_cycles = 0
         self.throughput_ops = 0
@@ -69,7 +71,9 @@ class ActivationLayer(BaseLayer):
         dp_info['GOP/s'] = self.throughput_ops*1e-9
         dp_info['vols/s'] = self.throughput_vols
         dp_info['DSP'] = self.dsps_util
+        dp_info['DSP_RAW'] = self.dsp_raw
         dp_info['BRAM'] = self.bram_util
+        dp_info['BRAM_RAW'] = self.bram_raw
         dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
@@ -102,36 +106,32 @@ class ActivationLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-
+        layer_fifos_arrays = {}
         if self.activation_type == 'Relu':
             max_parallel_muls = 0
             max_parallel_adds = 0
-            memory = 1
             depth = 1
         elif self.activation_type == 'Sigmoid':
-            max_parallel_muls = math.ceil(self.channels * coarse_inout * 5)
-            max_parallel_adds = math.ceil(self.channels * coarse_inout)
-            memory = 1
-            depth = 25 # This value came up from some experiments on HLS. Should revise that
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
+            depth = 28 # This value came up from some experiments on HLS. Should revise that
         elif self.activation_type == 'Swish':
-            max_parallel_muls = math.ceil(self.channels * coarse_inout * 6)
-            max_parallel_adds = math.ceil(self.channels * coarse_inout)
-            memory = 1
-            depth = 25 # This value came up from some experiments on HLS. Should revise that
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 4)
+            max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
+            depth = 33 # This value came up from some experiments on HLS. Should revise that
 
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsp_raw, bram_util, bram_raw, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, layer_fifos_arrays, depth, coarse_inout=coarse_inout)
         total_ops = self.get_total_workload()
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0, 0]             # Volumes per second
         thr_out /= workload_matrix[-1, -1]          # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90. and bram_util < 90.:
+        if dsps_util < 90. and bram_util < 95.:
             self.full_rate_in = [gamma_matrix_balanced[0, 0]]
             self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
-            self.memory = memory
             self.depth = depth
             self.mem_bd_in = [mem_bounded_in]
             self.mem_bd_out = [mem_bounded_out]
@@ -140,14 +140,16 @@ class ActivationLayer(BaseLayer):
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
+            self.dsp_raw = dsp_raw
             self.bram_util = bram_util
+            self.bram_raw = bram_raw
             self.latency_sec = latency_sec
             self.latency_cycles = int(latency_cycles)
             self.throughput_ops = throughput_ops
             self.throughput_vols = thr_out
 
             if DEBUG:
-                print("*"*40, "inout factor={} latency={} depth={}, max_parallel_muls={}".format(coarse_inout, int(latency_cycles), depth, dsps_util))
+                print("*"*40, "coarse_inout factor={:.3f}->{} latency={} depth={}, DPS(%)={}({:.3f}), BRAM(%)={}({:.3f})".format(coarse_inout, math.ceil(1/coarse_inout), int(latency_cycles), depth, dsp_raw, dsps_util, bram_raw, bram_util))
         else:
             self.update_layer()
             if DEBUG:

@@ -6,7 +6,8 @@ from ..layers.elemwise import ElementWiseLayer
 from ..layers.activation import ActivationLayer
 from ..layers.fully_connected import FCLayer
 from ..layers.base_layer import BaseLayer
-from ..utils.matrix_balancing import balance_memory_rates, balance_multiport_rates, balance_matrix
+from ..utils import utils
+from ..utils.matrix_balancing import balance_memory_rates, balance_matrix
 from collections import deque
 import numpy as np
 import math
@@ -27,13 +28,16 @@ class PartitionComposer(BaseLayer):
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
+        self.branch_depth = 0
         self.data_size_in = 0
         self.data_size_out = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
+        self.dsps_raw = 0
         self.bram_util = 0
+        self.bram_raw = 0
         self.latency_sec = 0
         self.latency_cycles = 0
         self.throughput_ops = 0
@@ -60,10 +64,13 @@ class PartitionComposer(BaseLayer):
         dp_info['vols/s'] = self.throughput_vols
         dp_info['GOPs'] = self.total_ops*1e-9
         dp_info['DSP'] = self.dsps_util
+        dp_info['DSP_RAW'] = self.dsps_raw
         dp_info['BRAM'] = self.bram_util
+        dp_info['BRAM_RAW'] = self.bram_raw
         dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
+        dp_info['branch_depth'] = self.branch_depth
         dp_info['muls'] = self.max_parallel_muls
         dp_info['adds'] = self.max_parallel_adds
         dp_info['memWords'] = self.memory
@@ -77,13 +84,57 @@ class PartitionComposer(BaseLayer):
         return dp_info
 
     @staticmethod
+    def calculate_branch_buffering(graph):
+        #TODO: Deal with buffering needed without a common split node for the two branches (like in the case of gap approx)
+        def iterate_graph(graph, node, branches):
+            sub_branch = True
+            split_node = None
+            for i, pn in enumerate(graph.predecessors(node)):
+                curr_node = pn
+                curr_branch = []
+                while True:
+                    if (graph.out_degree(curr_node) > 1 or graph.nodes[curr_node]['type'] == 'mem_in') and sub_branch:
+                        split_node = curr_node
+                        break
+                    elif graph.in_degree(curr_node) > 1:
+                        curr_branch.append(curr_node)
+                        curr_node = iterate_graph(graph, curr_node, [])
+                        sub_branch = False
+                    else:
+                        sub_branch = True
+                        curr_branch.append(curr_node)
+                        curr_node = list(graph.predecessors(curr_node))[0]
+                branches.append(curr_branch)
+            return split_node
+
+        merge_nodes = utils.get_merge_points(graph)
+        final_branches = {}
+        for mn in merge_nodes:
+            branches = []
+            iterate_graph(graph, mn, branches)
+            final_branches[mn] = branches
+        
+        for mn in merge_nodes:
+            buff_list = []
+            for b in final_branches[mn]:
+                branch_depth = sum([graph.nodes[n]['hw'].depth for n in b])
+                buff_list.append(branch_depth)
+            final_branches[mn].append(max(buff_list) - min(buff_list))
+
+        buffering = 0
+        for val in final_branches.values():
+            buffering += val[-1]
+
+        return buffering
+
+    @staticmethod
     def find_node_idx(graph, request_node):
         for n, node in enumerate(graph.nodes):
             if node == request_node:
                 return n
         return -1
 
-    def get_design_point(self, graph, comb: dict(), mem_bw_in: list(), mem_bw_out: list, read_mem_points: list, write_mem_points: list, branch_mem=0):
+    def get_design_point(self, graph, comb: dict(), mem_bw_in: list(), mem_bw_out: list, read_mem_points: list, write_mem_points: list, gap_approx=False, branch_mem=0):
         assert len(mem_bw_in) == len(read_mem_points), "Input memory break points and memory configuration does not match."
         assert len(mem_bw_out) == len(write_mem_points), "Output memory break points and memory configuration does not match."
 
@@ -107,9 +158,19 @@ class PartitionComposer(BaseLayer):
 
         total_muls = 0
         total_adds = 0
-        total_memory = branch_mem
+
+        layer_fifos_arrays = {
+            'branch_buffering': 0,
+        }
+
         total_depth = 0
+        total_brams = 0
+        config = {}
+        layers_ii = []
         for n, node in enumerate(graph.nodes()):
+            if DEBUG:
+                print("#"*50)
+                print("Processing node: {}".format(node))
             op_type = graph.nodes[node]['type']
             hw = graph.nodes[node]['hw']
 
@@ -143,11 +204,14 @@ class PartitionComposer(BaseLayer):
                 raise Exception(f"Node: {node} has more than 2 predecessors. This kind of connection is not yet supported.")
 
             if isinstance(hw, GAPLayer):
-                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate, gap_approx=gap_approx)
+                config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, Convolutional3DLayer):
                 dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[1], c[2], c[0]*hw.kd*hw.kh*hw.kw, c[1]*hw.channels, c[2]*hw.filters]
             elif isinstance(hw, ActivationLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, ElementWiseLayer):
                 if hw.broadcasting:
                     prev_nodes = [pn for pn in graph.predecessors(node)]
@@ -156,24 +220,31 @@ class PartitionComposer(BaseLayer):
                     node_rs = prev_nodes[prev_nodes_out_shapes.index(min(prev_nodes_out_shapes))]
                     prev_layer_rate_1 = graph.nodes[node_fs]['prod_rate']
                     prev_layer_rate_2 = graph.nodes[node_rs]['prod_rate']
-                if branch_mem == 0:
-                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=prev_layer_rate_1, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
-                else:
-                    dp_info = hw.get_design_point(coarse_in1=c[0], coarse_in2=c[1], coarse_out=c[2], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in_1=prev_layer_rate_1, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[0]*hw.channels_1]
             elif isinstance(hw, BatchNorm3DLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, SqueezeExcitationLayer):
                 dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12]]
             elif isinstance(hw, FCLayer):
                 dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                config[node] = [c[0], c[1], c[0]*hw.dim_in, c[1]*hw.dim_out]
             else:
                 assert False, "Not supported layer"
 
             if isinstance(hw, ElementWiseLayer):
                 if not dp_info['config']:
                     self.update_layer()
+                    if DEBUG:
+                        mem_kb = (dp_info['memWords'] * self.word_bytes) / 1e3
+                        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
+                        curr_bram_util = (mem_bram / self.bram) * 100
+                        curr_dsps_util = (dp_info['muls']/self.dsp)*100
+                        print(f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}")
                     return self.get_dp_info()
-                full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['rateIn'][0], dp_info['rateIn'][1], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedIn'][0], dp_info['memBoundedOut']
+                latency_cycles, full_rate_in_1, full_rate_in_2, full_rate_out, muls, adds, memory, bram_raw, depth, mem_bd_in_1, mem_bd_in_2, mem_bd_out = dp_info['latency(C)'], dp_info['rateIn'][0], dp_info['rateIn'][1], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['BRAM_RAW'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedIn'][0], dp_info['memBoundedOut']
                 if hw.broadcasting:
                     cp1 = graph_idx[node_fs]
                     cp2 = graph_idx[node_rs]
@@ -189,25 +260,31 @@ class PartitionComposer(BaseLayer):
             else:
                 if not dp_info['config']:
                     self.update_layer()
+                    if DEBUG:
+                        mem_kb = (dp_info['memWords'] * self.word_bytes) / 1e3
+                        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
+                        curr_bram_util = (mem_bram / self.bram) * 100
+                        curr_dsps_util = (dp_info['muls']/self.dsp)*100
+                        print(f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}")
                     return self.get_dp_info()
-                full_rate_in, full_rate_out, muls, adds, memory, depth, mem_bd_in, mem_bd_out = dp_info['rateIn'][0], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedOut'][0]
+                latency_cycles, full_rate_in, full_rate_out, muls, adds, memory, bram_raw, depth, mem_bd_in, mem_bd_out = dp_info['latency(C)'], dp_info['rateIn'][0], dp_info['rateOut'][0], dp_info['muls'], dp_info['adds'], dp_info['memWords'], dp_info['BRAM_RAW'], dp_info['depth'], dp_info['memBoundedIn'][0], dp_info['memBoundedOut'][0]
                 cp = graph_idx[node_predecessors[0]]
                 gamma_matrix[cp, n] = -full_rate_in
                 gamma_matrix[n, n] = full_rate_out
                 graph.nodes[node]['cons_rate'] = full_rate_in
                 graph.nodes[node]['prod_rate'] = full_rate_out
+            
+            layers_ii.append(latency_cycles-depth)
 
             total_muls += muls
             total_adds += adds
-            total_memory += memory
+            total_brams += bram_raw
             total_depth += depth
 
-            mem_kb = (total_memory * self.word_bytes) / 1e3
-            mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
-            curr_bram_util = (mem_bram / self.bram) * 100
+            curr_bram_util = (total_brams / self.bram) * 100
             curr_dsps_util = (total_muls/self.dsp)*100
 
-            if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 92.:
+            if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 95.:
                 self.update_layer()
                 if DEBUG:
                     print(f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}")
@@ -216,10 +293,11 @@ class PartitionComposer(BaseLayer):
         assert len(off_chip_mem_in) == 0, "Off-chip memory IN points left hanging. Wrong configuration of the graph."
         assert len(off_chip_mem_out) == 0, "Off-chip memory OUT points left hanging. Wrong configuration of the graph."
 
+        layer_fifos_arrays['branch_buffering'] = self.calculate_branch_buffering(graph)
+
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced = balance_memory_rates(gamma_matrix.copy())
-        # gamma_matrix_balanced = balance_multiport_rates(gamma_matrix.copy())
         # gamma_matrix_balanced = balance_matrix(gamma_matrix_balanced)
 
         # TODO: Properly find whether the graph is memory bounding and in which input/output (from gama matrix balancing)
@@ -263,43 +341,49 @@ class PartitionComposer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         batch_size = 1
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, total_memory, total_depth, batch=batch_size)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsps_raw, bram_util, bram_raw, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, layer_fifos_arrays, total_brams, total_depth, graph, config, batch=batch_size)
+        
+        if DEBUG:
+            print("Gama matrix calculated: {}. Max II over layers: {}".format(latency_cycles, max(layers_ii)))
+        latency_cycles = int(max(layers_ii))
+        latency_sec = latency_cycles/self.cycles_per_sec
+
         total_ops = self.get_total_workload(graph)*batch_size
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
         thr_out /= workload_matrix[-1,-1]           # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90. and bram_util < 92.:
+        if dsps_util < 90. and bram_util < 95.:
             self.full_rate_in = rates_in
             self.full_rate_out = rates_out
             self.max_parallel_muls = total_muls
             self.max_parallel_adds = total_adds
-            self.memory = total_memory
             self.depth = total_depth
+            self.branch_depth = layer_fifos_arrays['branch_buffering']
             self.mem_bd_in = mem_bounded_in
             self.mem_bd_out = mem_bounded_out
             self.data_size_in = sum(map(lambda x: np.prod(np.array(x[1:])), shapes_in))
             self.data_size_out = sum(map(lambda x: np.prod(np.array(x[1:])), shapes_out))
 
-            config = comb
             self.total_ops = total_ops
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
+            self.dsps_raw = dsps_raw
             self.bram_util = bram_util
+            self.bram_raw = bram_raw
             self.latency_sec = latency_sec
             self.latency_cycles = int(latency_cycles)
             self.throughput_ops = throughput_ops
             self.throughput_vols = thr_out
 
             if DEBUG:
-                print("GOPs/s={:.2f}, DSPS={:.2f}, BRAM={:.2f}, depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(throughput_ops*1e-9, dsps_util, bram_util, total_depth, latency_sec, int(latency_cycles), mem_bounded_in, mem_bounded_out))
+                print("GOPs/s={:.2f}, DSPS={}({:.2f}), BRAM={}({:.2f}), depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(throughput_ops*1e-9, dsps_raw, dsps_util, bram_raw, bram_util, total_depth, latency_sec, int(latency_cycles), mem_bounded_in, mem_bounded_out))
         else:
             self.update_layer()
             if DEBUG:
                 print(f"Discarding design point. DSPS={dsps_util}, BRAM={bram_util}")
-
         return self.get_dp_info()
 
     def get_workload_matrix(self, graph, num_layers):
@@ -335,12 +419,22 @@ class PartitionComposer(BaseLayer):
 
         return workload_matrix
 
-    def get_performance(self, workload_matrix, ii, muls, adds, mem, depth, batch=1):
-        mem_kb = (mem * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
-        bram_util = (mem_bram / self.bram) * 100
+    def get_performance(self, workload_matrix, ii, muls, adds, layer_fifos_arrays, layer_brams, depth, graph, config, batch=1):
 
+        mem_kb_total = 0
+        bram_raw_out = layer_brams
+
+        if 'branch_buffering' in layer_fifos_arrays.keys() and layer_fifos_arrays['branch_buffering'] > 0:
+            extra_branch_fifos_brams = self.bram_stream_resource_model(layer_fifos_arrays['branch_buffering'], 16)
+
+            merge_point = utils.get_merge_points(graph)[0]
+            parallel_fifos_branch_buffer = config[merge_point][1]
+            bram_raw_out += extra_branch_fifos_brams * parallel_fifos_branch_buffer
+            # print("Branch Depth:", layer_fifos_arrays['branch_buffering'], "Extra buffers:", extra_branch_fifos_brams, "Total:", extra_branch_fifos_brams * parallel_fifos_branch_buffer)
+
+        bram_util = (bram_raw_out / self.bram) * 100
         dsps_util = (muls/self.dsp)*100
+        dsps_raw_out = muls
 
         latency_cycles = np.max(np.abs(ii))*batch + depth
         latency_sec = latency_cycles/self.cycles_per_sec
@@ -348,4 +442,4 @@ class PartitionComposer(BaseLayer):
         thr_in = (batch*workload_matrix[0,0])/latency_sec       # Input words per second
         thr_out = (batch*workload_matrix[-1,-1])/latency_sec    # Output words per second
 
-        return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, mem_kb
+        return latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsps_raw_out, bram_util, bram_raw_out, mem_kb_total

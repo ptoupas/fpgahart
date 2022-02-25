@@ -129,7 +129,7 @@ def conv_compose(name, description, model_file, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
     
-    print("Latency: {}.\n(fine={:.2f}, cIn={:.2f}, cOut={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
+    print("Latency: {}.\n(fine={:.2f}->{}, cIn={:.2f}->{}, cOut={:.2f}->{}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSPs(%)={}({:.2f}), BRAMs(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][5], best['config'][1], best['config'][6], best['config'][2], best['config'][7], best['config'][3], best['config'][4], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP_RAW'], best['DSP'], best['BRAM_RAW'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {} ({}).".format(name, convtype))
     graph = nx.DiGraph()
@@ -226,16 +226,15 @@ def batchnorm_compose(name, description, model_file, singlethreaded):
 def gap_compose(name, description, model_file, singlethreaded):
     gap = GAPLayer(description)
 
-    coarse_in = utils.get_factors(gap.channels) / np.int64(gap.channels)
-    coarse_out = utils.get_factors(gap.filters) / np.int64(gap.filters)
+    coarse_inout = utils.get_factors(gap.channels) / np.int64(gap.channels)
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
 
-    total = [coarse_in, coarse_out, mem_bw]
+    total = [coarse_inout, mem_bw]
     combinations = itertools.product(*total)
     
-    print("Calculating {} design points for layer {}.".format(len(coarse_in)*len(coarse_out)*len(mem_bw), name))
+    print("Calculating {} design points for layer {}.".format(len(coarse_inout)*len(mem_bw), name))
 
     throughput_gops = []
     throughput_vols = []
@@ -252,8 +251,8 @@ def gap_compose(name, description, model_file, singlethreaded):
         if not singlethreaded:
             processes_pool = Pool(10)
             input_vars = []
-            for (cin, cout, (bw_in, bw_out)) in combinations:
-                input_vars.append([cin, cout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out])
+            for (cinout, (bw_in, bw_out)) in combinations:
+                input_vars.append([cinout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out])
             results = multithreaded_modeling(gap.get_design_point, input_vars, processes_pool)
             processes_pool.close()
             for r in results:
@@ -274,8 +273,8 @@ def gap_compose(name, description, model_file, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
         else:
-            for (cin, cout, (bw_in, bw_out)) in combinations:
-                r = gap.get_design_point(cin, cout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out)
+            for (cinout, (bw_in, bw_out)) in combinations:
+                r = gap.get_design_point(cinout, gap.mem_words_per_cycle*bw_in, gap.mem_words_per_cycle*bw_out)
 
                 if r['config']:
                     throughput_gops.append(r['GOP/s'])
@@ -294,7 +293,7 @@ def gap_compose(name, description, model_file, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
     
-    print("Latency: {}.\n(cin={:.2f}, cout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
+    print("Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
     graph = nx.DiGraph()
@@ -502,17 +501,15 @@ def se_compose(name, description, model_file, singlethreaded):
 def elemwise_compose(name, description, model_file, singlethreaded):
     elem = ElementWiseLayer(description)
 
-    coarse_in1 = utils.get_conbinations(utils.get_factors(elem.channels_1), utils.get_factors(elem.depth_in_1)) / (np.int64(elem.channels_1)*np.int64(elem.depth_in_1))
-    coarse_in2 = utils.get_conbinations(utils.get_factors(elem.channels_2), utils.get_factors(elem.depth_in_2)) / (np.int64(elem.channels_2)*np.int64(elem.depth_in_2))
-    coarse_out = utils.get_conbinations(utils.get_factors(elem.filters), utils.get_factors(elem.depth_out))  / (np.int64(elem.filters)*np.int64(elem.depth_out))
+    coarse_inout = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
 
     # mem_bw = [(0.1, 0.1, 0.8), (0.2, 0.2, 0.6), (0.3, 0.3, 0.4), (0.4, 0.4, 0.2), (0.3, 0.3, 0.4), (0.1, 0.4, 0.5), (0.4, 0.2, 0.4), (0.7, 0.2, 0.1), (0.8, 0.1, 0.1)]
     mem_bw = [(10000000, 10000000, 10000000)]
 
-    total = [coarse_in1, coarse_in2, coarse_out, mem_bw]
+    total = [coarse_inout, mem_bw]
     combinations = itertools.product(*total)
     
-    print("Calculating {} design points for layer {}.".format(len(coarse_in1)*len(coarse_in2)*len(coarse_out)*len(mem_bw), name))
+    print("Calculating {} design points for layer {}.".format(len(coarse_inout)*len(mem_bw), name))
 
     throughput_gops = []
     throughput_vols = []
@@ -529,8 +526,8 @@ def elemwise_compose(name, description, model_file, singlethreaded):
         if not singlethreaded:
             processes_pool = Pool(10)
             input_vars = []
-            for (cin1, cin2, cout, (bw_in1, bw_in2, bw_out)) in combinations:
-                input_vars.append([cin1, cin2, cout, elem.mem_words_per_cycle*bw_in1, elem.mem_words_per_cycle*bw_in2, elem.mem_words_per_cycle*bw_out])
+            for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
+                input_vars.append([cinout, elem.mem_words_per_cycle*bw_in1, elem.mem_words_per_cycle*bw_in2, elem.mem_words_per_cycle*bw_out])
             results = multithreaded_modeling(elem.get_design_point, input_vars, processes_pool)
             processes_pool.close()
             for r in results:
@@ -551,8 +548,8 @@ def elemwise_compose(name, description, model_file, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
         else:
-            for (cin1, cin2, cout, (bw_in1, bw_in2, bw_out)) in combinations:
-                r = elem.get_design_point(cin1, cin2, cout, elem.mem_words_per_cycle*bw_in1, elem.mem_words_per_cycle*bw_in2, elem.mem_words_per_cycle*bw_out)
+            for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
+                r = elem.get_design_point(cinout, elem.mem_words_per_cycle*bw_in1, elem.mem_words_per_cycle*bw_in2, elem.mem_words_per_cycle*bw_out)
 
                 if r['config']:
                     throughput_gops.append(r['GOP/s'])
@@ -571,7 +568,7 @@ def elemwise_compose(name, description, model_file, singlethreaded):
                             min_latency = r['latency(C)']
                             best = r
     
-    print("Latency: {}.\n(cin1={:.2f}, cin2={:.2f}, cout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['config'][4], best['config'][5], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
+    print("Latency: {}.\n(cinout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(best['latency(S)'], best['config'][0], best['config'][1], best['config'][2], best['config'][3], best['latency(C)'], best['latency(S)'], best['GOP/s'], best['vols/s'], best['DSP_RAW'], best['DSP'], best['BRAM_RAW'], best['BRAM'], best['rateIn'], best['rateOut'], best['depth'], best['muls'], best['adds'], best['memWords'], best['memKBs'], best['memBoundedIn'], best['memBoundedOut']))
     print("*"*40)
     print("Searching for optimal point with simulated annealing for layer {}.".format(name))
     graph = nx.DiGraph()
