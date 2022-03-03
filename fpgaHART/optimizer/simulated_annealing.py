@@ -402,7 +402,8 @@ class SimulatedAnnealing(BaseLayer):
         dp_info = self.partition_composer.get_design_point(graph.copy(), comb_config, mem_bw[0], mem_bw[1], read_points, write_points, gap_approx=self.gap_approx, branch_mem=branch_mem)
         # self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_int')
         if dp_info['config']:
-            return dp_info['latency(S)'], dp_info
+            # return dp_info['latency(S)'], dp_info
+            return -dp_info['GOP/s'], dp_info
         return None, None
 
     @staticmethod
@@ -810,7 +811,8 @@ class SimulatedAnnealing(BaseLayer):
             assert False, "Not supported layer"
 
         if dp_info['config']:
-            return dp_info['latency(S)'], dp_info
+            # return dp_info['latency(S)'], dp_info
+            return -dp_info['GOP/s'], dp_info
         return None, None
 
     def generate_random_config_layer(self, l):

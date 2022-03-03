@@ -95,17 +95,20 @@ class GAPLayer(BaseLayer):
             'gap_array': 0
         }
         if self.data_format == 'NCHWD':
-            max_parallel_muls = 0
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
             #TODO: !SOS! Revise that
             depth = 1
 
         else:
-            max_parallel_muls = 0
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
             max_parallel_adds = math.ceil(self.channels * coarse_inout)
             # layer_fifos_arrays['gap_array'] = math.ceil(1/coarse_inout)
             #TODO: !SOS! Revise that
-            depth = math.ceil(1/coarse_inout) * self.depth_in * self.rows_in * self.cols_in
+            if self.gap_approx:
+                depth = 1
+            else:
+                depth = math.ceil(1/coarse_inout) * self.depth_in * self.rows_in * self.cols_in
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsp_raw, bram_util, bram_raw, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, layer_fifos_arrays, depth, coarse_inout=math.ceil(self.channels * coarse_inout))
         total_ops = self.get_total_workload()
@@ -187,10 +190,7 @@ class GAPLayer(BaseLayer):
         return data_matrix
         
     def get_workload_matrix(self):
-        if self.gap_approx:
-            in_volume = self.channels
-        else:
-            in_volume = self.channels * self.depth_in * self.rows_in * self.cols_in
+        in_volume = self.channels * self.depth_in * self.rows_in * self.cols_in
         out_volume = self.depth_out * self.rows_out * self.cols_out * self.filters
 
         workload_matrix = np.zeros( shape=(2,3) , dtype=float )

@@ -345,50 +345,50 @@ def part_3d(file_format, prefix):
 		def __init__(self):
 			super().__init__()
 
-			channels_1 = 24
-			filters_1 = 54
+			channels_1 = 8
+			filters_1 = 12
 			kernel_shape_1 = (1, 1, 1)
 			padding_1 = (0, 0, 0)
 			stride_1 = (1, 1, 1)
 			self.groups_1 = 1
-			self.coarse_in_1 = 1
-			self.coarse_out_1 = 1
+			self.coarse_in_1 = 4
+			self.coarse_out_1 = 6
 
-			channels_2 = 54
-			filters_2 = 54
+			channels_2 = 12
+			filters_2 = 12
 			kernel_shape_2 = (3, 3, 3)
 			padding_2 = (1, 1, 1)
 			stride_2 = (1, 1, 1)
-			self.groups_2 = 54
-			self.coarse_in_2 = 1
+			self.groups_2 = 12
+			self.coarse_in_2 = 6
 			self.coarse_out_2 = 1
 
-			channels_3 = 54
+			channels_3 = 12
 			filters_3 = 8
 			kernel_shape_3 = (1, 1, 1)
 			padding_3 = (0, 0, 0)
 			stride_3 = (1, 1, 1)
 			self.groups_3 = 1
-			self.coarse_in_3 = 1
-			self.coarse_out_3 = 1
+			self.coarse_in_3 = 3
+			self.coarse_out_3 = 4
 			
 			channels_4 = 8
-			filters_4 = 54
+			filters_4 = 12
 			kernel_shape_4 = (1, 1, 1)
 			padding_4 = (0, 0, 0)
 			stride_4 = (1, 1, 1)
 			self.groups_4 = 1
-			self.coarse_in_4 = 1
-			self.coarse_out_4 = 1
+			self.coarse_in_4 = 4
+			self.coarse_out_4 = 3
 
-			channels_5 = 54
-			filters_5 = 24
+			channels_5 = 12
+			filters_5 = 8
 			kernel_shape_5 = (1, 1, 1)
 			padding_5 = (0, 0, 0)
 			stride_5 = (1, 1, 1)
 			self.groups_5 = 1
-			self.coarse_in_5 = 1
-			self.coarse_out_5 = 1
+			self.coarse_in_5 = 3
+			self.coarse_out_5 = 4
 
 			self.relu1 = nn.ReLU()
 			self.conv1 = nn.Conv3d(channels_1, filters_1, kernel_shape_1, stride=stride_1, padding=padding_1, groups=self.groups_1, bias=False)
@@ -413,21 +413,35 @@ def part_3d(file_format, prefix):
 			return x * torch.sigmoid(x)
 
 		def forward(self, x):
+			print("input shape: ", x.shape)
 			x = self.relu1(x)
+			print("relu1 shape: ", x.shape)
 			relu1_out = x
 			x = self.conv1(x)
+			print("conv1 shape: ", x.shape)
 			x = self.relu2(x)
+			print("relu2 shape: ", x.shape)
 			x = self.conv2(x)
+			print("conv2 shape: ", x.shape)
 			conv2_out = x
 			x = self.gap1(x)
+			print("gap1 shape: ", x.shape)
 			x = self.conv3(x)
+			print("conv3 shape: ", x.shape)
 			x = self.relu3(x)
+			print("relu3 shape: ", x.shape)
 			x = self.conv4(x)
+			print("conv4 shape: ", x.shape)
 			x = self.sigmoid1(x)
+			print("sigmoid1 shape: ", x.shape)
 			x = x * conv2_out
+			print("multiply shape: ", x.shape)
 			x = self.swish(x)
+			print("swish shape: ", x.shape)
 			x = self.conv5(x)
+			print("conv5 shape: ", x.shape)
 			x = x + relu1_out
+			print("add shape: ", x.shape)
 			return x
 		
 		def save_weights(self):
@@ -479,7 +493,7 @@ def part_3d(file_format, prefix):
 	if not os.path.exists(prefix):
 		os.makedirs(prefix)
 	
-	input_shape = (1, 24, 16, 64, 64)
+	input_shape = (1, 8, 6, 12, 12)
 	
 	x = torch.randn(input_shape)
 	print("*"*30)

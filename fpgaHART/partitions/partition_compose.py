@@ -204,13 +204,13 @@ class PartitionComposer(BaseLayer):
                 raise Exception(f"Node: {node} has more than 2 predecessors. This kind of connection is not yet supported.")
 
             if isinstance(hw, GAPLayer):
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate, gap_approx=gap_approx)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate, gap_approx=gap_approx)
                 config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, Convolutional3DLayer):
-                dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[1], c[2], c[0]*hw.kd*hw.kh*hw.kw, c[1]*hw.channels, c[2]*hw.filters]
             elif isinstance(hw, ActivationLayer):
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, ElementWiseLayer):
                 if hw.broadcasting:
@@ -220,16 +220,16 @@ class PartitionComposer(BaseLayer):
                     node_rs = prev_nodes[prev_nodes_out_shapes.index(min(prev_nodes_out_shapes))]
                     prev_layer_rate_1 = graph.nodes[node_fs]['prod_rate']
                     prev_layer_rate_2 = graph.nodes[node_rs]['prod_rate']
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in_1=prev_layer_rate_1, mem_bw_in_2=prev_layer_rate_2, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[0]*hw.channels_1]
             elif isinstance(hw, BatchNorm3DLayer):
-                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[0]*hw.channels]
             elif isinstance(hw, SqueezeExcitationLayer):
-                dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12]]
             elif isinstance(hw, FCLayer):
-                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=prev_layer_rate_1, mem_bw_out=curr_layer_rate)
+                dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
                 config[node] = [c[0], c[1], c[0]*hw.dim_in, c[1]*hw.dim_out]
             else:
                 assert False, "Not supported layer"
@@ -341,13 +341,8 @@ class PartitionComposer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         batch_size = 1
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsps_raw, bram_util, bram_raw, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, layer_fifos_arrays, total_brams, total_depth, graph, config, batch=batch_size)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsps_raw, bram_util, bram_raw, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, layer_fifos_arrays, total_brams, total_depth, graph, config, batch=batch_size, per_layer_ii=layers_ii)
         
-        if DEBUG:
-            print("Gama matrix calculated: {}. Max II over layers: {}".format(latency_cycles, max(layers_ii)))
-        latency_cycles = int(max(layers_ii))
-        latency_sec = latency_cycles/self.cycles_per_sec
-
         total_ops = self.get_total_workload(graph)*batch_size
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
@@ -419,7 +414,7 @@ class PartitionComposer(BaseLayer):
 
         return workload_matrix
 
-    def get_performance(self, workload_matrix, ii, muls, adds, layer_fifos_arrays, layer_brams, depth, graph, config, batch=1):
+    def get_performance(self, workload_matrix, ii, muls, adds, layer_fifos_arrays, layer_brams, depth, graph, config, batch=1, per_layer_ii=None):
 
         mem_kb_total = 0
         bram_raw_out = layer_brams
@@ -435,10 +430,15 @@ class PartitionComposer(BaseLayer):
         bram_util = (bram_raw_out / self.bram) * 100
         dsps_util = (muls/self.dsp)*100
         dsps_raw_out = muls
-
-        latency_cycles = np.max(np.abs(ii))*batch + depth
+        
+        if per_layer_ii is not None:
+            latency_cycles = int(max(per_layer_ii))*batch + depth
+        else:
+            latency_cycles = int(np.max(np.abs(ii)))*batch + depth
         latency_sec = latency_cycles/self.cycles_per_sec
-
+        if DEBUG:
+            print("Gama matrix calculated: {} - Max II over layers: {} = {}".format(int(np.max(np.abs(ii)))*batch + depth, int(max(per_layer_ii))*batch + depth, (int(np.max(np.abs(ii)))*batch + depth) - (int(max(per_layer_ii))*batch + depth)))
+        
         thr_in = (batch*workload_matrix[0,0])/latency_sec       # Input words per second
         thr_out = (batch*workload_matrix[-1,-1])/latency_sec    # Output words per second
 

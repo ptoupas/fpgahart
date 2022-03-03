@@ -294,4 +294,86 @@ class PartitionParser():
 
         custom_partition = ['Relu_22', 'Conv_23', 'Relu_25', 'Conv_26', 'Swish_28', 'Conv_30', 'Add_32']
 
+        self.model_descriptor.layers['Relu_22']['shape_in'] = [[1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Relu_22']['shape_out'] = [1, 8, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_23']['shape_in'] = [[1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_23']['shape_out'] = [1, 16, 6, 12, 12]
+        self.model_descriptor.layers['Conv_23']['kernel'] = [16, 8, 1, 1, 1]
+        self.model_descriptor.layers['Conv_23']['bias'] = [16]
+
+        self.model_descriptor.layers['Relu_25']['shape_in'] = [[1, 16, 6, 12, 12]]
+        self.model_descriptor.layers['Relu_25']['shape_out'] = [1, 16, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_26']['shape_in'] = [[1, 16, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_26']['shape_out'] = [1, 16, 6, 12, 12]
+        self.model_descriptor.layers['Conv_26']['kernel'] = [16, 1, 3, 3, 3]
+        self.model_descriptor.layers['Conv_26']['bias'] = [16]
+        self.model_descriptor.layers['Conv_26']['groups'] = 16
+
+        self.model_descriptor.layers['Swish_28']['shape_in'] = [[1, 16, 6, 12, 12]]
+        self.model_descriptor.layers['Swish_28']['shape_out'] = [1, 16, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_30']['shape_in'] = [[1, 16, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_30']['shape_out'] = [1, 8, 6, 12, 12]
+        self.model_descriptor.layers['Conv_30']['kernel'] = [8, 16, 1, 1, 1]
+        self.model_descriptor.layers['Conv_30']['bias'] = [8]
+
+        self.model_descriptor.layers['Add_32']['shape_in'] = [[1, 8, 6, 12, 12], [1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Add_32']['shape_out'] = [1, 8, 6, 12, 12]
+
+
+
+        custom_partition = ['Relu_33', 'Conv_34', 'Relu_36', 'Conv_37', 'GlobalAveragePool_39', 'Conv_40', 'Relu_41', 'Conv_42', 'Sigmoid_43', 'Mul_44', 'Swish_45', 'Conv_47', 'Add_49']
+
+        self.model_descriptor.layers['Relu_33']['shape_in'] = [[1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Relu_33']['shape_out'] = [1, 8, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_34']['shape_in'] = [[1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_34']['shape_out'] = [1, 12, 6, 12, 12]
+        self.model_descriptor.layers['Conv_34']['kernel'] = [12, 8, 1, 1, 1]
+        self.model_descriptor.layers['Conv_34']['bias'] = [12]
+
+        self.model_descriptor.layers['Relu_36']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Relu_36']['shape_out'] = [1, 12, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_37']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_37']['shape_out'] = [1, 12, 6, 12, 12]
+        self.model_descriptor.layers['Conv_37']['kernel'] = [12, 1, 3, 3, 3]
+        self.model_descriptor.layers['Conv_37']['bias'] = [12]
+        self.model_descriptor.layers['Conv_37']['groups'] = 12
+
+        self.model_descriptor.layers['GlobalAveragePool_39']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['GlobalAveragePool_39']['shape_out'] = [1, 12, 1, 1, 1]
+
+        self.model_descriptor.layers['Conv_40']['shape_in'] = [[1, 12, 1, 1, 1]]
+        self.model_descriptor.layers['Conv_40']['shape_out'] = [1, 8, 1, 1, 1]
+        self.model_descriptor.layers['Conv_40']['kernel'] = [8, 12, 1, 1, 1]
+        self.model_descriptor.layers['Conv_40']['bias'] = [8]
+
+        self.model_descriptor.layers['Relu_41']['shape_in'] = [[1, 8, 1, 1, 1]]
+        self.model_descriptor.layers['Relu_41']['shape_out'] = [1, 8, 1, 1, 1]
+
+        self.model_descriptor.layers['Conv_42']['shape_in'] = [[1, 8, 1, 1, 1]]
+        self.model_descriptor.layers['Conv_42']['shape_out'] = [1, 12, 1, 1, 1]
+        self.model_descriptor.layers['Conv_42']['kernel'] = [12, 8, 1, 1, 1]
+        self.model_descriptor.layers['Conv_42']['bias'] = [12]
+
+        self.model_descriptor.layers['Sigmoid_43']['shape_in'] = [[1, 12, 1, 1, 1]]
+        self.model_descriptor.layers['Sigmoid_43']['shape_out'] = [1, 12, 1, 1, 1]
+
+        self.model_descriptor.layers['Mul_44']['shape_in'] = [[1, 12, 6, 12, 12], [1, 12, 1, 1, 1]]
+        self.model_descriptor.layers['Mul_44']['shape_out'] = [1, 12, 6, 12, 12]
+        
+        self.model_descriptor.layers['Swish_45']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Swish_45']['shape_out'] = [1, 12, 6, 12, 12]
+
+        self.model_descriptor.layers['Conv_47']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_47']['shape_out'] = [1, 8, 6, 12, 12]
+        self.model_descriptor.layers['Conv_47']['kernel'] = [8, 12, 1, 1, 1]
+        self.model_descriptor.layers['Conv_47']['bias'] = [8]
+
+        self.model_descriptor.layers['Add_49']['shape_in'] = [[1, 8, 6, 12, 12], [1, 8, 6, 12, 12]]
+        self.model_descriptor.layers['Add_49']['shape_out'] = [1, 8, 6, 12, 12]
+
         self.model_partition(custom_partition, name="Custom_Partition")

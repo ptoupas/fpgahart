@@ -143,15 +143,15 @@ class Convolutional3DLayer(BaseLayer):
             depth_window_buffer_3d = math.ceil(1/f_coarseIn) + 1
             layer_fifos_arrays['sw_wb_3d'] = depth_window_buffer_3d
 
-            depth = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
-                    math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
-                    math.ceil(1/f_coarseIn) * (self.kd - 1)
-            depth += math.ceil(1/f_coarseIn) * ( (self.kh - 1)*self.kw*self.kd + (self.kw - 1)*self.kd + (self.kd - 1) )
-
+            # depth = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
+            #         math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
+            #         math.ceil(1/f_coarseIn) * (self.kd - 1)
+            # depth += math.ceil(1/f_coarseIn) * ( (self.kh - 1)*self.kw*self.kd + (self.kw - 1)*self.kd + (self.kd - 1) )
+            depth = depth_line_buffer_3d + depth_line_buffer_2d + depth_window_buffer_3d
             # Fork Module (FM) Depth and Memory
 
             # Convolution Module (CM) Depth and Memory
-            depth += math.ceil(1/f_fine)
+            depth += math.ceil(1/f_fine) + 1
             # Accumulator Module (AM) Depth and Memory
 
             # Glue Module (GM) Depth and Memory
@@ -160,8 +160,9 @@ class Convolutional3DLayer(BaseLayer):
             # Accumulator Module (AM) Depth and Memory
             depth_accumulator = math.ceil(1/f_coarseOut) + 1
             layer_fifos_arrays['acc_fifo'] = depth_accumulator
-            # fifo_accumulator_brams = self.bram_stream_resource_model(depth_accumulator, 30)
-            depth += math.ceil(1/f_coarseIn) * math.ceil(1/f_coarseOut)
+            
+            # depth += math.ceil(1/f_coarseIn) * math.ceil(1/f_coarseOut)
+            depth += depth_accumulator
 
             # Accumulation Buffer
             array_accumulator = math.ceil(1/f_coarseOut)
@@ -319,7 +320,7 @@ class Convolutional3DLayer(BaseLayer):
 
             # Convolution 3D
             stream_matrix[2, 3] = math.ceil(self.channels * f_coarseIn)
-            stream_matrix[3, 3] = math.ceil(self.channels * f_coarseIn)
+            stream_matrix[3, 3] = math.ceil(self.filters * f_coarseOut)
 
             # Accumulation
 
