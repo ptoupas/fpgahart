@@ -9,10 +9,9 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG=False
 
 class BatchNorm3DLayer(BaseLayer):
-    def __init__(self, description, optimization):
+    def __init__(self, description):
         super().__init__()
 
-        self.optimization = optimization
         self.input_shape = description['shape_in'][0]
         self.depth_in = self.input_shape[2]
         self.rows_in = self.input_shape[3]
@@ -37,7 +36,9 @@ class BatchNorm3DLayer(BaseLayer):
         self.mem_bd_out = []
         self.config = []
         self.dsps_util = 0
+        self.dsp_raw = 0
         self.bram_util = 0
+        self.bram_raw = 0
         self.latency_sec = 0
         self.latency_cycles = 0
         self.throughput_ops = 0
@@ -54,7 +55,9 @@ class BatchNorm3DLayer(BaseLayer):
         dp_info['GOP/s'] = self.throughput_ops*1e-9
         dp_info['vols/s'] = self.throughput_vols
         dp_info['DSP'] = self.dsps_util
+        dp_info['DSP_RAW'] = self.dsp_raw
         dp_info['BRAM'] = self.bram_util
+        dp_info['BRAM_RAW'] = self.bram_raw
         dp_info['rateIn'] = self.full_rate_in
         dp_info['rateOut'] = self.full_rate_out
         dp_info['depth'] = self.depth
@@ -76,17 +79,6 @@ class BatchNorm3DLayer(BaseLayer):
     def get_design_point(self, coarse_inout, mem_bw_in, mem_bw_out):
         self.update_layer()
 
-        if self.optimization == 'Powell':
-            initial_guess = [0.5, mem_bw_in, mem_bw_out]
-            lower_bound = 1/(self.channels*self.depth_in*self.rows_in*self.cols_in)
-            bnds = ((lower_bound, 1.0), (lower_bound, 1.0), (0.001, mem_bw_in), (0.001, mem_bw_out))   
-            result = optimize.minimize(self.get_latency, initial_guess, method=self.optimization, bounds=bnds)
-            if result.success:
-                coarse_inout, mem_bw_in, mem_bw_out = result.x
-            else:
-                print("Failed to optimize. Skipping...")
-                return
-
         gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_inout) * self.get_data_matrix(mem_bw_in, mem_bw_out)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
@@ -100,22 +92,21 @@ class BatchNorm3DLayer(BaseLayer):
 
         max_parallel_muls = math.ceil(self.channels * coarse_inout)
         max_parallel_adds = math.ceil(self.channels * coarse_inout)
-        memory = 1
+        layer_fifos_arrays = {}
         depth = 1
 
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
+        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsp_raw, bram_util, bram_raw, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, layer_fifos_arrays, depth, coarse_inout=coarse_inout)
         total_ops = self.get_total_workload()
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0, 0]             # Volumes per second
         thr_out /= workload_matrix[-1, -1]          # Volumes per second
         assert math.isclose(thr_in, thr_out), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90. and bram_util < 90.:
+        if dsps_util < 90. and bram_util < 95.:
             self.full_rate_in = [gamma_matrix_balanced[0, 0]]
             self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
-            self.memory = memory
             self.depth = depth
             self.mem_bd_in = [mem_bounded_in]
             self.mem_bd_out = [mem_bounded_out]
@@ -124,7 +115,9 @@ class BatchNorm3DLayer(BaseLayer):
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
+            self.dsp_raw = dsp_raw
             self.bram_util = bram_util
+            self.bram_raw = bram_raw
             self.latency_sec = latency_sec
             self.latency_cycles = int(latency_cycles)
             self.throughput_ops = throughput_ops
@@ -138,42 +131,6 @@ class BatchNorm3DLayer(BaseLayer):
                 print("Discarding design point.")
 
         return self.get_dp_info()
-
-    def get_latency(self, params):
-        coarse_inout, mem_bw_in, mem_bw_out = params
-        if not (coarse_inout>0 and mem_bw_in>0 and mem_bw_out>0):
-            return 1000000000000
-        if (coarse_inout>1):
-            return 1000000000000
-
-        gamma_matrix = self.get_rate_matrix() * self.get_stream_matrix(coarse_inout) * self.get_data_matrix(mem_bw_in, mem_bw_out)
-        if DEBUG:
-            print("Γ:\n{}".format(gamma_matrix))
-        gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
-        if DEBUG:
-            print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
-        workload_matrix = self.get_workload_matrix()
-        ii_matrix = np.nan_to_num(workload_matrix/gamma_matrix_balanced)
-        if DEBUG:
-            print("II:\n{}".format(ii_matrix))
-
-        max_parallel_muls = math.ceil(self.channels * coarse_inout)
-        max_parallel_adds = math.ceil(self.channels * coarse_inout)
-        memory = 1
-        depth = 1
-
-        latency_sec, latency_cycles, thr_in, thr_out, dsps_util, bram_util, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, memory, depth)
-
-        latency_cycles = np.max(np.abs(ii_matrix)) + depth
-        penalize_factor = (bram_util/100 + dsps_util/100) * (np.max(np.abs(ii_matrix)) + depth)
-
-        if self.optimization == 'Powell':
-            optimization_score = latency_cycles + penalize_factor
-        elif self.optimization == 'trust-constr':
-            optimization_score = latency_cycles
-
-        return optimization_score
-
 
     def get_rate_matrix(self):
         rate_matrix = np.zeros( shape=(2,3) , dtype=float )

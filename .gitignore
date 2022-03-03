@@ -16,3 +16,4 @@ pip-delete-this-directory.txt
 *.jpg
 *.jpeg
 *.csv
+*.dat

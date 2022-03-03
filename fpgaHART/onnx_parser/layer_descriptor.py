@@ -5,15 +5,15 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 
 class ModelLayerDescriptor(OnnxModelParser):
-    def __init__(self, model_name, breakdown_se):
+    def __init__(self, model_name, se_block):
         super().__init__(model_name)
 
         self.layers = {}
-        self.breakdown_se = breakdown_se
+        self.se_block = se_block
         self.create_layers()
 
     def create_layers(self):
-        if not self.breakdown_se:
+        if self.se_block:
             se_module = deque(maxlen=6)
         swish_module = deque(maxlen=2)
         prev_output_id = -1
@@ -119,7 +119,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                   del self.layers[sigmoid_name]
                   del self.layers[mul_name]
 
-            if not self.breakdown_se:
+            if self.se_block:
                 se_module.append([operation, name])
                 if se_module[0][0] == 'GlobalAveragePool' and se_module[1][0] == 'Conv' and se_module[2][0] == 'Relu' and se_module[3][0] == 'Conv' and se_module[4][0] == 'Sigmoid' and se_module[5][0] == 'Mul':
                     logging.debug("Creating Squeeze and Excitation Module")
