@@ -43,6 +43,7 @@ class PartitionComposer(BaseLayer):
         self.throughput_ops = 0
         self.throughput_vols = 0
         self.total_ops = 0
+        self.max_latency_nodes = None
 
     def get_total_workload(self, graph):
         total_wl = 0
@@ -79,6 +80,7 @@ class PartitionComposer(BaseLayer):
         dp_info['dataSizeOut'] = (self.data_size_out * self.word_bytes) / 1e6
         dp_info['memBoundedIn'] = self.mem_bd_in
         dp_info['memBoundedOut'] = self.mem_bd_out
+        dp_info['slowestNodes'] = self.max_latency_nodes
         dp_info['config'] = self.config
         
         return dp_info
@@ -155,6 +157,14 @@ class PartitionComposer(BaseLayer):
         graph_idx = {}
         for i, n in enumerate(graph.nodes()):
             graph_idx[n] = i
+
+        graph_layers = {}
+        reduce_factor = 0
+        for i, n in enumerate(graph.nodes()):
+            if not (graph.nodes[n]['type'] == 'mem_in' or graph.nodes[n]['type'] == 'mem_out'):
+                graph_layers[i-reduce_factor] = n
+            else:
+                reduce_factor += 1
 
         total_muls = 0
         total_adds = 0
@@ -342,7 +352,10 @@ class PartitionComposer(BaseLayer):
 
         batch_size = 1
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsps_raw, bram_util, bram_raw, memKBs = self.get_performance(workload_matrix, ii_matrix, total_muls, total_adds, layer_fifos_arrays, total_brams, total_depth, graph, config, batch=batch_size, per_layer_ii=layers_ii)
-        
+        slowest_nodes_idxs = np.array(layers_ii).argsort()[::-1][:n].tolist()[:3]
+        slowest_nodes_names = [graph_layers[n] for n in slowest_nodes_idxs[:3]]
+        self.max_latency_nodes = slowest_nodes_names
+
         total_ops = self.get_total_workload(graph)*batch_size
         throughput_ops = total_ops/latency_sec
         thr_in /= workload_matrix[0,0]              # Volumes per second
