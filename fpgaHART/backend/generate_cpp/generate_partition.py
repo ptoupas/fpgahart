@@ -69,7 +69,6 @@ def generate_partition_code(layers_config, branch_depth, partition_name, parser)
 
     # Generate top level partition file
     graph = utils.update_graph(graph, split_points=split_points, squeeze_layers=squeeze_layers)
-    parser.visualize_graph(graph, 'tst')
     generate_top_level_files(graph, branch_depth, layers_config, partition_name)
 
     # Generate testbench file
