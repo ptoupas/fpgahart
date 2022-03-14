@@ -21,7 +21,7 @@ import os
 
 
 class SimulatedAnnealing(BaseLayer):
-    def __init__(self, graph, branch_mem, t_min=0.0001, t_max=25, iterationPerTemp=15, cooling_rate=0.99, partition_name='', gap_approx=False):
+    def __init__(self, graph, branch_mem, t_min=1e-8, t_max=7.5, iterationPerTemp=15, cooling_rate=0.99, partition_name='', gap_approx=False):
         super().__init__()
         self.gap_approx = gap_approx
         self.part_name = partition_name
@@ -282,12 +282,14 @@ class SimulatedAnnealing(BaseLayer):
 
         config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9)
         cost, dp_info = self.get_cost(config, mem_bw)
+        slowest_nodes = None
 
         if cost is None:
             for _ in range(500):
-                config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9)
+                config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9, prev_state=config, slowest_nodes=slowest_nodes)
                 cost, dp_info = self.get_cost(config, mem_bw)
                 if cost is not None:
+                    slowest_nodes = dp_info['slowestNodes']
                     break
             if cost is None:
                 print("No configuration found in 100 iterations. Exiting...")
@@ -298,73 +300,88 @@ class SimulatedAnnealing(BaseLayer):
         solution_dp = dp_info
         solution_mem = mem_bw
 
-        current_temp = 12.5
-        for i in range(1000):
-            new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(param_perc=0.9)
-            new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+        # current_temp = 12.5
+        # for i in range(1000):
+        #     new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(param_perc=0.9, prev_state=prev_state, slowest_nodes=slowest_nodes)
+        #     new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+        #     if new_cost is not None:
+        #         slowest_nodes = dp_info['slowestNodes']
 
-            if new_cost is None:
-                continue
+        #     if new_cost is None:
+        #         continue
 
-            cost_diff = prev_cost - new_cost
-            if cost_diff >= 0:
-                prev_state = copy.deepcopy(new_state)
-                prev_cost = copy.deepcopy(new_cost)
-                solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
-            else:
-                if random.uniform(0, 1) < math.exp((cost_diff/(self.k*current_temp))):
-                    prev_state = copy.deepcopy(new_state)
-                    prev_cost = copy.deepcopy(new_cost)
-                    solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
+        #     cost_diff = prev_cost - new_cost
+        #     if cost_diff >= 0:
+        #         prev_state = copy.deepcopy(new_state)
+        #         prev_cost = copy.deepcopy(new_cost)
+        #         solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
+        #     else:
+        #         if random.uniform(0, 1) < math.exp((cost_diff/(self.k*current_temp))):
+        #             prev_state = copy.deepcopy(new_state)
+        #             prev_cost = copy.deepcopy(new_cost)
+        #             solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
 
-            current_temp *= self.cooling_rate
-            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{param_count:5d}\t{param_perc:.3f}", end='\r')
-        self.freeze_param = False
+        #     current_temp *= self.cooling_rate
+        #     print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{param_count:5d}\t{param_perc:.3f}", end='\r')
+        # self.freeze_param = False
 
-        return prev_state, prev_cost, solution_dp, solution_mem
+        return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
     def run_optimizer(self):
         if self.has_gap() and self.branch_bram_util > 80:
             return self.run_optimizer_double_graph()
 
-        config, cost, dp_info, mem_bw = self.initialize_optimizer()
+        best_solution_mem = None
+        best_solution_dp = None
+        best_latency = 1000
+        for i in range(3):
+            config, cost, dp_info, mem_bw, slowest_nodes = self.initialize_optimizer()
 
-        prev_state = config
-        prev_cost = cost
-        solution_dp = dp_info
-        solution_mem = mem_bw
+            prev_state = config
+            prev_cost = cost
+            solution_dp = dp_info
+            solution_mem = mem_bw
 
-        current_temp = self.t_max
-        count = 0
-        print(f"Temperature  |  Latency     |  Count  |  Param Count  |  Param %")
-        while current_temp > self.t_min:
-            
-            for i in range(self.iterationPerTemp):
-                count += 1
-                new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(neighbours=True, prev_state=prev_state)
-                new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+            current_temp = self.t_max
+            count = 0
+            print(f"Temperature  |  Latency     |  Count  |  Param Count  |  Param %")
+            while current_temp > self.t_min:
+                
+                for i in range(self.iterationPerTemp):
+                    count += 1
+                    new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(neighbours=True, prev_state=prev_state, slowest_nodes=slowest_nodes)
+                    new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+                    if new_cost is not None:
+                        slowest_nodes = new_dp_info['slowestNodes']
 
-                if new_cost is None:
-                    continue
+                    if new_cost is None:
+                        continue
 
-                cost_diff = prev_cost - new_cost
-                if cost_diff >= 0:
-                    prev_state = copy.deepcopy(new_state)
-                    prev_cost = copy.deepcopy(new_cost)
-                    solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
-                else:
-                    if random.uniform(0, 1) < math.exp((cost_diff/(self.k*current_temp))):
+                    cost_diff = prev_cost - new_cost
+                    if cost_diff >= 0:
                         prev_state = copy.deepcopy(new_state)
                         prev_cost = copy.deepcopy(new_cost)
                         solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
+                    else:
+                        if random.uniform(0, 1) < math.exp(cost_diff/current_temp):
+                            prev_state = copy.deepcopy(new_state)
+                            prev_cost = copy.deepcopy(new_cost)
+                            solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
 
-            current_temp *= self.cooling_rate
-            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}", end='\r')
-        
-        print(f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}.")
-        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(solution_dp['latency(C)'], solution_dp['latency(S)'], solution_dp['GOP/s'], solution_dp['vols/s'], solution_dp['DSP_RAW'], solution_dp['DSP'], solution_dp['BRAM_RAW'], solution_dp['BRAM'], solution_dp['rateIn'], solution_dp['rateOut'], solution_dp['depth'], solution_dp['branch_depth'], solution_dp['muls'], solution_dp['adds'], solution_dp['memWords'], solution_dp['memKBs'], solution_dp['memBoundedIn'], solution_dp['memBoundedOut'], solution_dp['config']))
+                current_temp *= self.cooling_rate
+                print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}", end='\r')
+
+            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}")
+
+            if prev_cost < best_latency:
+                best_latency = prev_cost
+                best_solution_mem = solution_mem
+                best_solution_dp = solution_dp
+
+        print(f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}.")
+        print("Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(best_solution_dp['latency(C)'], best_solution_dp['latency(S)'], best_solution_dp['GOP/s'], best_solution_dp['vols/s'], best_solution_dp['DSP_RAW'], best_solution_dp['DSP'], best_solution_dp['BRAM_RAW'], best_solution_dp['BRAM'], best_solution_dp['rateIn'], best_solution_dp['rateOut'], best_solution_dp['depth'], best_solution_dp['branch_depth'], best_solution_dp['muls'], best_solution_dp['adds'], best_solution_dp['memWords'], best_solution_dp['memKBs'], best_solution_dp['memBoundedIn'], best_solution_dp['memBoundedOut'], best_solution_dp['config']))
         print("*"*40)
-        return self.mem_words_per_cycle, [solution_mem], [solution_dp]
+        return self.mem_words_per_cycle, [best_solution_mem], [best_solution_dp]
 
     def get_cost(self, config, mem_bw, target_graph=None, branch_mem_update=None, mem_in_conns=[], mem_out_conns=[]):
         """
@@ -402,8 +419,8 @@ class SimulatedAnnealing(BaseLayer):
         dp_info = self.partition_composer.get_design_point(graph.copy(), comb_config, mem_bw[0], mem_bw[1], read_points, write_points, gap_approx=self.gap_approx, branch_mem=branch_mem)
         # self.visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_int')
         if dp_info['config']:
-            # return dp_info['latency(S)'], dp_info
-            return -dp_info['GOP/s'], dp_info
+            return dp_info['latency(S)'], dp_info
+            # return -dp_info['GOP/s'], dp_info
         return None, None
 
     @staticmethod
@@ -608,35 +625,44 @@ class SimulatedAnnealing(BaseLayer):
                     assert False, "Not supported layer"
         return new_config
 
-    def generate_random_config(self, target_graph=None, neighbours=False, prev_state=None, param_perc=0.3, n_in=1, n_out=1):
+    def generate_random_config(self, target_graph=None, neighbours=False, prev_state=None, slowest_nodes=None, param_perc=0.3, n_in=1, n_out=1):
         if target_graph is None:
             graph = self.graph.copy()
         else:
             graph = target_graph
 
-        if neighbours:
-            if not self.freeze_param:
-                self.param_changes += 1
-                param_perc = math.cos(self.param_changes/1500)
-                if param_perc > 0.6:
-                    param_perc = 0.6
-                elif param_perc < 0.3:
-                    param_perc = 0.3
-                    self.freeze_param = True
-            else:
-                param_perc = param_perc
+        # if neighbours:
+        #     if not self.freeze_param:
+        #         self.param_changes += 1
+        #         param_perc = math.cos(self.param_changes/1500)
+        #         if param_perc > 0.6:
+        #             param_perc = 0.6
+        #         elif param_perc < 0.3:
+        #             param_perc = 0.3
+        #             self.freeze_param = True
+        #     else:
+        #         param_perc = param_perc
 
-            number_of_new_configs = math.ceil(graph.order() * param_perc)
+        #     number_of_new_configs = math.ceil(graph.order() * param_perc)
 
-            # without replacement
-            config_nodes = random.sample(list(graph.nodes), number_of_new_configs)
-            # with replacement
-            # config_nodes = random.choices(list(graph.nodes), k=number_of_new_configs)
+        #     # without replacement
+        #     config_nodes = random.sample(list(graph.nodes), number_of_new_configs)
+        #     # with replacement
+        #     # config_nodes = random.choices(list(graph.nodes), k=number_of_new_configs)
 
-            config = prev_state
+        #     config = prev_state
+        # else:
+        #     config_nodes = list(graph.nodes)
+        #     config = {}
+
+        neighbours = False
+        config_nodes = list(graph.nodes)
+        if slowest_nodes:
+            config = prev_state.copy()
+            slowest_node_choice = random.choice(slowest_nodes)
         else:
-            config_nodes = list(graph.nodes)
             config = {}
+            slowest_node_choice = None
 
         for node in config_nodes:
             op_type = graph.nodes[node]['type']
@@ -743,6 +769,9 @@ class SimulatedAnnealing(BaseLayer):
                 continue
             else:
                 assert False, "Not supported layer"
+            
+            if slowest_node_choice == node:
+                break
         mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=n_in, n_out=n_out, gap_approx=self.gap_approx)
 
         return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
@@ -811,8 +840,8 @@ class SimulatedAnnealing(BaseLayer):
             assert False, "Not supported layer"
 
         if dp_info['config']:
-            # return dp_info['latency(S)'], dp_info
-            return -dp_info['GOP/s'], dp_info
+            return dp_info['latency(S)'], dp_info
+            # return -dp_info['GOP/s'], dp_info
         return None, None
 
     def generate_random_config_layer(self, l):
