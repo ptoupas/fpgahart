@@ -448,3 +448,19 @@ def update_graph(graph, split_points=None, squeeze_layers=None):
             graph.update(edges=new_edges, nodes=new_nodes)
 
     return graph
+
+def add_supportive_nodes_config(graph, config):
+    for node in graph.nodes():
+        if "Split_" in node and not node in config.keys():
+            parent_node = node.split("Split_")[1]
+            config[node] = {'shape_in': config[parent_node]['shape_out'],
+                            'shape_out': config[parent_node]['shape_out'],
+                            'coarse_factor': config[parent_node]['coarse_factor'] if 'coarse_factor' in config[parent_node].keys() else config[parent_node]['coarse_out_factor']}
+        if "Squeeze_" in node and not node in config.keys():
+            node_decomp = node.split("_")
+            parent_node_1 = f"{node_decomp[1]}_{node_decomp[2]}"
+            # parent_node_2 = f"{node_decomp[3]}_{node_decomp[4]}"
+            config[node] = {'shape_in': config[parent_node_1]['shape_out'],
+                            'shape_out': config[parent_node_1]['shape_out'],
+                            'coarse_factor': config[parent_node_1]['coarse_factor'] if 'coarse_factor' in config[parent_node_1].keys() else config[parent_node_1]['coarse_out_factor']}
+    return config

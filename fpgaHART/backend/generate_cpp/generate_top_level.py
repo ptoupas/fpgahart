@@ -1,5 +1,6 @@
 from layers.codegen import *
-from fpgaHART.utils.utils import get_input_node, get_output_node, get_branch_edges
+from fpgaHART.utils.utils import get_input_node, get_output_node, get_branch_edges, add_supportive_nodes_config
+import numpy as np
 import os
 import re
 
@@ -16,7 +17,7 @@ def convert_name(name):
         name = name.replace("squeeze", "squeeze_")
     return name
     
-def get_nodes_and_fifos(graph):
+def get_nodes_and_fifos(graph, config):
     nodes_with_fifos = {}
     for start_node in graph.nodes:
         start_node_name = start_node.lower().replace("_", "")
@@ -24,9 +25,13 @@ def get_nodes_and_fifos(graph):
         prev_nodes = list(graph.predecessors(start_node))
         in_fifo_names = []
         if prev_nodes:
+            sorted_inputs = []
             for pn in prev_nodes:
                 in_fifo_name = pn.lower().replace("_", "") + "_" + start_node_name
-                in_fifo_names.append(in_fifo_name.replace("globalaveragepool", "gap"))
+                sorted_inputs.append((in_fifo_name.replace("globalaveragepool", "gap"), config[pn]['shape_in']))
+            sorted_inputs = sorted(sorted_inputs, key=lambda x: np.prod(np.array(x[1])), reverse=True)
+            for si in sorted_inputs:
+                in_fifo_names.append(si[0])
         else:
             in_fifo_names.append("in")
 
@@ -72,8 +77,8 @@ def get_nodes_and_fifos(graph):
 
     return nodes_with_fifos, nodes_in_order, unique_fifos
 
-def generate_top_level_cpp(graph, branch_depth, partition_name, prefix):
-    nodes_with_fifos, nodes_in_order, unique_fifos = get_nodes_and_fifos(graph)
+def generate_top_level_cpp(graph, layers_config, branch_depth, partition_name, prefix):
+    nodes_with_fifos, nodes_in_order, unique_fifos = get_nodes_and_fifos(graph, layers_config)
     branch_edges = get_branch_edges(graph)
 
     partition_name_lower = partition_name.lower()
@@ -178,4 +183,4 @@ def generate_top_level_files(graph, branch_depth, layers_config, partition_name,
     output_node = get_output_node(graph)
 
     generate_top_level_hpp(header_files, input_node, layers_config[input_node], output_node, layers_config[output_node], partition_name, prefix)
-    generate_top_level_cpp(graph, branch_depth, partition_name, prefix)
+    generate_top_level_cpp(graph, add_supportive_nodes_config(graph, layers_config.copy()), branch_depth, partition_name, prefix)
