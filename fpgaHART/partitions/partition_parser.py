@@ -71,6 +71,7 @@ class PartitionParser():
 
     def create_graph(self, partition):
         graph = nx.DiGraph()
+        print("*"*40)
         for layer in partition:
             print("Adding {} layer to graph...".format(layer))
             if self.model_descriptor.layers[layer]['operation'] == 'GlobalAveragePool':
