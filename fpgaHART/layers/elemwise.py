@@ -143,7 +143,7 @@ class ElementWiseLayer(BaseLayer):
             'elemwise_bc': 0
         }
         if self.broadcasting:
-            depth = storage_latency # self.reduced_shape[1] / math.ceil(self.reduced_shape[1]*coarse_inout)
+            depth = 1
             # layer_fifos_arrays['elemwise_bc'] = math.ceil(1/coarse_inout) + 1
             final_channel = self.full_shape[1]
             final_depth = self.full_shape[2]

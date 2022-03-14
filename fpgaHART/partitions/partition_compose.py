@@ -205,13 +205,13 @@ class PartitionComposer(BaseLayer):
 
             if isinstance(hw, GAPLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate, gap_approx=gap_approx)
-                config[node] = [c[0], c[0]*hw.channels]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, Convolutional3DLayer):
                 dp_info = hw.get_design_point(f_fine=c[0], f_coarseIn=c[1], f_coarseOut=c[2], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[1], c[2], c[0]*hw.kd*hw.kh*hw.kw, c[1]*hw.channels, c[2]*hw.filters]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, ActivationLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[0]*hw.channels]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, ElementWiseLayer):
                 if hw.broadcasting:
                     prev_nodes = [pn for pn in graph.predecessors(node)]
@@ -221,16 +221,16 @@ class PartitionComposer(BaseLayer):
                     prev_layer_rate_1 = graph.nodes[node_fs]['prod_rate']
                     prev_layer_rate_2 = graph.nodes[node_rs]['prod_rate']
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in_1=curr_layer_rate, mem_bw_in_2=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[0]*hw.channels_1]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, BatchNorm3DLayer):
                 dp_info = hw.get_design_point(coarse_inout=c[0], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[0]*hw.channels]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, SqueezeExcitationLayer):
                 dp_info = hw.get_design_point(f_gap_coarsein=c[0], f_gap_coarseout=c[1], f_fine_1=c[2], f_coarseIn_1=c[3], f_coarseOut_1=c[4], f_relu_cinout=c[5], f_fine_2=c[6], f_coarseIn_2=c[7], f_coarseOut_2=c[8], f_sigm_cinout=c[9], f_mul_coarsein1=c[10], f_mul_coarsein2=c[11], f_mul_coarseout=c[12], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12]]
+                config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, FCLayer):
                 dp_info = hw.get_design_point(coarse_in=c[0], coarse_out=c[1], mem_bw_in=curr_layer_rate, mem_bw_out=curr_layer_rate)
-                config[node] = [c[0], c[1], c[0]*hw.dim_in, c[1]*hw.dim_out]
+                config[node] = utils.generate_layer_config(hw, c)
             else:
                 assert False, "Not supported layer"
 
@@ -280,9 +280,11 @@ class PartitionComposer(BaseLayer):
             total_adds += adds
             total_brams += bram_raw
             total_depth += depth
-
             curr_bram_util = (total_brams / self.bram) * 100
             curr_dsps_util = (total_muls/self.dsp)*100
+
+            if DEBUG:
+                print(f"{node} - Latency(C)={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}")
 
             if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 95.:
                 self.update_layer()
@@ -296,6 +298,7 @@ class PartitionComposer(BaseLayer):
         layer_fifos_arrays['branch_buffering'] = self.calculate_branch_buffering(graph)
 
         if DEBUG:
+            print(f"Branch buffering: {layer_fifos_arrays['branch_buffering']}")
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced = balance_memory_rates(gamma_matrix.copy())
         # gamma_matrix_balanced = balance_matrix(gamma_matrix_balanced)
@@ -423,7 +426,7 @@ class PartitionComposer(BaseLayer):
             extra_branch_fifos_brams = self.bram_stream_resource_model(layer_fifos_arrays['branch_buffering'], 16)
 
             merge_point = utils.get_merge_points(graph)[0]
-            parallel_fifos_branch_buffer = config[merge_point][1]
+            parallel_fifos_branch_buffer = config[merge_point]['coarse_factor']
             bram_raw_out += extra_branch_fifos_brams * parallel_fifos_branch_buffer
             # print("Branch Depth:", layer_fifos_arrays['branch_buffering'], "Extra buffers:", extra_branch_fifos_brams, "Total:", extra_branch_fifos_brams * parallel_fifos_branch_buffer)
 

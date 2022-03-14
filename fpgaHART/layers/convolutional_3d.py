@@ -117,22 +117,25 @@ class Convolutional3DLayer(BaseLayer):
             'acc_fifo': 0,
             'acc_array': 0,
         }
+
+        depth = 1
         if self.pointwise:
             # Sliding Window Module (SWM) Depth and Memory
-            depth = 1
+            depth += 1
 
             # Fork Module (FM) Depth and Memory
             
             # Convolution Module (CM) Depth and Memory
+            depth += math.ceil(1/f_fine) + 1
 
             # Accumulator Module (AM) Depth and Memory
 
             # Glue Module (GM) Depth and Memory
         else:
             # Sliding Window Module (SWM) Depth and Memory
-
-            # depth = self.depth_in * self.rows_in * max(self.kw - 1, 1) * math.ceil(self.channels * f_coarseIn) + math.ceil(self.channels * f_coarseIn) * self.kd * self.kh * max(self.kw - 1, 1)
-            # sw_memory = self.depth_in * self.rows_in * max(self.kw - 1, 1) * self.channels + self.channels * self.kd * self.kh * max(self.kw - 1, 1)
+            first_time_read_input = self.padding[1] * math.ceil(1/f_coarseIn) * (self.cols_in+2*self.padding[2]) * (self.depth_in+2*self.padding[0]) +\
+                                    self.padding[2] * math.ceil(1/f_coarseIn) * (self.depth_in+2*self.padding[0]) +\
+                                    self.padding[0] * math.ceil(1/f_coarseIn) + 1    
 
             depth_line_buffer_3d = math.ceil(1/f_coarseIn) * (self.depth_in+2*self.padding[0]) + 1
             layer_fifos_arrays['sw_lb_3d'] = depth_line_buffer_3d
@@ -143,15 +146,26 @@ class Convolutional3DLayer(BaseLayer):
             depth_window_buffer_3d = math.ceil(1/f_coarseIn) + 1
             layer_fifos_arrays['sw_wb_3d'] = depth_window_buffer_3d
 
-            # depth = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
+            # DEPTH V1
+            # depth += math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
             #         math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
             #         math.ceil(1/f_coarseIn) * (self.kd - 1)
             # depth += math.ceil(1/f_coarseIn) * ( (self.kh - 1)*self.kw*self.kd + (self.kw - 1)*self.kd + (self.kd - 1) )
-            depth = depth_line_buffer_3d + depth_line_buffer_2d + depth_window_buffer_3d
+
+            # DEPTH V2
+            # depth += self.kh*(self.kw-1) * depth_line_buffer_3d + (self.kh-1) * depth_line_buffer_2d + self.kh*self.kw*(self.kd-1) * depth_window_buffer_3d
+            
+            # DEPTH V3
+            depth_ = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
+                    math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
+                    math.ceil(1/f_coarseIn) * (self.kd - 1)
+            depth += depth_ - first_time_read_input - (self.cols_in - 1) * math.ceil(1/f_coarseIn) * (self.kd - 1) - math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1)
+
             # Fork Module (FM) Depth and Memory
 
             # Convolution Module (CM) Depth and Memory
             depth += math.ceil(1/f_fine) + 1
+            
             # Accumulator Module (AM) Depth and Memory
 
             # Glue Module (GM) Depth and Memory
@@ -161,13 +175,16 @@ class Convolutional3DLayer(BaseLayer):
             depth_accumulator = math.ceil(1/f_coarseOut) + 1
             layer_fifos_arrays['acc_fifo'] = depth_accumulator
             
-            # depth += math.ceil(1/f_coarseIn) * math.ceil(1/f_coarseOut)
-            depth += depth_accumulator
-
             # Accumulation Buffer
             array_accumulator = math.ceil(1/f_coarseOut)
             layer_fifos_arrays['acc_array'] = array_accumulator
 
+            # DEPTH V1
+            # depth += depth_accumulator
+            
+            # DEPTH V2
+            depth += math.ceil(1/f_coarseOut) + 1
+            
             max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
             max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
 
@@ -176,7 +193,7 @@ class Convolutional3DLayer(BaseLayer):
             max_parallel_adds = math.ceil((kernel_elems - 1) * f_fine) * math.ceil(self.channels * f_coarseIn)
 
 
-        gamma_matrix = self.get_rate_matrix(f_fine) * self.get_stream_matrix(f_coarseIn, f_coarseOut) * self.get_data_matrix(mem_bw_in, mem_bw_out)
+        gamma_matrix = self.get_rate_matrix(f_fine) * self.get_stream_matrix(f_coarseIn, f_coarseOut) * self.get_data_matrix(mem_bw_in, mem_bw_out, f_fine)
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(gamma_matrix.copy())
@@ -234,7 +251,7 @@ class Convolutional3DLayer(BaseLayer):
 
     def get_rate_matrix(self, f_fine):
         if self.depthwise:
-            rate_matrix = np.zeros( shape=(4,5) , dtype=float )
+            rate_matrix = np.zeros( shape=(5,6) , dtype=float )
             
             rate_matrix[0, 0] = 1
 
@@ -247,15 +264,19 @@ class Convolutional3DLayer(BaseLayer):
             rate_matrix[2, 2] = 1
 
             # Convolution 3D
-            rate_matrix[2, 3] = f_fine
+            rate_matrix[2, 3] = f_fine #f_fine #*self.groups / math.ceil(1/f_coarseOut)
             rate_matrix[3, 3] = f_fine
 
             # Accumulation
 
-            # Concatenation
+            # Glue
             rate_matrix[3, 4] = 1
+            rate_matrix[4, 4] = 1
+
+            # Concatenation
+            rate_matrix[4, 5] = 1
         elif self.pointwise:
-            rate_matrix = np.zeros( shape=(4,5) , dtype=float )
+            rate_matrix = np.zeros( shape=(5,6) , dtype=float )
             
             rate_matrix[0, 0] = 1
 
@@ -273,10 +294,14 @@ class Convolutional3DLayer(BaseLayer):
             rate_matrix[2, 3] = 1
             rate_matrix[3, 3] = 1
 
-            # Concatenation
+            # Glue
             rate_matrix[3, 4] = 1
+            rate_matrix[4, 4] = 1
+
+            # Concatenation
+            rate_matrix[4, 5] = 1
         else:
-            rate_matrix = np.zeros( shape=(5,6) , dtype=float )
+            rate_matrix = np.zeros( shape=(6,7) , dtype=float )
 
             rate_matrix[0, 0] = 1
         
@@ -296,8 +321,12 @@ class Convolutional3DLayer(BaseLayer):
             rate_matrix[3, 4] = 1
             rate_matrix[4, 4] = 1
 
-            # Concatenation
+            # Glue
             rate_matrix[4, 5] = 1
+            rate_matrix[5, 5] = 1
+
+            # Concatenation
+            rate_matrix[5, 6] = 1
 
         assert np.max(rate_matrix) <= 1 and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0, "Rate matrix issue"
         if DEBUG:
@@ -306,7 +335,7 @@ class Convolutional3DLayer(BaseLayer):
 
     def get_stream_matrix(self, f_coarseIn, f_coarseOut):
         if self.depthwise:
-            stream_matrix = np.zeros( shape=(4,5) , dtype=float )
+            stream_matrix = np.zeros( shape=(5,6) , dtype=float )
 
             stream_matrix[0, 0] = 1
         
@@ -324,10 +353,14 @@ class Convolutional3DLayer(BaseLayer):
 
             # Accumulation
 
+            # Glue
+            stream_matrix[3, 4] = math.ceil(self.filters * f_coarseOut)
+            stream_matrix[4, 4] = math.ceil(self.filters * f_coarseOut)
+
             # Concatenation
-            stream_matrix[3, 4] = 1
+            stream_matrix[4, 5] = 1
         elif self.pointwise:
-            stream_matrix = np.zeros( shape=(4,5) , dtype=float )
+            stream_matrix = np.zeros( shape=(5,6) , dtype=float )
             
             stream_matrix[0, 0] = 1
 
@@ -345,10 +378,14 @@ class Convolutional3DLayer(BaseLayer):
             stream_matrix[2, 3] = math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
             stream_matrix[3, 3] = math.ceil(self.filters * f_coarseOut)
 
+            # Glue
+            stream_matrix[3, 4] = math.ceil(self.filters * f_coarseOut)
+            stream_matrix[4, 4] = math.ceil(self.filters * f_coarseOut)
+
             # Concatenation
-            stream_matrix[3, 4] = 1
+            stream_matrix[4, 5] = 1
         else:
-            stream_matrix = np.zeros( shape=(5,6) , dtype=float )
+            stream_matrix = np.zeros( shape=(6,7) , dtype=float )
 
             stream_matrix[0, 0] = 1
             
@@ -368,21 +405,25 @@ class Convolutional3DLayer(BaseLayer):
             stream_matrix[3, 4] = math.ceil(self.channels * f_coarseIn) * math.ceil(self.filters * f_coarseOut)
             stream_matrix[4, 4] = math.ceil(self.filters * f_coarseOut)
 
+            # Glue
+            stream_matrix[4, 5] = math.ceil(self.filters * f_coarseOut)
+            stream_matrix[5, 5] = math.ceil(self.filters * f_coarseOut)
+
             # Concatenation
-            stream_matrix[4, 5] = 1
+            stream_matrix[5, 6] = 1
 
         if DEBUG:
             print("S:\n{}".format(stream_matrix))
         return stream_matrix
 
-    def get_data_matrix(self, mem_bw_in, mem_bw_out):
+    def get_data_matrix(self, mem_bw_in, mem_bw_out, f_fine):
         if self.depthwise:
-            data_matrix = np.zeros( shape=(4,5) , dtype=float )
+            data_matrix = np.zeros( shape=(5,6) , dtype=float )
 
             data_matrix[0, 0] = mem_bw_in
 
             # Sliding Window
-            data_matrix[0, 1] = -1
+            data_matrix[0, 1] = -math.ceil(1/f_fine)
             data_matrix[1, 1] = self.kd * self.kw * self.kh
 
             # Fork
@@ -395,10 +436,14 @@ class Convolutional3DLayer(BaseLayer):
 
             # Accumulation
 
+            # Glue
+            data_matrix[3, 4] = -1
+            data_matrix[4, 4] = 1
+
             # Concatenation
-            data_matrix[3, 4] = -mem_bw_out
+            data_matrix[4, 5] = -mem_bw_out
         elif self.pointwise:
-            data_matrix = np.zeros( shape=(4,5) , dtype=float )
+            data_matrix = np.zeros( shape=(5,6) , dtype=float )
             
             data_matrix[0, 0] = mem_bw_in
 
@@ -416,10 +461,14 @@ class Convolutional3DLayer(BaseLayer):
             data_matrix[2, 3] = -1
             data_matrix[3, 3] = 1
 
+            # Glue
+            data_matrix[3, 4] = -1
+            data_matrix[4, 4] = 1
+
             # Concatenation
-            data_matrix[3, 4] = -mem_bw_out
+            data_matrix[4, 5] = -mem_bw_out
         else:
-            data_matrix = np.zeros( shape=(5,6) , dtype=float )
+            data_matrix = np.zeros( shape=(6,7) , dtype=float )
             
             data_matrix[0, 0] = mem_bw_in
         
@@ -439,8 +488,12 @@ class Convolutional3DLayer(BaseLayer):
             data_matrix[3, 4] = -1
             data_matrix[4, 4] = 1
 
+            # Glue
+            data_matrix[4, 5] = -1
+            data_matrix[5, 5] = 1
+
             # Concatenation
-            data_matrix[4, 5] = -mem_bw_out
+            data_matrix[5, 6] = -mem_bw_out
 
         if DEBUG:
             print("D:\n{}".format(data_matrix))
@@ -453,7 +506,7 @@ class Convolutional3DLayer(BaseLayer):
         kernel_volume = self.kd * self.kw * self.kh
 
         if self.depthwise:
-            workload_matrix = np.zeros( shape=(4,5) , dtype=float )
+            workload_matrix = np.zeros( shape=(5,6) , dtype=float )
 
             workload_matrix[0, 0] = in_volume * self.channels
             
@@ -471,10 +524,14 @@ class Convolutional3DLayer(BaseLayer):
 
             # Accumulation
 
-            # Concatenation
+            # Glue
             workload_matrix[3, 4] = out_volume * self.filters
+            workload_matrix[4, 4] = out_volume * self.filters
+
+            # Concatenation
+            workload_matrix[4, 5] = out_volume * self.filters
         elif self.pointwise:
-            workload_matrix = np.zeros( shape=(4,5) , dtype=float )
+            workload_matrix = np.zeros( shape=(5,6) , dtype=float )
             
             workload_matrix[0, 0] = in_volume * self.channels
 
@@ -492,10 +549,14 @@ class Convolutional3DLayer(BaseLayer):
             workload_matrix[2, 3] = out_volume * self.channels * self.filters
             workload_matrix[3, 3] = out_volume * self.filters
 
-            # Concatenation
+            # Glue
             workload_matrix[3, 4] = out_volume * self.filters
+            workload_matrix[4, 4] = out_volume * self.filters
+
+            # Concatenation
+            workload_matrix[4, 5] = out_volume * self.filters
         else:
-            workload_matrix = np.zeros( shape=(5,6) , dtype=float )
+            workload_matrix = np.zeros( shape=(6,7) , dtype=float )
             
             workload_matrix[0, 0] = in_volume * self.channels
             
@@ -515,8 +576,12 @@ class Convolutional3DLayer(BaseLayer):
             workload_matrix[3, 4] = out_volume * self.channels * self.filters
             workload_matrix[4, 4] = out_volume * self.filters
 
-            # Concatenation
+            # Glue
             workload_matrix[4, 5] = out_volume * self.filters
+            workload_matrix[5, 5] = out_volume * self.filters
+
+            # Concatenation
+            workload_matrix[5, 6] = out_volume * self.filters
 
         if DEBUG:
             print("WL:\n{}".format(workload_matrix))
