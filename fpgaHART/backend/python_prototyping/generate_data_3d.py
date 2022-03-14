@@ -517,16 +517,6 @@ def part_3d(file_format, config_file, prefix):
 									1, 1, groups=groups)
 				with open(os.path.join(self.file_path, prefix, self.part) + '/weights_{}_cin{}_cout{}.csv'.format(node, coarse_in, coarse_out), 'w') as f:
 					f.write(array_init(weights_transformed[0]))
-				f.write(array_init(weights_transformed[0]))	
-					f.write(array_init(weights_transformed[0]))
-				f.write(array_init(weights_transformed[0]))	
-					f.write(array_init(weights_transformed[0]))
-				f.write(array_init(weights_transformed[0]))	
-					f.write(array_init(weights_transformed[0]))
-				f.write(array_init(weights_transformed[0]))	
-					f.write(array_init(weights_transformed[0]))
-				f.write(array_init(weights_transformed[0]))	
-					f.write(array_init(weights_transformed[0]))
 			else:
 				print("weights_{}_cin{}_cout{}:".format(node, coarse_in, coarse_out), weights.detach().numpy().shape)
 				weights_transformed = transform_weights(
