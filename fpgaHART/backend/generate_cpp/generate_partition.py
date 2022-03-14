@@ -10,21 +10,23 @@ from layers.generate_split import generate_split_files
 from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_gap import generate_gap_files
 from generate_top_level import generate_top_level_files
+from generate_tb import generate_tb_files
 from fpgaHART.partitions.partition_parser import PartitionParser
 from fpgaHART.utils import utils
 
 def parse_args():
     parser = argparse.ArgumentParser(description='fpgaHART toolflow parser')
-    parser.add_argument('model_name', help='name of the HAR model')
-    parser.add_argument('configuration_file', help='name of the model\'s configuration file')
+    parser.add_argument('--model_name', help='name of the HAR model', required=True)
+    parser.add_argument('--prefix', help='the parent folder in which to store the model\'s partitions', type=str, required=True)
+    parser.add_argument('--config_file', help='name of the model\'s configuration file', required=True)
 
     args = parser.parse_args()
     return args
 
-def get_partitions_configurations(configuration_file):
+def get_partitions_configurations(config_file):
     result = {}
     
-    configuration = pd.read_csv(configuration_file)
+    configuration = pd.read_csv(config_file)
     partitions = configuration['Part'].to_list()
     for p in partitions:
         partition_layers_config = configuration[configuration['Part'] == p]['config'].to_dict()
@@ -36,22 +38,22 @@ def get_partitions_configurations(configuration_file):
 
     return result
 
-def generate_partition_code(layers_config, branch_depth, partition_name, parser):
+def generate_partition_code(layers_config, branch_depth, partition_name, parser, prefix):
     # Generate layers files
     for l in [*layers_config]:
         if "Swish" in l:
-            generate_swish_files(l, layers_config[l], partition_name)
+            generate_swish_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "Relu" in l:
-            generate_relu_files(l, layers_config[l], partition_name)
+            generate_relu_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "Sigmoid" in l:
-            generate_sigmoid_files(l, layers_config[l], partition_name)
+            generate_sigmoid_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "Add" in l or "Mul" in l:
-            generate_elemwise_files(l, layers_config[l], partition_name)
+            generate_elemwise_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "Conv" in l:
-            generate_conv_files(l, layers_config[l], partition_name)
+            generate_conv_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "GlobalAveragePool" in l:
             shorted_name = "Gap_" + l.split('_')[1]
-            generate_gap_files(shorted_name, layers_config[l], partition_name)
+            generate_gap_files(shorted_name, layers_config[l], f"{prefix}/{partition_name}")
         else:
             raise Exception(f"Layer {l} not supported")
 
@@ -61,17 +63,18 @@ def generate_partition_code(layers_config, branch_depth, partition_name, parser)
     # Generate extra supporting files (split, squeeze)
     split_points = utils.get_split_points(graph)
     for sf in split_points:
-        generate_split_files(sf, layers_config[sf], partition_name)
+        generate_split_files(sf, layers_config[sf], f"{prefix}/{partition_name}")
 
     squeeze_layers = identify_streams_mismatches(layers_config, graph.edges)
     for sl in squeeze_layers:
-        generate_squeeze_files(sl[0], layers_config[sl[0]], sl[1], layers_config[sl[1]], partition_name)
+        generate_squeeze_files(sl[0], layers_config[sl[0]], sl[1], layers_config[sl[1]], f"{prefix}/{partition_name}")
 
     # Generate top level partition file
     graph = utils.update_graph(graph, split_points=split_points, squeeze_layers=squeeze_layers)
-    generate_top_level_files(graph, branch_depth, layers_config, partition_name)
+    generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
 
     # Generate testbench file
+    generate_tb_files(partition_name, prefix)
 
 def identify_streams_mismatches(layers_config, connections):
     squeeze_layers = []
@@ -96,8 +99,7 @@ if __name__ == '__main__':
     
     parser = PartitionParser(args.model_name, False, False, False, False)
 
-    partition_configuration = get_partitions_configurations(args.configuration_file)
+    partition_configuration = get_partitions_configurations(args.config_file)
     
     for p in [*partition_configuration]:
-        generate_partition_code(partition_configuration[p]['layers'], partition_configuration[p]['branch_depth'], p, parser)
-        exit()
+        generate_partition_code(partition_configuration[p]['layers'], partition_configuration[p]['branch_depth'], p, parser, args.prefix)

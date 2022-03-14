@@ -179,7 +179,7 @@ def transform_weights(weights_raw,coarse_in,coarse_out,wr_factor=1,coarse_group=
 	# return transformed weights
 	return weights
 
-def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="data"):
+def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/gap_3d'):
 		os.makedirs(prefix + '/gap_3d')
 
@@ -206,7 +206,7 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="data"):
 	else:
 		raise Exception("Format not supported")
 
-def elemwise_3d(input_shape, input_shape_2, coarse_in, elemwise_op_type, file_format, prefix="data"):
+def elemwise_3d(input_shape, input_shape_2, coarse_in, elemwise_op_type, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/elemwise_3d'):
 		os.makedirs(prefix + '/elemwise_3d')
 
@@ -243,7 +243,7 @@ def elemwise_3d(input_shape, input_shape_2, coarse_in, elemwise_op_type, file_fo
 	else:
 		raise Exception("Format not supported")
 
-def shish_3d(input_shape, coarse_in, file_format, prefix="data"):
+def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/shish_3d'):
 		os.makedirs(prefix + '/shish_3d')
 
@@ -273,7 +273,7 @@ def shish_3d(input_shape, coarse_in, file_format, prefix="data"):
 	else:
 		raise Exception("Format not supported")
 
-def shish_3d(input_shape, coarse_in, file_format, prefix="data"):
+def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/shish_3d'):
 		os.makedirs(prefix + '/shish_3d')
 
@@ -303,7 +303,7 @@ def shish_3d(input_shape, coarse_in, file_format, prefix="data"):
 	else:
 		raise Exception("Format not supported")
 
-def sigmoid_3d(input_shape, coarse_in, file_format, prefix="data"):
+def sigmoid_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/sigmoid_3d'):
 		os.makedirs(prefix + '/sigmoid_3d')
 
@@ -332,7 +332,7 @@ def sigmoid_3d(input_shape, coarse_in, file_format, prefix="data"):
 	else:
 		raise Exception("Format not supported")
 		
-def relu_3d(input_shape, coarse_in, file_format, prefix="data"):
+def relu_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/relu_3d'):
 		os.makedirs(prefix + '/relu_3d')
 
@@ -576,7 +576,8 @@ def part_3d(file_format, config_file, prefix):
 										  "coarse_in": layers[p]['coarse_in_factor'],
 										  "coarse_out": layers[p]['coarse_out_factor']}
 
-		file_path = "/".join(__file__.split("/")[:-1])
+		# file_path = "/".join(__file__.split("/")[:-1])
+		file_path = os.getcwd()
 		if not os.path.exists(os.path.join(file_path, prefix, part)):
 			os.makedirs(os.path.join(file_path, prefix, part))
 		
@@ -610,7 +611,7 @@ def part_3d(file_format, config_file, prefix):
 			raise Exception("Format not supported")
 
 
-def conv_3d(input_shape, kernel_shape, filters, padding, stride, groups, depthwise, coarse_in, coarse_out, file_format, prefix="data"):
+def conv_3d(input_shape, kernel_shape, filters, padding, stride, groups, depthwise, coarse_in, coarse_out, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/conv_3d'):
 		os.makedirs(prefix + '/conv_3d')
 
@@ -851,8 +852,8 @@ def conv_3d(input_shape, kernel_shape, filters, padding, stride, groups, depthwi
 
 def parse_args():
   parser = argparse.ArgumentParser(description='3D sliding window prototying script')
-  parser.add_argument('op_type', type=str)
-  parser.add_argument('prefix', type=str)
+  parser.add_argument('--op_type', type=str, required=True)
+  parser.add_argument('--prefix', type=str, required=True)
   parser.add_argument('--input_shape', nargs='+', default=[1, 24, 16, 64, 64], type=int)
   parser.add_argument('--input_shape_2', nargs='+', default=[1, 24, 16, 64, 64], type=int)
   parser.add_argument('--kernel_shape', nargs='+', default=[3, 3, 3], type=int)
@@ -890,6 +891,6 @@ if __name__ == '__main__':
 	elif op_type == '3d_gap':
 		gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
 	elif op_type == '3d_part':
-		part_3d(args.format, args.config_file, "data/"+args.prefix)
+		part_3d(args.format, args.config_file, "generated_data/"+args.prefix)
 	else:
 		print("Invalid op_type: %s" % op_type)

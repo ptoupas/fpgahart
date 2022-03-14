@@ -222,7 +222,7 @@ def generate_conv_hpp(name, config, partition_name):
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    weights_file_path = f"/data/HLS_projects/fpgaHART_hls/x3d_m_layer_1/data/weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv"
+    weights_file_path = f"/data/HLS_projects/fpgaHART_hls/{partition_name}/data/weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv"
 
     hpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.hpp"))
     

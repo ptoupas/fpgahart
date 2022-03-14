@@ -72,14 +72,14 @@ def get_nodes_and_fifos(graph):
 
     return nodes_with_fifos, nodes_in_order, unique_fifos
 
-def generate_top_level_cpp(graph, branch_depth, partition_name):
+def generate_top_level_cpp(graph, branch_depth, partition_name, prefix):
     nodes_with_fifos, nodes_in_order, unique_fifos = get_nodes_and_fifos(graph)
     branch_edges = get_branch_edges(graph)
 
     partition_name_lower = partition_name.lower()
     partition_name_upper = partition_name.upper()
 
-    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{partition_name_lower}.cpp"))
+    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}", f"{partition_name_lower}.cpp"))
 
     cpp(f"#include \"{partition_name_lower}.hpp\"", newlines=2)
 
@@ -116,7 +116,7 @@ def generate_top_level_cpp(graph, branch_depth, partition_name):
 
     cpp.close()
 
-def generate_top_level_hpp(include_files, in_name, in_config, out_name, out_config, partition_name):
+def generate_top_level_hpp(include_files, in_name, in_config, out_name, out_config, partition_name, prefix):
     batch_size = in_config['shape_in'][0]
 
     channels_in = in_config['shape_in'][1]
@@ -137,7 +137,7 @@ def generate_top_level_hpp(include_files, in_name, in_config, out_name, out_conf
     layer_in_name_lower = in_name.lower()
     layer_out_name_lower = out_name.lower()
 
-    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{partition_name_lower}.hpp"))
+    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}", f"{partition_name_lower}.hpp"))
     
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
@@ -169,13 +169,13 @@ def generate_top_level_hpp(include_files, in_name, in_config, out_name, out_conf
     
     hpp.close()
 
-def generate_top_level_files(graph, branch_depth, layers_config, partition_name):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
+def generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}")):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}"))
 
-    header_files = [h_file.replace("globalaveragepool", "gap") for h_file in os.listdir(os.path.join(os.getcwd(), "generated_files", partition_name)) if h_file.endswith(".hpp")]
+    header_files = [h_file.replace("globalaveragepool", "gap") for h_file in os.listdir(os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}")) if h_file.endswith(".hpp")]
     input_node = get_input_node(graph)
     output_node = get_output_node(graph)
 
-    generate_top_level_hpp(header_files, input_node, layers_config[input_node], output_node, layers_config[output_node], partition_name)
-    generate_top_level_cpp(graph, branch_depth, partition_name)
+    generate_top_level_hpp(header_files, input_node, layers_config[input_node], output_node, layers_config[output_node], partition_name, prefix)
+    generate_top_level_cpp(graph, branch_depth, partition_name, prefix)
