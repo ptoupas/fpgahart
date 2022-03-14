@@ -7,12 +7,35 @@ import random
 import argparse
 import os
 import sys
+import json
+import pandas as pd
 
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
 
 np.set_printoptions(suppress=True, precision=5, threshold=sys.maxsize)
+
+def get_x3d_m_layer_type(layer_order):
+
+	LAYER_TYPE_1 = ['Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv', 'Conv', 'Add']
+	LAYER_TYPE_2 = ['Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv', 'Add']
+	LAYER_TYPE_3 = ['Relu', 'Conv', 'Relu', 'Conv', 'Swish', 'Conv', 'Add']
+	LAYER_TYPE_4 = ['Conv', 'Conv', 'Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv', 'Conv', 'Add']
+	LAYER_TYPE_5 = ['Relu', 'Conv', 'Relu', 'GlobalAveragePool', 'Gemm', 'Relu', 'Gemm']
+
+	if layer_order == LAYER_TYPE_1:
+		return "type_1"
+	elif layer_order == LAYER_TYPE_2:
+		return "type_2"
+	elif layer_order == LAYER_TYPE_3:
+		return "type_3"
+	elif layer_order == LAYER_TYPE_4:
+		return "type_first"
+	elif layer_order == LAYER_TYPE_5:
+		return "type_last"
+	else:
+		raise Exception("Unknown layer type")
 
 def create_queue(data_in):
   batch, height, width, depth, channel = data_in.shape
@@ -161,7 +184,6 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="data"):
 		os.makedirs(prefix + '/gap_3d')
 
 	x = torch.randn(input_shape)
-	print(x.numpy())
 	print(x.numpy().shape)
 	write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
 	if file_format == "bin":
@@ -174,7 +196,6 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="data"):
 	gap = torch.nn.AdaptiveAvgPool3d(1)
 	out = gap(x)
 
-	print(out.detach().numpy())
 	print(out.detach().numpy().shape)
 
 	write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
@@ -340,187 +361,263 @@ def relu_3d(input_shape, coarse_in, file_format, prefix="data"):
 	else:
 		raise Exception("Format not supported")
 
-def part_3d(file_format, prefix):
+def get_partitions_configurations(configuration_file):
+    result = {}
+    
+    configuration = pd.read_csv(configuration_file)
+    partitions = configuration['Part'].to_list()
+    for p in partitions:
+        partition_layers_config = configuration[configuration['Part'] == p]['config'].to_dict()
+        partition_layers_config = partition_layers_config[[*partition_layers_config][0]]
+        partition_layers_config = partition_layers_config.replace("\'", "\"")
+        partition_layers_config = json.loads(partition_layers_config)
+        partition_branch_depth = configuration[configuration['Part'] == p]['Branch Depth'].values[0]
+        result[p] = partition_layers_config
+
+    return result
+
+def part_3d(file_format, config_file, prefix):
 	class X3d_m_layer(nn.Module):
-		def __init__(self):
+		def __init__(self, layer_type, conv_config, file_path, part):
 			super().__init__()
 
-			channels_1 = 8
-			filters_1 = 12
-			kernel_shape_1 = (1, 1, 1)
-			padding_1 = (0, 0, 0)
-			stride_1 = (1, 1, 1)
-			self.groups_1 = 1
-			self.coarse_in_1 = 4
-			self.coarse_out_1 = 6
+			self.layer_type = layer_type
+			self.conv_config = conv_config
+			self.conv_layers = [*conv_config]
+			self.file_path = file_path
+			self.part = part
 
-			channels_2 = 12
-			filters_2 = 12
-			kernel_shape_2 = (3, 3, 3)
-			padding_2 = (1, 1, 1)
-			stride_2 = (1, 1, 1)
-			self.groups_2 = 12
-			self.coarse_in_2 = 6
-			self.coarse_out_2 = 1
+			if self.layer_type == "type_1":
+				self.relu1 = nn.ReLU()
+				self.conv1 = self.create_conv_layer(0)
+				self.weights_1 = self.conv1.weight
+				self.relu2 = nn.ReLU()
+				self.conv2 = self.create_conv_layer(1)
+				self.weights_2 = self.conv2.weight
+				self.gap1  = nn.AdaptiveAvgPool3d(1)
+				self.conv3 = self.create_conv_layer(2)
+				self.weights_3 = self.conv3.weight
+				self.relu3 = nn.ReLU()
+				self.conv4 = self.create_conv_layer(3)
+				self.weights_4 = self.conv4.weight
+				self.sigmoid1 = nn.Sigmoid()
+				self.conv5 = self.create_conv_layer(4)
+				self.weights_5 = self.conv5.weight
+				self.conv6 = self.create_conv_layer(5)
+				self.weights_6 = self.conv6.weight
+			elif self.layer_type == "type_2":
+				self.relu1 = nn.ReLU()
+				self.conv1 = self.create_conv_layer(0)
+				self.weights_1 = self.conv1.weight
+				self.relu2 = nn.ReLU()
+				self.conv2 = self.create_conv_layer(1)
+				self.weights_2 = self.conv2.weight
+				self.gap1  = nn.AdaptiveAvgPool3d(1)
+				self.conv3 = self.create_conv_layer(2)
+				self.weights_3 = self.conv3.weight
+				self.relu3 = nn.ReLU()
+				self.conv4 = self.create_conv_layer(3)
+				self.weights_4 = self.conv4.weight
+				self.sigmoid1 = nn.Sigmoid()
+				self.conv5 = self.create_conv_layer(4)
+				self.weights_5 = self.conv5.weight
+			elif self.layer_type == "type_3":
+				self.relu1 = nn.ReLU()
+				self.conv1 = self.create_conv_layer(0)
+				self.weights_1 = self.conv1.weight
+				self.relu2 = nn.ReLU()
+				self.conv2 = self.create_conv_layer(1)
+				self.weights_2 = self.conv2.weight
+				self.conv3 = self.create_conv_layer(2)
+				self.weights_3 = self.conv3.weight
+			elif self.layer_type == "type_first":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			elif self.layer_type == "type_last":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			else:
+				raise Exception(f"Layer type {self.layer_type} is not supported")
 
-			channels_3 = 12
-			filters_3 = 8
-			kernel_shape_3 = (1, 1, 1)
-			padding_3 = (0, 0, 0)
-			stride_3 = (1, 1, 1)
-			self.groups_3 = 1
-			self.coarse_in_3 = 3
-			self.coarse_out_3 = 4
-			
-			channels_4 = 8
-			filters_4 = 12
-			kernel_shape_4 = (1, 1, 1)
-			padding_4 = (0, 0, 0)
-			stride_4 = (1, 1, 1)
-			self.groups_4 = 1
-			self.coarse_in_4 = 4
-			self.coarse_out_4 = 3
-
-			channels_5 = 12
-			filters_5 = 8
-			kernel_shape_5 = (1, 1, 1)
-			padding_5 = (0, 0, 0)
-			stride_5 = (1, 1, 1)
-			self.groups_5 = 1
-			self.coarse_in_5 = 3
-			self.coarse_out_5 = 4
-
-			self.relu1 = nn.ReLU()
-			self.conv1 = nn.Conv3d(channels_1, filters_1, kernel_shape_1, stride=stride_1, padding=padding_1, groups=self.groups_1, bias=False)
-			self.weights_1 = self.conv1.weight
-			self.relu2 = nn.ReLU()
-			self.conv2 = nn.Conv3d(channels_2, filters_2, kernel_shape_2, stride=stride_2, padding=padding_2, groups=self.groups_2, bias=False)
-			self.weights_2 = self.conv2.weight
-
-			self.gap1  = nn.AdaptiveAvgPool3d(1)
-			self.conv3 = nn.Conv3d(channels_3, filters_3, kernel_shape_3, stride=stride_3, padding=padding_3, groups=self.groups_3, bias=False)
-			self.weights_3 = self.conv3.weight
-			self.relu3 = nn.ReLU()
-			self.conv4 = nn.Conv3d(channels_4, filters_4, kernel_shape_4, stride=stride_4, padding=padding_4, groups=self.groups_4, bias=False)
-			self.weights_4 = self.conv4.weight
-			self.sigmoid1 = nn.Sigmoid()
-
-			self.sigmoid2 = nn.Sigmoid()
-			self.conv5 = nn.Conv3d(channels_5, filters_5, kernel_shape_5, stride=stride_5, padding=padding_5, groups=self.groups_5, bias=False)
-			self.weights_5 = self.conv5.weight
+		def create_conv_layer(self, conv_idx):
+			return nn.Conv3d(in_channels=self.conv_config[self.conv_layers[conv_idx]]['channels'],
+							 out_channels=self.conv_config[self.conv_layers[conv_idx]]['filters'],
+							 kernel_size=self.conv_config[self.conv_layers[conv_idx]]['kernel_shape'],
+							 stride=self.conv_config[self.conv_layers[conv_idx]]['stride'],
+							 padding=self.conv_config[self.conv_layers[conv_idx]]['padding'],
+							 groups=self.conv_config[self.conv_layers[conv_idx]]['groups'],
+							 bias=False)
 
 		def swish(self, x):
 			return x * torch.sigmoid(x)
 
 		def forward(self, x):
-			print("input shape: ", x.shape)
-			x = self.relu1(x)
-			print("relu1 shape: ", x.shape)
-			relu1_out = x
-			x = self.conv1(x)
-			print("conv1 shape: ", x.shape)
-			x = self.relu2(x)
-			print("relu2 shape: ", x.shape)
-			x = self.conv2(x)
-			print("conv2 shape: ", x.shape)
-			conv2_out = x
-			x = self.gap1(x)
-			print("gap1 shape: ", x.shape)
-			x = self.conv3(x)
-			print("conv3 shape: ", x.shape)
-			x = self.relu3(x)
-			print("relu3 shape: ", x.shape)
-			x = self.conv4(x)
-			print("conv4 shape: ", x.shape)
-			x = self.sigmoid1(x)
-			print("sigmoid1 shape: ", x.shape)
-			x = x * conv2_out
-			print("multiply shape: ", x.shape)
-			x = self.swish(x)
-			print("swish shape: ", x.shape)
-			x = self.conv5(x)
-			print("conv5 shape: ", x.shape)
-			x = x + relu1_out
-			print("add shape: ", x.shape)
-			return x
-		
+			if self.layer_type == "type_1":
+				x = self.relu1(x)
+				relu1_out = x
+				x = self.conv1(x)
+				x = self.relu2(x)
+				x = self.conv2(x)
+				conv2_out = x
+				x = self.gap1(x)
+				x = self.conv3(x)
+				x = self.relu3(x)
+				x = self.conv4(x)
+				x = self.sigmoid1(x)
+				x = x * conv2_out
+				x = self.swish(x)
+				x = self.conv5(x)
+				conv6_out = self.conv6(relu1_out)
+				x = x + conv6_out
+				return x
+			elif self.layer_type == "type_2":
+				x = self.relu1(x)
+				relu1_out = x
+				x = self.conv1(x)
+				x = self.relu2(x)
+				x = self.conv2(x)
+				conv2_out = x
+				x = self.gap1(x)
+				x = self.conv3(x)
+				x = self.relu3(x)
+				x = self.conv4(x)
+				x = self.sigmoid1(x)
+				x = x * conv2_out
+				x = self.swish(x)
+				x = self.conv5(x)
+				x = x + relu1_out
+				return x
+			elif self.layer_type == "type_3":
+				x = self.relu1(x)
+				relu1_out = x
+				x = self.conv1(x)
+				x = self.relu2(x)
+				x = self.conv2(x)
+				x = self.swish(x)
+				x = self.conv3(x)
+				x = x + relu1_out
+				return x
+			elif self.layer_type == "type_first":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			elif self.layer_type == "type_last":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			else:
+				raise Exception(f"Layer type {self.layer_type} is not supported")
+
+		def transform_store_weights(self, weights, idx):
+			node = self.conv_layers[idx]
+			depthwise = self.conv_config[node]['depthwise']
+			coarse_in = self.conv_config[node]['coarse_in']
+			coarse_out = self.conv_config[node]['coarse_out']
+			groups = self.conv_config[node]['groups']
+			if not depthwise:
+				print("weights_{}_cin{}_cout{}:".format(node, coarse_in, coarse_out), weights.detach().numpy().shape)
+				weights_transformed = transform_weights(
+									weights.detach().numpy(),
+									coarse_in,
+									coarse_out,
+									1, 1, groups=groups)
+				with open(os.path.join(self.file_path, prefix, self.part) + '/weights_{}_cin{}_cout{}.csv'.format(node, coarse_in, coarse_out), 'w') as f:
+					f.write(array_init(weights_transformed[0]))
+				f.write(array_init(weights_transformed[0]))	
+					f.write(array_init(weights_transformed[0]))
+				f.write(array_init(weights_transformed[0]))	
+					f.write(array_init(weights_transformed[0]))
+				f.write(array_init(weights_transformed[0]))	
+					f.write(array_init(weights_transformed[0]))
+				f.write(array_init(weights_transformed[0]))	
+					f.write(array_init(weights_transformed[0]))
+				f.write(array_init(weights_transformed[0]))	
+					f.write(array_init(weights_transformed[0]))
+			else:
+				print("weights_{}_cin{}_cout{}:".format(node, coarse_in, coarse_out), weights.detach().numpy().shape)
+				weights_transformed = transform_weights(
+									weights.detach().numpy(),
+									1,
+									coarse_out,
+									1, coarse_group=coarse_in, groups=groups)
+				with open(os.path.join(self.file_path, prefix, self.part) + '/weights_{}_cin{}_cout{}.csv'.format(node, coarse_in, coarse_out), 'w') as f:
+					f.write(array_init(weights_transformed[0]))
+
 		def save_weights(self):
-			print("weights_1_cin{}_cout{}:".format(self.coarse_in_1, self.coarse_out_1), self.weights_1.detach().numpy().shape)
-			weights_transformed = transform_weights(
-								self.weights_1.detach().numpy(),
-								self.coarse_in_1,
-								self.coarse_out_1,
-								1, 1, groups=self.groups_1)
-			with open(prefix + '/weights_1_cin{}_cout{}.csv'.format(self.coarse_in_1, self.coarse_out_1), 'w') as f:
-				f.write(array_init(weights_transformed[0]))	
+			if self.layer_type == "type_1":
+				self.transform_store_weights(self.weights_1, 0)
+				self.transform_store_weights(self.weights_2, 1)
+				self.transform_store_weights(self.weights_3, 2)
+				self.transform_store_weights(self.weights_4, 3)
+				self.transform_store_weights(self.weights_5, 4)
+				self.transform_store_weights(self.weights_6, 5)
+			elif self.layer_type == "type_2":
+				self.transform_store_weights(self.weights_1, 0)
+				self.transform_store_weights(self.weights_2, 1)
+				self.transform_store_weights(self.weights_3, 2)
+				self.transform_store_weights(self.weights_4, 3)
+				self.transform_store_weights(self.weights_5, 4)
+			elif self.layer_type == "type_3":
+				self.transform_store_weights(self.weights_1, 0)
+				self.transform_store_weights(self.weights_2, 1)
+				self.transform_store_weights(self.weights_3, 2)
+			elif self.layer_type == "type_first":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			elif self.layer_type == "type_last":
+				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
+			else:
+				raise Exception(f"Layer type {self.layer_type} is not supported")
 
-			print("weights_2_cin{}_cout{}:".format(self.coarse_in_2, self.coarse_out_2), self.weights_2.detach().numpy().shape)
-			weights_transformed = transform_weights(
-								self.weights_2.detach().numpy(),
-								1,
-								self.coarse_out_2,
-								1, coarse_group=self.coarse_in_2, groups=self.groups_2)
-			with open(prefix + '/weights_2_cin{}_cout{}.csv'.format(self.coarse_in_2, self.coarse_out_2), 'w') as f:
-				f.write(array_init(weights_transformed[0]))
 
-			print("weights_3_cin{}_cout{}:".format(self.coarse_in_3, self.coarse_out_3), self.weights_3.detach().numpy().shape)
-			weights_transformed = transform_weights(
-								self.weights_3.detach().numpy(),
-								self.coarse_in_3,
-								self.coarse_out_3,
-								1, 1, groups=self.groups_3)
-			with open(prefix + '/weights_3_cin{}_cout{}.csv'.format(self.coarse_in_3, self.coarse_out_3), 'w') as f:
-				f.write(array_init(weights_transformed[0]))	
+	partitions_config = get_partitions_configurations(config_file)
 
-			print("weights_4_cin{}_cout{}:".format(self.coarse_in_4, self.coarse_out_4), self.weights_4.detach().numpy().shape)
-			weights_transformed = transform_weights(
-								self.weights_4.detach().numpy(),
-								self.coarse_in_4,
-								self.coarse_out_4,
-								1, 1, groups=self.groups_4)
-			with open(prefix + '/weights_4_cin{}_cout{}.csv'.format(self.coarse_in_4, self.coarse_out_4), 'w') as f:
-				f.write(array_init(weights_transformed[0]))	
+	for part, layers in partitions_config.items():
+		layer_nodes = [*layers]
+		
+		layer_order = [l.split('_')[0] for l in layer_nodes]
+		layer_type = get_x3d_m_layer_type(layer_order)
+		
+		input_shape = layers[layer_nodes[0]]['shape_in']
 
-			print("weights_5_cin{}_cout{}:".format(self.coarse_in_5, self.coarse_out_5), self.weights_5.detach().numpy().shape)
-			weights_transformed = transform_weights(
-								self.weights_5.detach().numpy(),
-								self.coarse_in_5,
-								self.coarse_out_5,
-								1, 1, groups=self.groups_5)
-			with open(prefix + '/weights_5_cin{}_cout{}.csv'.format(self.coarse_in_5, self.coarse_out_5), 'w') as f:
-				f.write(array_init(weights_transformed[0]))	
+		conv_config = {}
+		for p in layers:
+			if "Conv" in p:
+				conv_config[p.lower()] = {"channels": layers[p]['shape_in'][1],
+										  "filters": layers[p]['shape_out'][1],
+										  "kernel_shape": layers[p]['shape_kernel'],
+										  "padding": layers[p]['padding'],
+										  "stride": layers[p]['stride'],
+										  "groups": layers[p]['groups'],
+										  "depthwise": layers[p]['depthwise'],
+										  "coarse_in": layers[p]['coarse_in_factor'],
+										  "coarse_out": layers[p]['coarse_out_factor']}
 
-	if not os.path.exists(prefix):
-		os.makedirs(prefix)
-	
-	input_shape = (1, 8, 6, 12, 12)
-	
-	x = torch.randn(input_shape)
-	print("*"*30)
-	print("input:", x.numpy().shape)
-	print("*"*30)
-	write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
-	if file_format == "bin":
-		write_input_binary.tofile(prefix + "/input.dat")
-	elif file_format == "txt":
-		np.savetxt(prefix + "/input.dat", write_input_binary.flatten(), fmt='%.8f')
-	else:
-		raise Exception("Format not supported")
+		file_path = "/".join(__file__.split("/")[:-1])
+		if not os.path.exists(os.path.join(file_path, prefix, part)):
+			os.makedirs(os.path.join(file_path, prefix, part))
+		
+		x = torch.randn(input_shape)
 
-	partition_model = X3d_m_layer()
-	partition_model.save_weights()
+		print("*"*30)
+		print("input:", x.numpy().shape)
+		print("*"*30)
+		write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
+		if file_format == "bin":
+			write_input_binary.tofile(os.path.join(file_path, prefix, part) + "/input.dat")
+		elif file_format == "txt":
+			np.savetxt(os.path.join(file_path, prefix, part) + "/input.dat", write_input_binary.flatten(), fmt='%.8f')
+		else:
+			raise Exception("Format not supported")
 
-	out = partition_model(x)
+		partition_model = X3d_m_layer(layer_type, conv_config, file_path, part)
+		partition_model.save_weights()
 
-	print("output:", out.detach().numpy().shape)
-	print("*"*30)
-	write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
-	if file_format == "bin":
-		write_out_binary.tofile(prefix + "/output.dat")
-	elif file_format == "txt":
-		np.savetxt(prefix + "/output.dat", write_out_binary.flatten(), fmt='%.8f')
-	else:
-		raise Exception("Format not supported")
+		out = partition_model(x)
+
+		print("*"*30)
+		print("output:", out.detach().numpy().shape)
+		print("*"*30)
+		write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
+		if file_format == "bin":
+			write_out_binary.tofile(os.path.join(file_path, prefix, part) + "/output.dat")
+		elif file_format == "txt":
+			np.savetxt(os.path.join(file_path, prefix, part) + "/output.dat", write_out_binary.flatten(), fmt='%.8f')
+		else:
+			raise Exception("Format not supported")
 
 
 def conv_3d(input_shape, kernel_shape, filters, padding, stride, groups, depthwise, coarse_in, coarse_out, file_format, prefix="data"):
@@ -778,6 +875,7 @@ def parse_args():
   parser.add_argument('--coarse_out', default=1, type=int)
   parser.add_argument('--elemwise_op_type', choices=['add', 'mul'], default='add', type=str)
   parser.add_argument('--format', choices=['txt', 'bin'], default='bin', type=str)
+  parser.add_argument('--config_file', default='', type=str)
 
   args = parser.parse_args()
   return args
@@ -802,6 +900,6 @@ if __name__ == '__main__':
 	elif op_type == '3d_gap':
 		gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
 	elif op_type == '3d_part':
-		part_3d(args.format, "data/"+args.prefix)
+		part_3d(args.format, args.config_file, "data/"+args.prefix)
 	else:
 		print("Invalid op_type: %s" % op_type)
