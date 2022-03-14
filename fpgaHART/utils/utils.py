@@ -168,6 +168,82 @@ def plot_layers_csv(file_name, model_name, calculate_pareto=True, pareto_type='M
         plt.savefig(os.path.join(plot_dir, file_name))
         plt.clf()
 
+def generate_layer_config(layer, config):
+
+    layer_config = {}
+    if isinstance(layer, GAPLayer):
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
+        coarse_factor = int(config[0]*layer.channels)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["coarse_factor"] = coarse_factor
+    elif isinstance(layer, Convolutional3DLayer):
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
+        kerner_shape = layer.kernel_shape
+        padding = layer.padding
+        stride = layer.stride
+        groups = layer.groups
+        depthwise = 1 if layer.depthwise else 0
+        pointwise = 1 if layer.pointwise else 0
+        fine_factor = int(config[0]*layer.kd*layer.kh*layer.kw)
+        coarse_in_factor = int(config[1]*layer.channels)
+        coarse_out_factor = int(config[2]*layer.filters)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["shape_kernel"] = kerner_shape
+        layer_config["padding"] = padding
+        layer_config["stride"] = stride
+        layer_config["groups"] = groups
+        layer_config["depthwise"] = depthwise
+        layer_config["pointwise"] = pointwise
+        layer_config["fine_factor"] = fine_factor
+        layer_config["coarse_in_factor"] = coarse_in_factor
+        layer_config["coarse_out_factor"] = coarse_out_factor
+    elif isinstance(layer, ActivationLayer):
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
+        coarse_factor = int(config[0]*layer.channels)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["coarse_factor"] = coarse_factor
+    elif isinstance(layer, ElementWiseLayer):
+        input_shape = layer.full_shape
+        output_shape = layer.full_shape
+        broadcasting = 1 if layer.broadcasting else 0
+        op_type = layer.type
+        coarse_factor = int(config[0]*layer.full_shape[1])
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["broadcasting"] = broadcasting
+        layer_config["op_type"] = op_type
+        layer_config["coarse_factor"] = coarse_factor
+    elif isinstance(layer, BatchNorm3DLayer):
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
+        coarse_factor = int(config[0]*layer.channels)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["coarse_factor"] = coarse_factor
+    elif isinstance(layer, SqueezeExcitationLayer):
+        pass
+    elif isinstance(layer, FCLayer):
+        input_shape = layer.dim_in
+        output_shape = layer.dim_out
+        weights_shape = layer.weights_shape
+        coarse_in_factor = int(config[0]*layer.dim_in)
+        coarse_out_factor = int(config[1]*layer.dim_out)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["shape_weights"] = weights_shape
+        layer_config["coarse_in_factor"] = coarse_in_factor
+        layer_config["coarse_out_factor"] = coarse_out_factor
+    else:
+        assert False, "Not supported layer"
+
+    return layer_config
+
 def get_config_points(name, file_name, is_partitioning=False):
     layers_df = pd.read_csv(file_name)
 
@@ -307,3 +383,68 @@ def get_branch_edges(graph):
 def get_conbinations(list1, list2):
     combs = [x * y for x, y in itertools.product(list1, list2)]
     return list(np.unique(np.array(combs)))
+
+def get_input_node(graph):
+    for node in graph.nodes():
+        if graph.in_degree[node] == 0:
+            return node
+
+def get_output_node(graph):
+    for node in graph.nodes():
+        if graph.out_degree[node] == 0:
+            return node
+
+def update_graph(graph, split_points=None, squeeze_layers=None):
+    if split_points is None and squeeze_layers is None:
+        return graph
+    
+    if split_points is not None:
+        new_nodes = []
+        new_edges = []
+        for sp in split_points:
+            new_node_name = 'Split_' + sp
+            new_nodes.append(new_node_name)
+
+            next_nodes = list(graph.successors(sp))
+
+            edges_out = list(graph.out_edges(sp))
+
+            assert len(next_nodes) > 1 and len(edges_out) > 1, "Split point {} cannot have only one successor".format(sp)
+
+            graph.remove_edges_from(edges_out)
+
+            edge = (sp, new_node_name)
+            new_edges.append(edge)
+            for nd in next_nodes:
+                edge = (new_node_name, nd)
+                new_edges.append(edge)
+
+        if new_nodes or new_edges:
+            graph.update(edges=new_edges, nodes=new_nodes)
+    
+    if squeeze_layers is not None:
+        new_nodes = []
+        new_edges = []
+        for sl in squeeze_layers:
+            new_node_name = 'Squeeze_' + sl[0] + "_" + sl[1]
+            new_nodes.append(new_node_name)
+
+            prev_nodes = list(graph.predecessors(sl[1]))
+
+            edges_in = list(graph.in_edges(sl[1]))
+
+            for ei in edges_in:
+                if sl[0] in ei[0] and sl[1] in ei[1]:
+                    graph.remove_edge(ei[0], ei[1])
+
+            edge = (new_node_name, sl[1])
+            new_edges.append(edge)
+            for pn in prev_nodes:
+                if sl[0] in pn:
+                    edge = (pn, new_node_name)
+                    new_edges.append(edge)
+
+        if new_nodes or new_edges:
+            graph.update(edges=new_edges, nodes=new_nodes)
+
+    return graph

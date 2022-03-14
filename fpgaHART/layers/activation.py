@@ -114,11 +114,11 @@ class ActivationLayer(BaseLayer):
         elif self.activation_type == 'Sigmoid':
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
             max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
-            depth = 28 # This value came up from some experiments on HLS. Should revise that
+            depth = 28 # 28 cycles is the delay for the execution of math for sigmoid. This value came up from some experiments on HLS.
         elif self.activation_type == 'Swish':
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 4)
             max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
-            depth = 33 # This value came up from some experiments on HLS. Should revise that
+            depth = 33 # 33 cycles is the delay for the execution of math for swish. This value came up from some experiments on HLS.
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsp_raw, bram_util, bram_raw, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, layer_fifos_arrays, depth, coarse_inout=coarse_inout)
         total_ops = self.get_total_workload()

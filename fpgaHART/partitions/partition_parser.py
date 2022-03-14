@@ -71,6 +71,7 @@ class PartitionParser():
 
     def create_graph(self, partition):
         graph = nx.DiGraph()
+        print("*"*40)
         for layer in partition:
             print("Adding {} layer to graph...".format(layer))
             if self.model_descriptor.layers[layer]['operation'] == 'GlobalAveragePool':
@@ -247,84 +248,135 @@ class PartitionParser():
         #     utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
 
     def model_custom_partition(self):
+        self.partition_model_file = os.path.join(os.getcwd(), 'fpga_modeling_reports', self.model_name + '_custom_partitions.csv')
 
-        custom_partition = ['Custom_Conv_1', 'Custom_Relu', 'Custom_Conv_2', 'Custom_Sigmoid']
+        with open(self.partition_model_file, mode='w') as partition_dp:
+            csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow(["Part", "Latency(C)-No-Depth", "Latency(C)", "Latency(S)", "GOP/s", "GOPs", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn", "RateOut", "Depth", "Branch Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "DataSizeIn(MB)", "DataSizeOut(MB)", "MemBoundIn", "MemBoundOut", "config", "memconfig"])
 
+        custom_partition = ['Custom_Conv_1']
+
+        # self.model_descriptor.layers['Custom_Gap_1'] = {'operation': 'GlobalAveragePool',
+        #                                                 'shape_in': [[1, 24, 16, 32, 32]],
+        #                                                 'shape_out': [1, 24, 1, 1, 1],
+        #                                                 'node_in': ['606'],
+        #                                                 'node_out': '608',
+        #                                                 'branching': False}
         self.model_descriptor.layers['Custom_Conv_1'] = {'operation': 'Conv',
-                                                         'shape_in': [[1, 54, 16, 32, 32]],
-                                                         'shape_out': [1, 8, 16, 32, 32],
-                                                         'node_in': ['input.1'],
-                                                         'node_out': '1',
-                                                         'branching': False,
-                                                         'kernel': [8, 54, 1, 1, 1],
-                                                         'bias': [],
-                                                         'padding': [0, 0, 0],
-                                                         'stride': [1, 1, 1],
-                                                         'groups': 1,
-                                                         'dilation': [1, 1, 1]}
+                                                                'shape_in': [[1, 12, 16, 16, 16]],
+                                                                'shape_out': [1, 12, 16, 16, 16],
+                                                                'node_in': ['2'],
+                                                                'node_out': '3',
+                                                                'branching': False,
+                                                                'kernel': [12, 1, 3, 3, 3],
+                                                                'bias': [],
+                                                                'padding': [1, 1, 1],
+                                                                'stride': [1, 1, 1],
+                                                                'groups': 12,
+                                                                'dilation': [1, 1, 1]}
+        # self.model_descriptor.layers['Custom_Conv_1'] = {'operation': 'Conv',
+        #                                                         'shape_in': [[1, 12, 16, 16, 16]],
+        #                                                         'shape_out': [1, 24, 16, 16, 16],
+        #                                                         'node_in': ['2'],
+        #                                                         'node_out': '3',
+        #                                                         'branching': False,
+        #                                                         'kernel': [24, 12, 1, 1, 1],
+        #                                                         'bias': [],
+        #                                                         'padding': [0, 0, 0],
+        #                                                         'stride': [1, 1, 1],
+        #                                                         'groups': 1,
+        #                                                         'dilation': [1, 1, 1]}
+        # self.model_partition(custom_partition, name="Custom_Partition")
+        # exit()
 
+        custom_partition = ['Custom_Relu', 'Custom_Conv_2', 'Custom_Swish', 'Custom_Add']
 
         self.model_descriptor.layers['Custom_Relu'] = {'operation': 'Relu',
-                                                         'shape_in': [[1, 8, 16, 32, 32]],
-                                                         'shape_out': [1, 8, 16, 32, 32],
+                                                         'shape_in': [[1, 16, 8, 12, 12]],
+                                                         'shape_out': [1, 16, 8, 12, 12],
                                                          'node_in': ['1'],
                                                          'node_out': '2',
                                                          'branching': False}
 
+        # self.model_descriptor.layers['Custom_Conv_2'] = {'operation': 'Conv',
+        #                                                  'shape_in': [[1, 16, 8, 12, 12]],
+        #                                                  'shape_out': [1, 16, 8, 12, 12],
+        #                                                  'node_in': ['2'],
+        #                                                  'node_out': '3',
+        #                                                  'branching': False,
+        #                                                  'kernel': [16, 1, 3, 3, 3],
+        #                                                  'bias': [],
+        #                                                  'padding': [1, 1, 1],
+        #                                                  'stride': [1, 1, 1],
+        #                                                  'groups': 16,
+        #                                                  'dilation': [1, 1, 1]}
         self.model_descriptor.layers['Custom_Conv_2'] = {'operation': 'Conv',
-                                                         'shape_in': [[1, 8, 16, 32, 32]],
-                                                         'shape_out': [1, 54, 16, 32, 32],
+                                                         'shape_in': [[1, 16, 8, 12, 12]],
+                                                         'shape_out': [1, 16, 8, 12, 12],
                                                          'node_in': ['2'],
                                                          'node_out': '3',
                                                          'branching': False,
-                                                         'kernel': [54, 8, 1, 1, 1],
+                                                         'kernel': [16, 16, 1, 1, 1],
                                                          'bias': [],
                                                          'padding': [0, 0, 0],
                                                          'stride': [1, 1, 1],
                                                          'groups': 1,
                                                          'dilation': [1, 1, 1]}
 
-
-        self.model_descriptor.layers['Custom_Sigmoid'] = {'operation': 'Sigmoid',
-                                                         'shape_in': [[1, 54, 16, 32, 32]],
-                                                         'shape_out': [1, 54, 16, 32, 32],
+        self.model_descriptor.layers['Custom_Swish'] = {'operation': 'Swish',
+                                                         'shape_in': [[1, 16, 8, 12, 12]],
+                                                         'shape_out': [1, 16, 8, 12, 12],
                                                          'node_in': ['3'],
                                                          'node_out': '4',
                                                          'branching': False}
 
+        self.model_descriptor.layers['Custom_Add'] = {'operation': 'Add',
+                                                      'shape_in': [[1, 16, 8, 12, 12], [1, 16, 8, 12, 12]],
+                                                      'shape_out': [1, 16, 8, 12, 12],
+                                                      'node_in': ['2', '4'],
+                                                      'node_out': '5',
+                                                      'branching': False}
+
+        # self.model_partition(custom_partition, name="Custom_Partition")
+        # exit()
+
         custom_partition = ['Relu_22', 'Conv_23', 'Relu_25', 'Conv_26', 'Swish_28', 'Conv_30', 'Add_32']
+        # custom_partition = ['Relu_22', 'Conv_23', 'Relu_25', 'Swish_28', 'Conv_30', 'Add_32']
 
         self.model_descriptor.layers['Relu_22']['shape_in'] = [[1, 8, 6, 12, 12]]
         self.model_descriptor.layers['Relu_22']['shape_out'] = [1, 8, 6, 12, 12]
 
         self.model_descriptor.layers['Conv_23']['shape_in'] = [[1, 8, 6, 12, 12]]
-        self.model_descriptor.layers['Conv_23']['shape_out'] = [1, 16, 6, 12, 12]
-        self.model_descriptor.layers['Conv_23']['kernel'] = [16, 8, 1, 1, 1]
-        self.model_descriptor.layers['Conv_23']['bias'] = [16]
+        self.model_descriptor.layers['Conv_23']['shape_out'] = [1, 12, 6, 12, 12]
+        self.model_descriptor.layers['Conv_23']['kernel'] = [12, 8, 1, 1, 1]
+        self.model_descriptor.layers['Conv_23']['bias'] = [12]
 
-        self.model_descriptor.layers['Relu_25']['shape_in'] = [[1, 16, 6, 12, 12]]
-        self.model_descriptor.layers['Relu_25']['shape_out'] = [1, 16, 6, 12, 12]
+        self.model_descriptor.layers['Relu_25']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Relu_25']['shape_out'] = [1, 12, 6, 12, 12]
 
-        self.model_descriptor.layers['Conv_26']['shape_in'] = [[1, 16, 6, 12, 12]]
-        self.model_descriptor.layers['Conv_26']['shape_out'] = [1, 16, 6, 12, 12]
-        self.model_descriptor.layers['Conv_26']['kernel'] = [16, 1, 3, 3, 3]
-        self.model_descriptor.layers['Conv_26']['bias'] = [16]
-        self.model_descriptor.layers['Conv_26']['groups'] = 16
+        self.model_descriptor.layers['Conv_26']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_26']['shape_out'] = [1, 12, 6, 12, 12]
+        self.model_descriptor.layers['Conv_26']['kernel'] = [12, 1, 3, 3, 3]
+        self.model_descriptor.layers['Conv_26']['bias'] = [12]
+        self.model_descriptor.layers['Conv_26']['groups'] = 12
 
-        self.model_descriptor.layers['Swish_28']['shape_in'] = [[1, 16, 6, 12, 12]]
-        self.model_descriptor.layers['Swish_28']['shape_out'] = [1, 16, 6, 12, 12]
+        self.model_descriptor.layers['Swish_28']['shape_in'] = [[1, 12, 6, 12, 12]]
+        self.model_descriptor.layers['Swish_28']['shape_out'] = [1, 12, 6, 12, 12]
+        # self.model_descriptor.layers['Swish_28']['node_in'] = ['594']
 
-        self.model_descriptor.layers['Conv_30']['shape_in'] = [[1, 16, 6, 12, 12]]
+        self.model_descriptor.layers['Conv_30']['shape_in'] = [[1, 12, 6, 12, 12]]
         self.model_descriptor.layers['Conv_30']['shape_out'] = [1, 8, 6, 12, 12]
-        self.model_descriptor.layers['Conv_30']['kernel'] = [8, 16, 1, 1, 1]
+        self.model_descriptor.layers['Conv_30']['kernel'] = [8, 12, 1, 1, 1]
         self.model_descriptor.layers['Conv_30']['bias'] = [8]
 
         self.model_descriptor.layers['Add_32']['shape_in'] = [[1, 8, 6, 12, 12], [1, 8, 6, 12, 12]]
         self.model_descriptor.layers['Add_32']['shape_out'] = [1, 8, 6, 12, 12]
 
-
+        # self.model_partition(custom_partition, name="Custom_Partition")
+        # exit()
 
         custom_partition = ['Relu_33', 'Conv_34', 'Relu_36', 'Conv_37', 'GlobalAveragePool_39', 'Conv_40', 'Relu_41', 'Conv_42', 'Sigmoid_43', 'Mul_44', 'Swish_45', 'Conv_47', 'Add_49']
+        # custom_partition = ['Conv_37', 'GlobalAveragePool_39', 'Conv_40', 'Relu_41', 'Conv_42', 'Sigmoid_43', 'Mul_44']
 
         self.model_descriptor.layers['Relu_33']['shape_in'] = [[1, 8, 6, 12, 12]]
         self.model_descriptor.layers['Relu_33']['shape_out'] = [1, 8, 6, 12, 12]
@@ -376,4 +428,4 @@ class PartitionParser():
         self.model_descriptor.layers['Add_49']['shape_in'] = [[1, 8, 6, 12, 12], [1, 8, 6, 12, 12]]
         self.model_descriptor.layers['Add_49']['shape_out'] = [1, 8, 6, 12, 12]
 
-        self.model_partition(custom_partition, name="Custom_Partition")
+        self.model_partition(custom_partition, name="Custom_Partition2")

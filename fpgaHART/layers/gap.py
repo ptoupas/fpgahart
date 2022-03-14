@@ -95,13 +95,13 @@ class GAPLayer(BaseLayer):
             'gap_array': 0
         }
         if self.data_format == 'NCHWD':
-            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 3)
+            max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 2)
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
             #TODO: !SOS! Revise that
             depth = 1
 
         else:
-            max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
+            max_parallel_muls = math.ceil(self.channels * coarse_inout * 2)
             max_parallel_adds = math.ceil(self.channels * coarse_inout)
             # layer_fifos_arrays['gap_array'] = math.ceil(1/coarse_inout)
             #TODO: !SOS! Revise that
@@ -190,7 +190,10 @@ class GAPLayer(BaseLayer):
         return data_matrix
         
     def get_workload_matrix(self):
-        in_volume = self.channels * self.depth_in * self.rows_in * self.cols_in
+        if not self.gap_approx:
+            in_volume = self.channels * self.depth_in * self.rows_in * self.cols_in
+        else:
+            in_volume = self.channels
         out_volume = self.depth_out * self.rows_out * self.cols_out * self.filters
 
         workload_matrix = np.zeros( shape=(2,3) , dtype=float )
