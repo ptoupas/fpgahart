@@ -21,7 +21,7 @@ import os
 
 
 class SimulatedAnnealing(BaseLayer):
-    def __init__(self, graph, branch_mem, t_min=1e-8, t_max=7.5, iterationPerTemp=15, cooling_rate=0.99, partition_name='', gap_approx=False):
+    def __init__(self, graph, branch_mem=0, t_min=1e-6, t_max=7, iterationPerTemp=15, cooling_rate=0.99, partition_name='', gap_approx=False):
         super().__init__()
         self.gap_approx = gap_approx
         self.part_name = partition_name
@@ -293,7 +293,7 @@ class SimulatedAnnealing(BaseLayer):
                     break
             if cost is None:
                 print("No configuration found in 100 iterations. Exiting...")
-                return None, None, None
+                return None, None, None, None, None
 
         prev_state = config
         prev_cost = cost
@@ -334,7 +334,7 @@ class SimulatedAnnealing(BaseLayer):
         best_solution_mem = None
         best_solution_dp = None
         best_latency = 1000
-        for i in range(3):
+        for i in range(4):
             config, cost, dp_info, mem_bw, slowest_nodes = self.initialize_optimizer()
 
             prev_state = config
@@ -344,7 +344,7 @@ class SimulatedAnnealing(BaseLayer):
 
             current_temp = self.t_max
             count = 0
-            print(f"Temperature  |  Latency     |  Count  |  Param Count  |  Param %")
+            print(f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %")
             while current_temp > self.t_min:
                 
                 for i in range(self.iterationPerTemp):
@@ -369,9 +369,9 @@ class SimulatedAnnealing(BaseLayer):
                             solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
 
                 current_temp *= self.cooling_rate
-                print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}", end='\r')
+                print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}", end='\r')
 
-            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t{param_perc:.3f}")
+            print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}")
 
             if prev_cost < best_latency:
                 best_latency = prev_cost
@@ -655,16 +655,18 @@ class SimulatedAnnealing(BaseLayer):
         #     config_nodes = list(graph.nodes)
         #     config = {}
 
-        neighbours = False
+        # neighbours = False
+
         config_nodes = list(graph.nodes)
         if slowest_nodes:
             config = prev_state.copy()
-            slowest_node_choice = random.choice(slowest_nodes)
         else:
             config = {}
-            slowest_node_choice = None
 
         for node in config_nodes:
+            if slowest_nodes is not None and node not in slowest_nodes[:1]:
+                continue
+
             op_type = graph.nodes[node]['type']
             hw = graph.nodes[node]['hw']
             if isinstance(hw, GAPLayer):
@@ -769,9 +771,7 @@ class SimulatedAnnealing(BaseLayer):
                 continue
             else:
                 assert False, "Not supported layer"
-            
-            if slowest_node_choice == node:
-                break
+ 
         mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=n_in, n_out=n_out, gap_approx=self.gap_approx)
 
         return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
