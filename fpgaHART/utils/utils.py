@@ -3,6 +3,7 @@ from ..layers.batchnorm_3d import BatchNorm3DLayer
 from ..layers.squeeze_excitation import SqueezeExcitationLayer
 from ..layers.gap import GAPLayer
 from ..layers.elemwise import ElementWiseLayer
+from ..layers.fully_connected import FCLayer
 from ..layers.activation import ActivationLayer
 import os
 import csv
