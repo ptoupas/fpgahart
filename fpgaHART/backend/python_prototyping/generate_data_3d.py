@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import pandas as pd
+import onnx
+import onnxoptimizer as optimizer
 
 random.seed(0)
 torch.manual_seed(0)
@@ -595,6 +597,7 @@ def part_3d(file_format, config_file, prefix):
 			raise Exception("Format not supported")
 
 		partition_model = X3d_m_layer(layer_type, conv_config, file_path, part)
+		generate_onnx(partition_model, x, f"models/{part}.onnx")
 		partition_model.save_weights()
 
 		out = partition_model(x)
@@ -610,6 +613,25 @@ def part_3d(file_format, config_file, prefix):
 		else:
 			raise Exception("Format not supported")
 
+def generate_onnx(model, input_data, file_name):
+	torch.onnx.export(model, input_data, file_name, verbose=True)
+	# onnx_model = onnx.load(file_name)
+	# onnx.checker.check_model(onnx_model)
+	# onnx_model = onnx.shape_inference.infer_shapes(onnx_model)
+	# passes = [
+	# 		"extract_constant_to_initializer",
+	# 		"eliminate_unused_initializer",
+	# 		"eliminate_nop_transpose",
+	# 		"eliminate_nop_pad",
+	# 		"fuse_consecutive_transposes",
+	# 		"fuse_transpose_into_gemm",
+	# 		"fuse_matmul_add_bias_into_gemm",
+	# 		"fuse_bn_into_conv",
+	# ]
+	# onnx_model = optimizer.optimize(onnx_model, passes=passes)
+	# onnx.checker.check_model(onnx_model)
+
+	# torch.onnx.export(onnx_model, input_data, file_name, verbose=True)
 
 def conv_3d(input_shape, kernel_shape, filters, padding, stride, groups, depthwise, coarse_in, coarse_out, file_format, prefix="generated_data"):
 	if not os.path.exists(prefix + '/conv_3d'):

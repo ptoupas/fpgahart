@@ -8,7 +8,8 @@ def get_node_coarse_factor(config, mode='in'):
     if mode == 'in':
         return config['coarse_in_factor']
     elif mode == 'out':
-        return config['coarse_out_factor']
+        depthwise = config['depthwise']
+        return config['coarse_out_factor'] if not depthwise else 1
 
 def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_name):
     if 'broadcasting' in in_config.keys() or 'broadcasting' in out_config.keys():

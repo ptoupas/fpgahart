@@ -2,12 +2,13 @@ from .codegen import *
 import os
 
 def generate_split_cpp(name, config, partition_name):
-    batch_size = config['shape_in'][0]
-    channels = config['shape_in'][1]
-    depth = config['shape_in'][2]
-    height = config['shape_in'][3]
-    width = config['shape_in'][4]
-    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor']
+    batch_size = config['shape_out'][0]
+    channels = config['shape_out'][1]
+    depth = config['shape_out'][2]
+    height = config['shape_out'][3]
+    width = config['shape_out'][4]
+    depthwise = config['depthwise'] if 'depthwise' in config.keys() else 0
+    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor'] if not depthwise else 1
 
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
@@ -43,12 +44,13 @@ def generate_split_cpp(name, config, partition_name):
     cpp.close()
 
 def generate_split_hpp(name, config, partition_name):
-    batch_size = config['shape_in'][0]
-    channels = config['shape_in'][1]
-    depth = config['shape_in'][2]
-    height = config['shape_in'][3]
-    width = config['shape_in'][4]
-    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor']
+    batch_size = config['shape_out'][0]
+    channels = config['shape_out'][1]
+    depth = config['shape_out'][2]
+    height = config['shape_out'][3]
+    width = config['shape_out'][4]
+    depthwise = config['depthwise'] if 'depthwise' in config.keys() else 0
+    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor'] if not depthwise else 1
 
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()

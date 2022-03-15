@@ -83,7 +83,8 @@ def identify_streams_mismatches(layers_config, connections):
         if 'coarse_factor' in layers_config[in_node].keys():
             in_node_streams = layers_config[in_node]['coarse_factor']
         else:
-            in_node_streams = layers_config[in_node]['coarse_out_factor']
+            depthwise = layers_config[in_node]['depthwise']
+            in_node_streams = layers_config[in_node]['coarse_out_factor'] if not depthwise else 1
         out_node = con[1]
         if 'coarse_factor' in layers_config[out_node].keys():
             out_node_streams = layers_config[out_node]['coarse_factor']
