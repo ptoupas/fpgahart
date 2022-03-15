@@ -506,7 +506,7 @@ def part_3d(file_format, config_file, prefix):
 			node = self.conv_layers[idx]
 			depthwise = self.conv_config[node]['depthwise']
 			coarse_in = self.conv_config[node]['coarse_in']
-			coarse_out = self.conv_config[node]['coarse_out']
+			coarse_out = self.conv_config[node]['coarse_out'] if not depthwise else 1
 			groups = self.conv_config[node]['groups']
 			if not depthwise:
 				print("weights_{}_cin{}_cout{}:".format(node, coarse_in, coarse_out), weights.detach().numpy().shape)

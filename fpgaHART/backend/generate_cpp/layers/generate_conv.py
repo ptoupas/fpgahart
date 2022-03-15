@@ -26,7 +26,7 @@ def generate_conv_cpp(name, config, partition_name):
 
     fine_factor = config['fine_factor']
     coarse_in_factor = config['coarse_in_factor']
-    coarse_out_factor = config['coarse_out_factor']
+    coarse_out_factor = config['coarse_out_factor'] if not depthwise else 1
 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
@@ -217,7 +217,7 @@ def generate_conv_hpp(name, config, partition_name):
 
     fine_factor = config['fine_factor']
     coarse_in_factor = config['coarse_in_factor']
-    coarse_out_factor = config['coarse_out_factor']
+    coarse_out_factor = config['coarse_out_factor'] if not depthwise else 1
 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
