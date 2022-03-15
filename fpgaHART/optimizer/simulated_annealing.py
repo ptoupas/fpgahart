@@ -655,7 +655,7 @@ class SimulatedAnnealing(BaseLayer):
         #     config_nodes = list(graph.nodes)
         #     config = {}
 
-        # neighbours = False
+        neighbours = False
 
         config_nodes = list(graph.nodes)
         if slowest_nodes:
