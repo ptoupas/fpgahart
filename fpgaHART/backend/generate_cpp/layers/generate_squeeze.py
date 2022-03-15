@@ -11,12 +11,15 @@ def get_node_coarse_factor(config, mode='in'):
         return config['coarse_out_factor']
 
 def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_name):
-    assert in_config['shape_out'] == out_config['shape_in'], "Output shape of the first node must be the same as input shape of the second node"
-    batch_size = out_config['shape_in'][0]
-    channels = out_config['shape_in'][1]
-    depth = out_config['shape_in'][2]
-    height = out_config['shape_in'][3]
-    width = out_config['shape_in'][4]
+    if 'broadcasting' in in_config.keys() or 'broadcasting' in out_config.keys():
+        assert in_config['shape_out'][1] == out_config['shape_in'][1], "Output shape of the first node must be the same as input shape of the second node"
+    else:
+        assert in_config['shape_out'] == out_config['shape_in'], "Output shape of the first node must be the same as input shape of the second node"
+    batch_size = in_config['shape_out'][0]
+    channels = in_config['shape_out'][1]
+    depth = in_config['shape_out'][2]
+    height = in_config['shape_out'][3]
+    width = in_config['shape_out'][4]
 
     node_in_coarse_factor = get_node_coarse_factor(in_config, mode='out')
     node_out_coarse_factor = get_node_coarse_factor(out_config, mode='in')
@@ -55,12 +58,15 @@ def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_nam
     cpp.close()
 
 def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_name):
-    assert in_config['shape_out'] == out_config['shape_in'], "Output shape of the first node must be the same as input shape of the second node"
-    batch_size = out_config['shape_in'][0]
-    channels = out_config['shape_in'][1]
-    depth = out_config['shape_in'][2]
-    height = out_config['shape_in'][3]
-    width = out_config['shape_in'][4]
+    if 'broadcasting' in in_config.keys() or 'broadcasting' in out_config.keys():
+        assert in_config['shape_out'][1] == out_config['shape_in'][1], "Output shape of the first node must be the same as input shape of the second node"
+    else:
+        assert in_config['shape_out'] == out_config['shape_in'], "Output shape of the first node must be the same as input shape of the second node"
+    batch_size = in_config['shape_out'][0]
+    channels = in_config['shape_out'][1]
+    depth = in_config['shape_out'][2]
+    height = in_config['shape_out'][3]
+    width = in_config['shape_out'][4]
     
     node_in_coarse_factor = get_node_coarse_factor(in_config, mode='out')
     node_out_coarse_factor = get_node_coarse_factor(out_config, mode='in')
