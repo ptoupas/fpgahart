@@ -349,13 +349,13 @@ class Convolutional3DLayer(BaseLayer):
 
             # Convolution 3D
             stream_matrix[2, 3] = math.ceil(self.channels * f_coarseIn)
-            stream_matrix[3, 3] = math.ceil(self.filters * f_coarseOut)
+            stream_matrix[3, 3] = math.ceil(self.channels * f_coarseIn)
 
             # Accumulation
 
             # Glue
-            stream_matrix[3, 4] = math.ceil(self.filters * f_coarseOut)
-            stream_matrix[4, 4] = math.ceil(self.filters * f_coarseOut)
+            stream_matrix[3, 4] = math.ceil(self.channels * f_coarseIn)
+            stream_matrix[4, 4] = math.ceil(self.channels * f_coarseIn)
 
             # Concatenation
             stream_matrix[4, 5] = 1
