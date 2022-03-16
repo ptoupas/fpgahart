@@ -1,4 +1,5 @@
 import argparse
+import os
 import json
 import pandas as pd
 from layers.generate_swish import generate_swish_files
@@ -69,8 +70,13 @@ def generate_partition_code(layers_config, branch_depth, partition_name, parser,
     for sl in squeeze_layers:
         generate_squeeze_files(sl[0], layers_config[sl[0]], sl[1], layers_config[sl[1]], f"{prefix}/{partition_name}")
 
-    # Generate top level partition file
+    # Update the graph with the supporting layers
     graph = utils.update_graph(graph, split_points=split_points, squeeze_layers=squeeze_layers)
+    if not os.path.exists(f"generated_files/{prefix}/graphs/"):
+        os.makedirs(f"generated_files/{prefix}/graphs/")
+    parser.visualize_graph(graph, f"generated_files/{prefix}/graphs/{partition_name}")
+    
+    # Generate top level partition file
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
 
     # Generate testbench file
@@ -84,7 +90,7 @@ def identify_streams_mismatches(layers_config, connections):
             in_node_streams = layers_config[in_node]['coarse_factor']
         else:
             depthwise = layers_config[in_node]['depthwise']
-            in_node_streams = layers_config[in_node]['coarse_out_factor'] if not depthwise else 1
+            in_node_streams = layers_config[in_node]['coarse_out_factor']
         out_node = con[1]
         if 'coarse_factor' in layers_config[out_node].keys():
             out_node_streams = layers_config[out_node]['coarse_factor']

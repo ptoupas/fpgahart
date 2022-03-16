@@ -8,7 +8,7 @@ def generate_split_cpp(name, config, partition_name):
     height = config['shape_out'][3]
     width = config['shape_out'][4]
     depthwise = config['depthwise'] if 'depthwise' in config.keys() else 0
-    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor'] if not depthwise else 1
+    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor']
 
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
@@ -50,7 +50,7 @@ def generate_split_hpp(name, config, partition_name):
     height = config['shape_out'][3]
     width = config['shape_out'][4]
     depthwise = config['depthwise'] if 'depthwise' in config.keys() else 0
-    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor'] if not depthwise else 1
+    coarse_factor = config['coarse_factor'] if 'coarse_factor' in config.keys() else config['coarse_out_factor']
 
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()

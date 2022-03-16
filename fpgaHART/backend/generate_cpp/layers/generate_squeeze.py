@@ -9,7 +9,7 @@ def get_node_coarse_factor(config, mode='in'):
         return config['coarse_in_factor']
     elif mode == 'out':
         depthwise = config['depthwise']
-        return config['coarse_out_factor'] if not depthwise else 1
+        return config['coarse_out_factor']
 
 def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_name):
     if 'broadcasting' in in_config.keys() or 'broadcasting' in out_config.keys():
@@ -72,6 +72,8 @@ def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_nam
     node_in_coarse_factor = get_node_coarse_factor(in_config, mode='out')
     node_out_coarse_factor = get_node_coarse_factor(out_config, mode='in')
 
+    squeeze_buffer = np.lcm(node_in_coarse_factor, node_out_coarse_factor)
+
     layer_in_name_lower = in_name.replace("GlobalAveragePool", "GAP").lower()
     layer_in_name_upper = in_name.replace("GlobalAveragePool", "GAP").upper()
     layer_out_name_lower = out_name.replace("GlobalAveragePool", "GAP").lower()
@@ -99,7 +101,7 @@ def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_nam
     hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_WIDTH \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_WIDTH")
     hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_IN \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_IN")
     hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_OUT \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_OUT")
-    hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BUFFER \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_CHANNELS", newlines=2)
+    hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BUFFER \t{squeeze_buffer}", newlines=2)
 
     hpp(f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \tsqueeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t;", newlines=3)
 

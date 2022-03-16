@@ -201,7 +201,7 @@ def generate_layer_config(layer, config):
         layer_config["pointwise"] = pointwise
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_in_factor"] = coarse_in_factor
-        layer_config["coarse_out_factor"] = coarse_out_factor
+        layer_config["coarse_out_factor"] = coarse_out_factor if not depthwise else coarse_in_factor
     elif isinstance(layer, ActivationLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape

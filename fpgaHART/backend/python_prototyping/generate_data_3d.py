@@ -508,7 +508,7 @@ def part_3d(file_format, config_file, prefix):
 			node = self.conv_layers[idx]
 			depthwise = self.conv_config[node]['depthwise']
 			coarse_in = self.conv_config[node]['coarse_in']
-			coarse_out = self.conv_config[node]['coarse_out'] if not depthwise else 1
+			coarse_out = self.conv_config[node]['coarse_out']
 			groups = self.conv_config[node]['groups']
 			if not depthwise:
 				print("weights_{}_cin{}_cout{}:".format(node, coarse_in, coarse_out), weights.detach().numpy().shape)
@@ -524,7 +524,7 @@ def part_3d(file_format, config_file, prefix):
 				weights_transformed = transform_weights(
 									weights.detach().numpy(),
 									1,
-									coarse_out,
+									1,
 									1, coarse_group=coarse_in, groups=groups)
 				with open(os.path.join(self.file_path, prefix, self.part) + '/weights_{}_cin{}_cout{}.csv'.format(node, coarse_in, coarse_out), 'w') as f:
 					f.write(array_init(weights_transformed[0]))
@@ -614,7 +614,7 @@ def part_3d(file_format, config_file, prefix):
 			raise Exception("Format not supported")
 
 def generate_onnx(model, input_data, file_name):
-	torch.onnx.export(model, input_data, file_name, verbose=True)
+	torch.onnx.export(model, input_data, file_name, verbose=False)
 	# onnx_model = onnx.load(file_name)
 	# onnx.checker.check_model(onnx_model)
 	# onnx_model = onnx.shape_inference.infer_shapes(onnx_model)

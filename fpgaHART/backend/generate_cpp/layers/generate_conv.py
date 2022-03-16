@@ -26,10 +26,12 @@ def generate_conv_cpp(name, config, partition_name):
 
     fine_factor = config['fine_factor']
     coarse_in_factor = config['coarse_in_factor']
-    coarse_out_factor = config['coarse_out_factor'] if not depthwise else 1
+    coarse_out_factor = config['coarse_out_factor']
 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
+
+    inner_block_loop = f"{layer_name_upper}_COARSE_OUT" if not depthwise else f"{layer_name_upper}_COARSE_OUT_INNER"
 
     cpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.cpp"))
 
@@ -55,17 +57,32 @@ def generate_conv_cpp(name, config, partition_name):
             cpp("#pragma HLS STREAM variable=sw_out")
             cpp("#pragma HLS ARRAY_PARTITION variable=sw_out complete dim=0", newlines=2)
 
-            cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT][{layer_name_upper}_KERNEL_SIZE_HEIGHT][{layer_name_upper}_KERNEL_SIZE_WIDTH][{layer_name_upper}_KERNEL_SIZE_DEPTH];")
-            cpp("#pragma HLS STREAM variable=fork_out")
-            cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
+            if depthwise:
+                cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT_INNER][{layer_name_upper}_KERNEL_SIZE_HEIGHT][{layer_name_upper}_KERNEL_SIZE_WIDTH][{layer_name_upper}_KERNEL_SIZE_DEPTH];")
+                cpp("#pragma HLS STREAM variable=fork_out")
+                cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
+            else:
+                cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT][{layer_name_upper}_KERNEL_SIZE_HEIGHT][{layer_name_upper}_KERNEL_SIZE_WIDTH][{layer_name_upper}_KERNEL_SIZE_DEPTH];")
+                cpp("#pragma HLS STREAM variable=fork_out")
+                cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
         else:
-            cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];")
-            cpp("#pragma HLS STREAM variable=fork_out")
-            cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
+            if depthwise:
+                cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT_INNER];")
+                cpp("#pragma HLS STREAM variable=fork_out")
+                cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
+            else:
+                cpp(f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];")
+                cpp("#pragma HLS STREAM variable=fork_out")
+                cpp("#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0", newlines=2)
 
-        cpp(f"stream_t(accum_data_t) conv_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];")
-        cpp("#pragma HLS STREAM variable=conv_out")
-        cpp("#pragma HLS ARRAY_PARTITION variable=conv_out complete dim=0", newlines=2)
+        if depthwise:
+            cpp(f"stream_t(accum_data_t) conv_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT_INNER];")
+            cpp("#pragma HLS STREAM variable=conv_out")
+            cpp("#pragma HLS ARRAY_PARTITION variable=conv_out complete dim=0", newlines=2)
+        else:
+            cpp(f"stream_t(accum_data_t) conv_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];")
+            cpp("#pragma HLS STREAM variable=conv_out")
+            cpp("#pragma HLS ARRAY_PARTITION variable=conv_out complete dim=0", newlines=2)
 
         if not depthwise:
             cpp(f"stream_t(accum_data_t) accum_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];")
@@ -117,7 +134,7 @@ def generate_conv_cpp(name, config, partition_name):
                     {layer_name_lower}_data_t\n\
                 >(in[i],fork_out[i]);", newlines=2)
 
-            with cpp.block(f"for(int j=0; j<{layer_name_upper}_COARSE_OUT; j++)"):
+            with cpp.block(f"for(int j=0; j<{inner_block_loop}; j++)"):
 
                 cpp("#pragma HLS unroll", newlines=2)
                 
@@ -217,7 +234,7 @@ def generate_conv_hpp(name, config, partition_name):
 
     fine_factor = config['fine_factor']
     coarse_in_factor = config['coarse_in_factor']
-    coarse_out_factor = config['coarse_out_factor'] if not depthwise else 1
+    coarse_out_factor = config['coarse_out_factor']
 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
@@ -255,7 +272,11 @@ def generate_conv_hpp(name, config, partition_name):
 
     hpp(f"#define {layer_name_upper}_FINE {fine_factor}")
     hpp(f"#define {layer_name_upper}_COARSE_IN {coarse_in_factor}")
-    hpp(f"#define {layer_name_upper}_COARSE_OUT {coarse_out_factor}", newlines=2)
+    if depthwise:
+        hpp(f"#define {layer_name_upper}_COARSE_OUT {coarse_out_factor}")
+        hpp(f"#define {layer_name_upper}_COARSE_OUT_INNER 1", newlines=2)
+    else:
+        hpp(f"#define {layer_name_upper}_COARSE_OUT {coarse_out_factor}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_FILTERS {filters}")
     hpp(f"#define {layer_name_upper}_DEPTH_OUT {depth_out}")
@@ -285,11 +306,17 @@ def generate_conv_hpp(name, config, partition_name):
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_DEPTH \t{layer_name_upper}_KERNEL_SIZE_DEPTH")
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_HEIGHT \t{layer_name_upper}_KERNEL_SIZE_HEIGHT")
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_WIDTH \t{layer_name_upper}_KERNEL_SIZE_WIDTH")
-    hpp(f"#define {layer_name_upper}_FORK_COARSE \t{layer_name_upper}_COARSE_OUT", newlines=2)
+    if depthwise:
+        hpp(f"#define {layer_name_upper}_FORK_COARSE \t{layer_name_upper}_COARSE_OUT_INNER", newlines=2)
+    else:
+        hpp(f"#define {layer_name_upper}_FORK_COARSE \t{layer_name_upper}_COARSE_OUT", newlines=2)
 
     hpp(f"#define {layer_name_upper}_CONV_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(f"#define {layer_name_upper}_CONV_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)")
-    hpp(f"#define {layer_name_upper}_CONV_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT)")
+    if depthwise:
+        hpp(f"#define {layer_name_upper}_CONV_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT_INNER)")
+    else:
+        hpp(f"#define {layer_name_upper}_CONV_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT)")
     hpp(f"#define {layer_name_upper}_CONV_DEPTH \t{layer_name_upper}_DEPTH_OUT")
     hpp(f"#define {layer_name_upper}_CONV_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
     hpp(f"#define {layer_name_upper}_CONV_WIDTH \t{layer_name_upper}_WIDTH_OUT")
@@ -301,7 +328,10 @@ def generate_conv_hpp(name, config, partition_name):
 
     hpp(f"#define {layer_name_upper}_ACCUM_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(f"#define {layer_name_upper}_ACCUM_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)")
-    hpp(f"#define {layer_name_upper}_ACCUM_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT)")
+    if depthwise:
+        hpp(f"#define {layer_name_upper}_ACCUM_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT_INNER)")
+    else:
+        hpp(f"#define {layer_name_upper}_ACCUM_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT)")
     hpp(f"#define {layer_name_upper}_ACCUM_DEPTH \t{layer_name_upper}_DEPTH_OUT")
     hpp(f"#define {layer_name_upper}_ACCUM_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
     hpp(f"#define {layer_name_upper}_ACCUM_WIDTH \t{layer_name_upper}_WIDTH_OUT")
@@ -315,18 +345,31 @@ def generate_conv_hpp(name, config, partition_name):
     hpp(f"#define {layer_name_upper}_GLUE_WIDTH \t{layer_name_upper}_WIDTH_OUT")
     hpp(f"#define {layer_name_upper}_GLUE_GROUPS \t{layer_name_upper}_GROUPS")
     hpp(f"#define {layer_name_upper}_GLUE_COARSE_IN \t{layer_name_upper}_COARSE_IN")
-    hpp(f"#define {layer_name_upper}_GLUE_COARSE_OUT \t{layer_name_upper}_COARSE_OUT", newlines=2)
+    if depthwise:
+        hpp(f"#define {layer_name_upper}_GLUE_COARSE_OUT \t{layer_name_upper}_COARSE_OUT_INNER", newlines=2)
+    else:
+        hpp(f"#define {layer_name_upper}_GLUE_COARSE_OUT \t{layer_name_upper}_COARSE_OUT", newlines=2)
 
     hpp(f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \t{layer_name_lower}_data_t;", newlines=2)
 
-    hpp(f"static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
-                                        [{layer_name_upper}_COARSE_OUT]\n\
+    if depthwise:
+        hpp(f"static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
+                                        [{layer_name_upper}_COARSE_OUT_INNER]\n\
                                         [DIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)]\n\
-                                        [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT*{layer_name_upper}_GROUPS)]\n\
+                                        [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT_INNER*{layer_name_upper}_GROUPS)]\n\
                                         [{layer_name_upper}_KERNEL_SIZE_HEIGHT]\n\
                                         [{layer_name_upper}_KERNEL_SIZE_WIDTH]\n\
                                         [{layer_name_upper}_KERNEL_SIZE_DEPTH] = {{\n\
                                         #include \"{weights_file_path}\"\n}};", newlines=3)
+    else:
+        hpp(f"static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
+                                            [{layer_name_upper}_COARSE_OUT]\n\
+                                            [DIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)]\n\
+                                            [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT*{layer_name_upper}_GROUPS)]\n\
+                                            [{layer_name_upper}_KERNEL_SIZE_HEIGHT]\n\
+                                            [{layer_name_upper}_KERNEL_SIZE_WIDTH]\n\
+                                            [{layer_name_upper}_KERNEL_SIZE_DEPTH] = {{\n\
+                                            #include \"{weights_file_path}\"\n}};", newlines=3)
 
     hpp(f"void {layer_name_lower}_layer(\n\
         stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE_IN],\n\
