@@ -130,6 +130,9 @@ def generate_conv_cpp(name, config, partition_name):
                     {layer_name_upper}_FORK_HEIGHT,\n\
                     {layer_name_upper}_FORK_WIDTH,\n\
                     {layer_name_upper}_FORK_DEPTH,\n\
+                    {layer_name_upper}_FORK_STRIDE_HEIGHT,\n\
+                    {layer_name_upper}_FORK_STRIDE_WIDTH,\n\
+                    {layer_name_upper}_FORK_STRIDE_DEPTH,\n\
                     {layer_name_upper}_FORK_COARSE,\n\
                     {layer_name_lower}_data_t\n\
                 >(in[i],fork_out[i]);", newlines=2)
@@ -300,9 +303,17 @@ def generate_conv_hpp(name, config, partition_name):
 
     hpp(f"#define {layer_name_upper}_FORK_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(f"#define {layer_name_upper}_FORK_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)")
-    hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH_OUT")
-    hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
-    hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH_OUT")
+    if not pointwise:
+        hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH_OUT")
+        hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
+        hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH_OUT")
+    else:
+        hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH")
+        hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT")
+        hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH")
+        hpp(f"#define {layer_name_upper}_FORK_STRIDE_DEPTH \t{layer_name_upper}_STRIDE_DEPTH")
+        hpp(f"#define {layer_name_upper}_FORK_STRIDE_HEIGHT \t{layer_name_upper}_STRIDE_HEIGHT")
+        hpp(f"#define {layer_name_upper}_FORK_STRIDE_WIDTH \t{layer_name_upper}_STRIDE_WIDTH")
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_DEPTH \t{layer_name_upper}_KERNEL_SIZE_DEPTH")
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_HEIGHT \t{layer_name_upper}_KERNEL_SIZE_HEIGHT")
     hpp(f"#define {layer_name_upper}_FORK_KERNEL_SIZE_WIDTH \t{layer_name_upper}_KERNEL_SIZE_WIDTH")
