@@ -93,8 +93,8 @@ def generate_top_level_cpp(graph, layers_config, branch_depth, partition_name, p
         stream_t({partition_name_lower}_output_t) out[{partition_name_upper}_STREAMS_OUT])"):
 
         cpp("#pragma HLS INTERFACE ap_ctrl_chain port=return")
-        cpp("#pragma HLS INTERFACE mode=axis register_mode=both depth=2 port=in register")
-        cpp("#pragma HLS INTERFACE mode=axis register_mode=both depth=2 port=out register", newlines=2)
+        cpp("#pragma HLS INTERFACE axis register_mode=both depth=2 port=in register")
+        cpp("#pragma HLS INTERFACE axis register_mode=both depth=2 port=out register", newlines=2)
 
         cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
         cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
