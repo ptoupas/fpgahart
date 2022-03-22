@@ -33,9 +33,9 @@ create_clock -period 7 -name default
 config_dataflow -default_channel fifo
 
 # Set variable to select which steps to execute
-set hls_exec 1
+set hls_exec 2
 
-csim_design -clean -O
+#csim_design -clean -O
 
 if {$hls_exec == 1} {
 	# Run Synthesis and Exit

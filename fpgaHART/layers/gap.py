@@ -98,7 +98,7 @@ class GAPLayer(BaseLayer):
             max_parallel_muls = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout * 2)
             max_parallel_adds = math.ceil(self.channels * self.depth_in * self.rows_in * self.cols_in * coarse_inout)
             #TODO: !SOS! Revise that
-            depth = 1
+            depth = 2
 
         else:
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 2)
@@ -106,7 +106,7 @@ class GAPLayer(BaseLayer):
             # layer_fifos_arrays['gap_array'] = math.ceil(1/coarse_inout)
             #TODO: !SOS! Revise that
             if self.gap_approx:
-                depth = 1
+                depth = 2
             else:
                 depth = math.ceil(1/coarse_inout) * self.depth_in * self.rows_in * self.cols_in
 

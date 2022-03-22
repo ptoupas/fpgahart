@@ -11,6 +11,7 @@ from ..utils.matrix_balancing import balance_memory_rates, balance_matrix
 from collections import deque
 import numpy as np
 import math
+import networkx as nx
 
 np.set_printoptions(precision=5, suppress=True, linewidth=250)
 np.seterr(divide='ignore', invalid='ignore')
@@ -84,6 +85,34 @@ class PartitionComposer(BaseLayer):
         dp_info['config'] = self.config
         
         return dp_info
+
+    @staticmethod
+    def calculate_branch_buffering_new(graph):
+        branch_buffering = {}
+        branch_edges = utils.get_branch_start_end_points(graph)
+        for (in_point, end_point) in branch_edges:
+            num_paths = len(list(nx.all_simple_paths(graph, source=in_point, target=end_point)))
+            paths = []
+            depths = []
+            for path in nx.all_simple_paths(graph, source=in_point, target=end_point):
+                depth_branch = 0
+                split_node = path[0]
+                merge_node = path[-1]
+                assert in_point == split_node and end_point == merge_node, 'Branch edges are wrongly defined'
+                for p in path[1:-1]:
+                    depth_branch += graph.nodes[p]['hw'].depth
+                depths.append(depth_branch)
+                paths.append(path)
+                # print(f"merge @ {merge_node}, split @ {split_node} -> path: {path}, depth: {depth_branch}")
+            if num_paths > 2:
+                longest_idx = np.argmax(depths[:-1])
+                final_depth = min(abs(depths[longest_idx] - depths[-1]), np.product(graph.nodes[end_point]['hw'].full_shape)) + 2
+                branch_buffering[end_point] = {'split': in_point, 'depth': final_depth}
+            else:
+                final_depth = min(abs(depths[0] - depths[-1]), np.product(graph.nodes[end_point]['hw'].full_shape)) + 2
+                branch_buffering[end_point] = {'split': in_point, 'depth': final_depth}
+
+        return branch_buffering
 
     @staticmethod
     def calculate_branch_buffering(graph):
@@ -294,7 +323,7 @@ class PartitionComposer(BaseLayer):
             curr_dsps_util = (total_muls/self.dsp)*100
 
             if DEBUG:
-                print(f"{node} - Latency(C)={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}")
+                print(f"{node} - Latency(C)={latency_cycles}, Latency(C)-Depth={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}")
 
             if not dp_info['config'] or curr_dsps_util >= 90. or curr_bram_util >= 95.:
                 self.update_layer()
@@ -305,7 +334,7 @@ class PartitionComposer(BaseLayer):
         assert len(off_chip_mem_in) == 0, "Off-chip memory IN points left hanging. Wrong configuration of the graph."
         assert len(off_chip_mem_out) == 0, "Off-chip memory OUT points left hanging. Wrong configuration of the graph."
 
-        layer_fifos_arrays['branch_buffering'] = self.calculate_branch_buffering(graph)
+        layer_fifos_arrays['branch_buffering'] = self.calculate_branch_buffering_new(graph)
 
         if DEBUG:
             print(f"Branch buffering: {layer_fifos_arrays['branch_buffering']}")
@@ -435,13 +464,11 @@ class PartitionComposer(BaseLayer):
         mem_kb_total = 0
         bram_raw_out = layer_brams
 
-        if 'branch_buffering' in layer_fifos_arrays.keys() and layer_fifos_arrays['branch_buffering'] > 0:
-            extra_branch_fifos_brams = self.bram_stream_resource_model(layer_fifos_arrays['branch_buffering'], 16)
-
-            merge_point = utils.get_merge_points(graph)[0]
-            parallel_fifos_branch_buffer = config[merge_point]['coarse_factor']
-            bram_raw_out += extra_branch_fifos_brams * parallel_fifos_branch_buffer
-            # print("Branch Depth:", layer_fifos_arrays['branch_buffering'], "Extra buffers:", extra_branch_fifos_brams, "Total:", extra_branch_fifos_brams * parallel_fifos_branch_buffer)
+        if 'branch_buffering' in layer_fifos_arrays:
+            for merge_node, v in layer_fifos_arrays['branch_buffering'].items():
+                curr_depth = v['depth']
+                # depth_per_fifo = math.ceil(curr_depth/config[merge_node]['coarse_factor'])
+                bram_raw_out += self.bram_stream_resource_model(curr_depth, 16) * config[merge_node]['coarse_factor']
 
         bram_util = (bram_raw_out / self.bram) * 100
         dsps_util = (muls/self.dsp)*100

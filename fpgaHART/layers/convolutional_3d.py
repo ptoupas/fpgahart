@@ -118,7 +118,7 @@ class Convolutional3DLayer(BaseLayer):
             'acc_array': 0,
         }
 
-        depth = 1
+        depth = 2
         if self.pointwise:
             # Sliding Window Module (SWM) Depth and Memory
             depth += 1
@@ -147,19 +147,19 @@ class Convolutional3DLayer(BaseLayer):
             layer_fifos_arrays['sw_wb_3d'] = depth_window_buffer_3d
 
             # DEPTH V1
-            # depth += math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
-            #         math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
-            #         math.ceil(1/f_coarseIn) * (self.kd - 1)
-            # depth += math.ceil(1/f_coarseIn) * ( (self.kh - 1)*self.kw*self.kd + (self.kw - 1)*self.kd + (self.kd - 1) )
+            depth += math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
+                    math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
+                    math.ceil(1/f_coarseIn) * (self.kd - 1)
+            depth += math.ceil(1/f_coarseIn) * ( (self.kh - 1)*self.kw*self.kd + (self.kw - 1)*self.kd + (self.kd - 1) )
 
             # DEPTH V2
             # depth += self.kh*(self.kw-1) * depth_line_buffer_3d + (self.kh-1) * depth_line_buffer_2d + self.kh*self.kw*(self.kd-1) * depth_window_buffer_3d
             
             # DEPTH V3
-            depth_ = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
-                    math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
-                    math.ceil(1/f_coarseIn) * (self.kd - 1)
-            depth += depth_ - first_time_read_input - (self.cols_in - 1) * math.ceil(1/f_coarseIn) * (self.kd - 1) - math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1)
+            # depth_ = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
+            #         math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
+            #         math.ceil(1/f_coarseIn) * (self.kd - 1)
+            # depth += depth_ - first_time_read_input - (self.cols_in - 1) * math.ceil(1/f_coarseIn) * (self.kd - 1) - math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1)
 
             # Fork Module (FM) Depth and Memory
 

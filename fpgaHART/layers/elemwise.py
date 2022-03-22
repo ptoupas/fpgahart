@@ -143,14 +143,14 @@ class ElementWiseLayer(BaseLayer):
             'elemwise_bc': 0
         }
         if self.broadcasting:
-            depth = 1
+            depth = 2
             # layer_fifos_arrays['elemwise_bc'] = math.ceil(1/coarse_inout) + 1
             final_channel = self.full_shape[1]
             final_depth = self.full_shape[2]
             final_columns = self.full_shape[3]
             final_rows = self.full_shape[4]
         else:
-            depth = 1
+            depth = 2
             final_channel = self.channels_1
             final_depth = self.depth_in_1
             final_columns = self.cols_in_1

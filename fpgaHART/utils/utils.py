@@ -395,6 +395,28 @@ def get_output_node(graph):
         if graph.out_degree[node] == 0:
             return node
 
+def get_branch_start_end_points(graph):
+    result = []
+    split_points = get_split_points(graph)
+    for sp in split_points:
+        merge_point = None
+        next_node = sp
+        extra_split_points = 0
+        while True:
+            if graph.out_degree[next_node] == 1:
+                next_node = list(graph.successors(next_node))[0]
+            elif graph.out_degree[next_node] > 1:
+                extra_split_points += 1
+                next_node = list(graph.successors(next_node))[0]
+
+            if graph.in_degree[next_node] > 1:
+                extra_split_points -= 1
+                if extra_split_points == 0:
+                    merge_point = next_node
+                    break
+        result.append((sp, merge_point))
+    return result
+
 def update_graph(graph, split_points=None, squeeze_layers=None):
     if split_points is None and squeeze_layers is None:
         return graph

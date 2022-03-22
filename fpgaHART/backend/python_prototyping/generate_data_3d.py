@@ -36,6 +36,8 @@ def get_x3d_m_layer_type(layer_order):
 		return "type_first"
 	elif layer_order == LAYER_TYPE_5:
 		return "type_last"
+	elif layer_order == ['Relu', 'Conv', 'Relu', 'Conv', 'GlobalAveragePool', 'Conv', 'Relu', 'Conv', 'Sigmoid', 'Mul', 'Swish', 'Conv']:
+		return "type_seq"
 	else:
 		raise Exception("Unknown layer type")
 
@@ -432,6 +434,22 @@ def part_3d(file_format, config_file, prefix):
 				self.weights_2 = self.conv2.weight
 				self.conv3 = self.create_conv_layer(2)
 				self.weights_3 = self.conv3.weight
+			elif self.layer_type == "type_seq":
+				self.relu1 = nn.ReLU()
+				self.conv1 = self.create_conv_layer(0)
+				self.weights_1 = self.conv1.weight
+				self.relu2 = nn.ReLU()
+				self.conv2 = self.create_conv_layer(1)
+				self.weights_2 = self.conv2.weight
+				self.gap1  = nn.AdaptiveAvgPool3d(1)
+				self.conv3 = self.create_conv_layer(2)
+				self.weights_3 = self.conv3.weight
+				self.relu3 = nn.ReLU()
+				self.conv4 = self.create_conv_layer(3)
+				self.weights_4 = self.conv4.weight
+				self.sigmoid1 = nn.Sigmoid()
+				self.conv5 = self.create_conv_layer(4)
+				self.weights_5 = self.conv5.weight
 			elif self.layer_type == "type_first":
 				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
 			elif self.layer_type == "type_last":
@@ -497,6 +515,21 @@ def part_3d(file_format, config_file, prefix):
 				x = self.conv3(x)
 				x = x + relu1_out
 				return x
+			elif self.layer_type == "type_seq":
+				x = self.relu1(x)
+				x = self.conv1(x)
+				x = self.relu2(x)
+				x = self.conv2(x)
+				conv2_out = x
+				x = self.gap1(x)
+				x = self.conv3(x)
+				x = self.relu3(x)
+				x = self.conv4(x)
+				x = self.sigmoid1(x)
+				x = x * conv2_out
+				x = self.swish(x)
+				x = self.conv5(x)
+				return x
 			elif self.layer_type == "type_first":
 				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
 			elif self.layer_type == "type_last":
@@ -547,6 +580,12 @@ def part_3d(file_format, config_file, prefix):
 				self.transform_store_weights(self.weights_1, 0)
 				self.transform_store_weights(self.weights_2, 1)
 				self.transform_store_weights(self.weights_3, 2)
+			elif self.layer_type == "type_seq":
+				self.transform_store_weights(self.weights_1, 0)
+				self.transform_store_weights(self.weights_2, 1)
+				self.transform_store_weights(self.weights_3, 2)
+				self.transform_store_weights(self.weights_4, 3)
+				self.transform_store_weights(self.weights_5, 4)
 			elif self.layer_type == "type_first":
 				raise Exception(f"Layer type {self.layer_type} is not implemented yet")
 			elif self.layer_type == "type_last":

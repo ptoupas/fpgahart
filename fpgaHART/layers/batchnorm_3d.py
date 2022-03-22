@@ -93,7 +93,7 @@ class BatchNorm3DLayer(BaseLayer):
         max_parallel_muls = math.ceil(self.channels * coarse_inout)
         max_parallel_adds = math.ceil(self.channels * coarse_inout)
         layer_fifos_arrays = {}
-        depth = 1
+        depth = 2
 
         latency_sec, latency_cycles, thr_in, thr_out, dsps_util, dsp_raw, bram_util, bram_raw, memKBs = self.get_dp_performance(workload_matrix, ii_matrix, max_parallel_muls, max_parallel_adds, layer_fifos_arrays, depth, coarse_inout=coarse_inout)
         total_ops = self.get_total_workload()

@@ -110,7 +110,7 @@ class ActivationLayer(BaseLayer):
         if self.activation_type == 'Relu':
             max_parallel_muls = 0
             max_parallel_adds = 0
-            depth = 1
+            depth = 2
         elif self.activation_type == 'Sigmoid':
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
             max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
