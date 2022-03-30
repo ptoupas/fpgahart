@@ -69,11 +69,44 @@ class PartitionParser():
         PG = nx.nx_pydot.to_pydot(graph)
         PG.write_png(path + ".png")
 
+    def update_shapes(self, layer, channels_reduction_rate=2, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1):
+        for i, node_in in enumerate(self.model_descriptor.layers[layer]['shape_in']):
+            new_shape_in = node_in.copy()
+            new_shape_in[1] = new_shape_in[1] // channels_reduction_rate
+            new_shape_in[2] = new_shape_in[2] // depth_reduction_rate if new_shape_in[2] > 1 else 1
+            new_shape_in[3] = new_shape_in[3] // height_reduction_rate if new_shape_in[3] > 1 else 1
+            new_shape_in[4] = new_shape_in[4] // width_reduction_rate if new_shape_in[4] > 1 else 1
+            self.model_descriptor.layers[layer]['shape_in'][i] = new_shape_in
+
+        new_shape_out = self.model_descriptor.layers[layer]['shape_out'].copy()
+        new_shape_out[1] = new_shape_out[1] // channels_reduction_rate
+        new_shape_out[2] = new_shape_out[2] // depth_reduction_rate if new_shape_out[2] > 1 else 1
+        new_shape_out[3] = new_shape_out[3] // height_reduction_rate if new_shape_out[3] > 1 else 1
+        new_shape_out[4] = new_shape_out[4] // width_reduction_rate if new_shape_out[4] > 1 else 1
+        self.model_descriptor.layers[layer]['shape_out'] = new_shape_out
+
+        if self.model_descriptor.layers[layer]['operation'] == 'Conv':
+            new_kernel_shape = self.model_descriptor.layers[layer]['kernel'].copy()
+            new_kernel_shape[0] = new_kernel_shape[0] // channels_reduction_rate if new_kernel_shape[0] > 1 else 1
+            new_kernel_shape[1] = new_kernel_shape[1] // channels_reduction_rate if new_kernel_shape[1] > 1 else 1
+            self.model_descriptor.layers[layer]['kernel'] = new_kernel_shape
+            
+            if self.model_descriptor.layers[layer]['bias']:
+                new_bias = self.model_descriptor.layers[layer]['bias'].copy()
+                new_bias[0] = new_bias[0] // channels_reduction_rate
+                self.model_descriptor.layers[layer]['bias'] = new_bias
+
+            if self.model_descriptor.layers[layer]['groups'] > 1:
+                new_groups = self.model_descriptor.layers[layer]['groups'] // channels_reduction_rate
+                self.model_descriptor.layers[layer]['groups'] = new_groups
+
     def create_graph(self, partition):
         graph = nx.DiGraph()
         print("*"*40)
         for layer in partition:
             print("Adding {} layer to graph...".format(layer))
+            # if not 'Gemm_401' in partition:
+            #     self.update_shapes(layer, channels_reduction_rate=4, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1)
             if self.model_descriptor.layers[layer]['operation'] == 'GlobalAveragePool':
                 hw_layer = GAPLayer(self.model_descriptor.layers[layer])
                 layer_type = self.model_descriptor.layers[layer]['operation']
@@ -255,6 +288,13 @@ class PartitionParser():
             csv_writer = csv.writer(partition_dp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(["Part", "Latency(C)-No-Depth", "Latency(C)", "Latency(S)", "GOP/s", "GOPs", "volumes/s", "DSP(%)", "BRAM(%)", "RateIn", "RateOut", "Depth", "Branch Depth", "Muls", "Adds", "Mem(W)", "Mem(KB)", "DataSizeIn(MB)", "DataSizeOut(MB)", "MemBoundIn", "MemBoundOut", "config", "memconfig"])
 
+        # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90']
+        # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90', 'Mul_91', 'Swish_92']
+        # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90', 'Mul_91', 'Swish_92', 'Conv_94']
+        custom_partition = ['Swish_92', 'Conv_94']
+
+        self.model_partition(custom_partition, name="Sequential")
+        exit()
 
         custom_partition = ['Custom_Conv_1']
         # self.model_descriptor.layers['Custom_Gap_1'] = {'operation': 'GlobalAveragePool',
@@ -263,32 +303,32 @@ class PartitionParser():
         #                                                 'node_in': ['606'],
         #                                                 'node_out': '608',
         #                                                 'branching': False}
-        self.model_descriptor.layers['Custom_Conv_1'] = {'operation': 'Conv',
-                                                                'shape_in': [[1, 12, 16, 16, 16]],
-                                                                'shape_out': [1, 12, 16, 16, 16],
-                                                                'node_in': ['2'],
-                                                                'node_out': '3',
-                                                                'branching': False,
-                                                                'kernel': [12, 1, 3, 3, 3],
-                                                                'bias': [],
-                                                                'padding': [1, 1, 1],
-                                                                'stride': [1, 1, 1],
-                                                                'groups': 12,
-                                                                'dilation': [1, 1, 1]}
+        # self.model_descriptor.layers['Custom_Conv_1'] = {'operation': 'Conv',
+        #                                                         'shape_in': [[1, 12, 8, 16, 16]],
+        #                                                         'shape_out': [1, 12, 8, 16, 16],
+        #                                                         'node_in': ['2'],
+        #                                                         'node_out': '3',
+        #                                                         'branching': False,
+        #                                                         'kernel': [12, 1, 3, 3, 3],
+        #                                                         'bias': [],
+        #                                                         'padding': [1, 1, 1],
+        #                                                         'stride': [1, 1, 1],
+        #                                                         'groups': 12,
+        #                                                         'dilation': [1, 1, 1]}
         self.model_descriptor.layers['Custom_Conv_2'] = {'operation': 'Conv',
-                                                                'shape_in': [[1, 12, 16, 16, 16]],
-                                                                'shape_out': [1, 24, 16, 16, 16],
+                                                                'shape_in': [[1, 12, 8, 16, 16]],
+                                                                'shape_out': [1, 24, 8, 16, 16],
                                                                 'node_in': ['2'],
                                                                 'node_out': '3',
                                                                 'branching': False,
                                                                 'kernel': [24, 12, 1, 1, 1],
                                                                 'bias': [],
                                                                 'padding': [0, 0, 0],
-                                                                'stride': [1, 1, 1],
+                                                                'stride': [1, 2, 2],
                                                                 'groups': 1,
                                                                 'dilation': [1, 1, 1]}
-        # self.model_partition(custom_partition, name="Single_Layer")
-        # exit()
+        self.model_partition(custom_partition, name="Single_Layer")
+        exit()
 
 
         custom_partition = ['Custom_Relu', 'Custom_Conv_1', 'Custom_Swish', 'Custom_Add']
