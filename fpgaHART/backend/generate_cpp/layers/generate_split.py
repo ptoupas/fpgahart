@@ -1,5 +1,7 @@
-from .codegen import *
 import os
+
+from .codegen import *
+
 
 def generate_split_cpp(name, config, partition_name):
     batch_size = config['shape_out'][0]

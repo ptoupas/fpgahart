@@ -1,6 +1,7 @@
-from .layer_descriptor import ModelLayerDescriptor
-from collections import deque
 import logging
+from collections import deque
+
+from .layer_descriptor import ModelLayerDescriptor
 
 logging.basicConfig(level=logging.WARNING)
 
