@@ -4,6 +4,7 @@ import os
 import time
 from multiprocessing import Pool
 
+import mlflow
 import networkx as nx
 import numpy as np
 
@@ -78,9 +79,11 @@ class PartitionParser:
         return nodes
 
     @staticmethod
-    def visualize_graph(graph, path):
+    def visualize_graph(graph, path, run_id=None):
         PG = nx.nx_pydot.to_pydot(graph)
         PG.write_png(path + ".png")
+        with mlflow.start_run(run_id=run_id):
+            mlflow.log_artifact(path + ".png")
 
     def update_shapes(
         self,
@@ -235,14 +238,18 @@ class PartitionParser:
                 )
             branch_buffer += max_shape
 
+        with mlflow.start_run(run_name=name) as run:
+            run_id = run.info.run_id
         self.visualize_graph(
-            graph, os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name
+            graph,
+            os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name,
+            run_id,
         )
 
         print("Partition: {}: ".format(name))
         # optimizer = SimulatedAnnealing(graph, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx)
         optimizer = SimulatedAnnealing(
-            graph, partition_name=name, gap_approx=self.gap_approx
+            graph, partition_name=name, gap_approx=self.gap_approx, ml_flow_id=run_id
         )
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()

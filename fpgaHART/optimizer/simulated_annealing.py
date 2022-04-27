@@ -5,6 +5,7 @@ import os
 import random
 from collections import deque
 
+import mlflow
 import networkx as nx
 import numpy as np
 import scipy.constants as sc
@@ -33,9 +34,11 @@ class SimulatedAnnealing(BaseLayer):
         cooling_rate=0.99,
         partition_name="",
         gap_approx=False,
+        ml_flow_id=None,
     ):
         super().__init__()
         self.gap_approx = gap_approx
+        self.ml_flow_id = ml_flow_id
         self.part_name = partition_name
 
         self.partition_composer = PartitionComposer()
@@ -567,69 +570,91 @@ class SimulatedAnnealing(BaseLayer):
         best_solution_mem = None
         best_solution_dp = None
         best_latency = 1000
-        for i in range(4):
-            config, cost, dp_info, mem_bw, slowest_nodes = self.initialize_optimizer()
+        with mlflow.start_run(run_id=self.ml_flow_id):
+            for i in range(1):
 
-            prev_state = config
-            prev_cost = cost
-            solution_dp = dp_info
-            solution_mem = mem_bw
+                (
+                    config,
+                    cost,
+                    dp_info,
+                    mem_bw,
+                    slowest_nodes,
+                ) = self.initialize_optimizer()
 
-            current_temp = self.t_max
-            count = 0
-            print(
-                f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
-            )
-            while current_temp > self.t_min:
+                prev_state = config
+                prev_cost = cost
+                solution_dp = dp_info
+                solution_mem = mem_bw
 
-                for i in range(self.iterationPerTemp):
-                    count += 1
-                    (
-                        new_state,
-                        new_mem_bw,
-                        param_count,
-                        param_perc,
-                    ) = self.generate_random_config(
-                        neighbours=True,
-                        prev_state=prev_state,
-                        slowest_nodes=slowest_nodes,
-                    )
-                    new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
-                    if new_cost is not None:
-                        slowest_nodes = new_dp_info["slowestNodes"]
+                current_temp = self.t_max
+                count = 0
+                print(
+                    f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
+                )
+                while current_temp > self.t_min:
+                    mlflow.log_metric("running_temp", current_temp)
+                    mlflow.log_metric("running_latency", prev_cost)
+                    for i in range(self.iterationPerTemp):
+                        count += 1
+                        (
+                            new_state,
+                            new_mem_bw,
+                            param_count,
+                            param_perc,
+                        ) = self.generate_random_config(
+                            neighbours=True,
+                            prev_state=prev_state,
+                            slowest_nodes=slowest_nodes,
+                        )
+                        new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+                        if new_cost is not None:
+                            slowest_nodes = new_dp_info["slowestNodes"]
 
-                    if new_cost is None:
-                        continue
+                        if new_cost is None:
+                            continue
 
-                    cost_diff = prev_cost - new_cost
-                    if cost_diff >= 0:
-                        prev_state = copy.deepcopy(new_state)
-                        prev_cost = copy.deepcopy(new_cost)
-                        solution_mem, solution_dp = copy.deepcopy(
-                            new_mem_bw
-                        ), copy.deepcopy(new_dp_info)
-                    else:
-                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
+                        cost_diff = prev_cost - new_cost
+                        if cost_diff >= 0:
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
                             solution_mem, solution_dp = copy.deepcopy(
                                 new_mem_bw
                             ), copy.deepcopy(new_dp_info)
+                        else:
+                            if random.uniform(0, 1) < math.exp(
+                                cost_diff / current_temp
+                            ):
+                                prev_state = copy.deepcopy(new_state)
+                                prev_cost = copy.deepcopy(new_cost)
+                                solution_mem, solution_dp = copy.deepcopy(
+                                    new_mem_bw
+                                ), copy.deepcopy(new_dp_info)
 
-                current_temp *= self.cooling_rate
+                    current_temp *= self.cooling_rate
+                    print(
+                        f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
+                        end="\r",
+                    )
+
                 print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
-                    end="\r",
+                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}"
                 )
 
-            print(
-                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}"
-            )
+                if prev_cost < best_latency:
+                    best_latency = prev_cost
+                    best_solution_mem = solution_mem
+                    best_solution_dp = solution_dp
 
-            if prev_cost < best_latency:
-                best_latency = prev_cost
-                best_solution_mem = solution_mem
-                best_solution_dp = solution_dp
+        with mlflow.start_run(run_id=self.ml_flow_id):
+            mlflow.log_metric("Latency-C", best_solution_dp["latency(C)"])
+            mlflow.log_metric("Latency-S", best_solution_dp["latency(S)"])
+            mlflow.log_metric("GOP/s", best_solution_dp["GOP/s"])
+            mlflow.log_metric("vols/s", best_solution_dp["vols/s"])
+            mlflow.log_metric("DSP", best_solution_dp["DSP"])
+            mlflow.log_metric("BRAM", best_solution_dp["BRAM"])
+
+            # with mlflow.start_run(nested=True):
+            mlflow.log_dict(best_solution_dp["config"], "config")
 
         print(
             f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."

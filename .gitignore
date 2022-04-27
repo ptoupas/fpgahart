@@ -2,6 +2,7 @@
 __pycache__/
 generated_files/
 generated_data/
+mlruns/
 *.py[cod]
 *$py.class
 **/*.pyc
