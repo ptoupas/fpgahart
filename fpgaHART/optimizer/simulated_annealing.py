@@ -654,7 +654,7 @@ class SimulatedAnnealing(BaseLayer):
             mlflow.log_metric("BRAM", best_solution_dp["BRAM"])
 
             # with mlflow.start_run(nested=True):
-            mlflow.log_dict(best_solution_dp["config"], "config")
+            mlflow.log_dict(best_solution_dp["config"], "config.json")
 
         print(
             f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
