@@ -2,11 +2,14 @@ import csv
 import itertools
 import os
 import time
+from collections import Counter
 from multiprocessing import Pool
 
 import mlflow
 import networkx as nx
 import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
 
 from ..layers.activation import ActivationLayer
 from ..layers.batchnorm_3d import BatchNorm3DLayer
@@ -20,6 +23,16 @@ from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
 from .layer_compose import layer_compose
 from .partition_compose import PartitionComposer
+
+# logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
+# logger = logging.getLogger()
+# logger.setLevel("INFO")
+# handler = logging.StreamHandler()
+# handler.setLevel("INFO")
+# formatter = logging.Formatter(("%(levelname)s -> %(message)s"))
+# handler.setFormatter(formatter)
+# logger.addHandler(handler)
+# coloredlogs.install(level="INFO", logger=logger)
 
 
 def multithreaded_modeling(operation, input, pool):
@@ -207,6 +220,40 @@ class PartitionParser:
             graph.add_edge(*edge)
 
         return graph
+
+    @staticmethod
+    def get_conv_type(layer):
+        conv_type = "Conv"
+        cin = layer["kernel"][1]
+        cout = layer["kernel"][0]
+        kernel_shape = layer["kernel"][2:]
+        padding = layer["padding"]
+        stride = layer["stride"]
+        groups = layer["groups"]
+        if cin == 1 and groups == cout:
+            conv_type += "Dw"
+        if kernel_shape.count(1) == len(kernel_shape):
+            conv_type += "Pw"
+        conv_type += "k{}".format("".join(map(str, kernel_shape)))
+        conv_type += "s{}".format("".join(map(str, stride)))
+        conv_type += "p{}".format("".join(map(str, padding)))
+        return conv_type
+
+    def find_common_layers(self):
+        layers = []
+        for layer, config in self.model_descriptor.layers.items():
+            if config["operation"] == "Conv":
+                layers.append(self.get_conv_type(config))
+            else:
+                layers.append(config["operation"])
+        # print(Counter(layers))
+        df = pd.DataFrame.from_dict(Counter(layers), orient="index").sort_index(
+            ascending=False
+        )
+        df.plot(kind="barh")
+        plt.tight_layout()
+        plt.legend().remove()
+        plt.show()
 
     def model_partition(self, partition, name):
 
@@ -465,8 +512,9 @@ class PartitionParser:
 
         start = time.time()
         for i, partition in enumerate(self.model_descriptor.partitions):
-            part_name = "part_{}".format(i)
-            self.model_partition(partition, name=part_name)
+            if i == 1 or i == 2:
+                part_name = "part_{}".format(i)
+                self.model_partition(partition, name=part_name)
         end = time.time()
         print("Partition modeling took {:.2f} seconds".format(end - start))
 

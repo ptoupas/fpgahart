@@ -66,4 +66,5 @@ if __name__ == "__main__":
 
     # parser.model_custom_partition()
     # parser.model_individual_layers()
-    parser.parse()
+    # parser.parse()
+    parser.find_common_layers()
