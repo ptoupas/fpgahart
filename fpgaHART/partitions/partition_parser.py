@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from nltk import ngrams
 
 from ..layers.activation import ActivationLayer
 from ..layers.batchnorm_3d import BatchNorm3DLayer
@@ -239,17 +240,37 @@ class PartitionParser:
         conv_type += "p{}".format("".join(map(str, padding)))
         return conv_type
 
-    def find_common_layers(self):
+    def find_common_layers(self, groupping=1):
+        network_string = ""
         layers = []
         for layer, config in self.model_descriptor.layers.items():
+            layers.append(layer)
             if config["operation"] == "Conv":
-                layers.append(self.get_conv_type(config))
+                network_string += (
+                    "_{}".format(self.get_conv_type(config))
+                    if network_string != ""
+                    else self.get_conv_type(config)
+                )
             else:
-                layers.append(config["operation"])
-        # print(Counter(layers))
-        df = pd.DataFrame.from_dict(Counter(layers), orient="index").sort_index(
-            ascending=False
-        )
+                network_string += (
+                    "_{}".format(config["operation"])
+                    if network_string != ""
+                    else config["operation"]
+                )
+
+        # graph = self.create_graph(layers)
+        # self.visualize_graph(graph, os.getcwd())
+
+        net_grams = ngrams(network_string.split("_"), groupping)
+
+        common_layers = []
+        for gram in net_grams:
+            common_layers.append("_".join(map(str, gram)))
+        net_grams_dict = dict(Counter(common_layers))
+
+        df = pd.DataFrame.from_dict(net_grams_dict, orient="index").sort_values(
+            by=0
+        )  # .sort_index(ascending=False)
         df.plot(kind="barh")
         plt.tight_layout()
         plt.legend().remove()
