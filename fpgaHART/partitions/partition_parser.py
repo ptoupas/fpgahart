@@ -206,7 +206,11 @@ class PartitionParser:
                 assert False, "{} operation in layer {} is not supported".format(
                     self.model_descriptor.layers[layer]["operation"], layer
                 )
-            graph.add_node(layer, type=layer_type, hw=hw_layer)
+            if self.model_descriptor.layers[layer]["operation"] == "Conv":
+                hw_type = self.get_conv_type(self.model_descriptor.layers[layer])
+            else:
+                hw_type = self.model_descriptor.layers[layer]["operation"]
+            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
         print("*" * 40)
 
         edges = []
@@ -241,6 +245,27 @@ class PartitionParser:
         return conv_type
 
     def find_common_layers(self, groupping=1):
+        """
+        Finds combinations of layers in the model that can be mapped together into a single hardware IP.
+        Currently, the following assumptions are made:
+            1. The cannot be combinations containing either layers that split the graph into branches or layers that
+                merge the branches back.
+
+        Args:
+            groupping (int, optional): Number of layers to group together as combined HW building blocks.
+        """
+
+        def validate_combination(combs):
+            prev_layer = None
+            for val in combs:
+                if prev_layer is None:
+                    prev_layer = val
+                    continue
+                if val not in list(graph.successors((prev_layer))):
+                    return False
+                prev_layer = val
+            return True
+
         network_string = ""
         layers = []
         for layer, config in self.model_descriptor.layers.items():
@@ -258,23 +283,136 @@ class PartitionParser:
                     else config["operation"]
                 )
 
-        # graph = self.create_graph(layers)
-        # self.visualize_graph(graph, os.getcwd())
+        graph = self.create_graph(layers)
+        self.visualize_graph(
+            graph,
+            os.getcwd() + "/fpga_modeling_reports/layer_grouppings/graph_complete",
+        )
 
-        net_grams = ngrams(network_string.split("_"), groupping)
+        group_type_count = 0
+        count = 0
+        while True:
+            valid_combinations = list(
+                filter(
+                    validate_combination,
+                    itertools.combinations(list(graph.nodes()), groupping),
+                )
+            )
 
-        common_layers = []
-        for gram in net_grams:
-            common_layers.append("_".join(map(str, gram)))
-        net_grams_dict = dict(Counter(common_layers))
+            valid_combinations_types = []
+            for c in valid_combinations:
+                type_conb = tuple()
+                for n in c:
+                    if n not in graph.nodes():
+                        continue
+                    type_conb += (graph.nodes[n]["hw_type"],)
+                valid_combinations_types.append(type_conb)
 
-        df = pd.DataFrame.from_dict(net_grams_dict, orient="index").sort_values(
-            by=0
-        )  # .sort_index(ascending=False)
-        df.plot(kind="barh")
-        plt.tight_layout()
-        plt.legend().remove()
-        plt.show()
+            if len(valid_combinations_types) == 0:
+                break
+            comb_dict = dict(Counter(valid_combinations_types))
+            comb_dict = {
+                k: v
+                for k, v in sorted(
+                    comb_dict.items(), key=lambda item: item[1], reverse=True
+                )
+            }
+            # print(comb_dict)
+            if comb_dict[list(comb_dict.keys())[0]] <= 1:
+                break
+            frequent_comb = list(comb_dict.keys())[0]
+
+            for c in valid_combinations:
+                type_conb = tuple()
+                for n in c:
+                    if n not in graph.nodes():
+                        continue
+                    type_conb += (graph.nodes[n]["hw_type"],)
+                drop_nodes = []
+                drop_edges = []
+                add_nodes = []
+                add_edges = []
+                if type_conb == frequent_comb:
+                    underlying_layers_hw = dict()
+                    underlying_layers = []
+                    underlying_layers_type = []
+                    for n in c:
+                        drop_nodes.append(n)
+                        edges_in = list(graph.in_edges(n))
+                        drop_edges += edges_in
+                        edges_out = list(graph.out_edges(n))
+                        drop_edges += edges_out
+                        if "group" in n:
+                            underlying_layers += graph.nodes[n]["underlying_layers"]
+                            underlying_layers_type += graph.nodes[n][
+                                "underlying_layers_type"
+                            ]
+                            underlying_layers_hw.update(graph.nodes[n]["hw"])
+                        else:
+                            underlying_layers.append(n)
+                            underlying_layers_type.append(graph.nodes[n]["hw_type"])
+                            underlying_layers_hw[n] = graph.nodes[n]["hw"]
+                    drop_edges = list(set(drop_edges))
+                    add_nodes.append(
+                        (
+                            f"grouped_layers_{count}_type_{group_type_count}",
+                            dict(
+                                hw_type=f"group_type_{group_type_count}",
+                                underlying_layers=underlying_layers,
+                                underlying_layers_type=underlying_layers_type,
+                                hw=underlying_layers_hw,
+                            ),
+                        )
+                    )
+
+                    for i, n in enumerate(c):
+                        if len(list(graph.predecessors(n))) > 0 and (i == 0):
+                            for ie in graph.predecessors(n):
+                                in_edge = (
+                                    ie,
+                                    f"grouped_layers_{count}_type_{group_type_count}",
+                                )
+                                add_edges += [in_edge]
+                        if len(list(graph.successors(n))) > 0 and (i == len(c) - 1):
+                            for oe in graph.successors(n):
+                                out_edge = (
+                                    f"grouped_layers_{count}_type_{group_type_count}",
+                                    oe,
+                                )
+                                add_edges += [out_edge]
+                        if len(list(graph.successors(n))) > 0 and (
+                            graph.in_degree(n) > 1
+                        ):
+                            for ie in graph.in_edges(n):
+                                if ie[0] not in drop_nodes:
+                                    in_edge = (
+                                        ie[0],
+                                        f"grouped_layers_{count}_type_{group_type_count}",
+                                    )
+                                    add_edges += [in_edge]
+                        if len(list(graph.successors(n))) > 0 and (
+                            graph.out_degree(n) > 1
+                        ):
+                            for oe in graph.out_edges(n):
+                                if oe[1] not in drop_nodes:
+                                    out_edge = (
+                                        f"grouped_layers_{count}_type_{group_type_count}",
+                                        oe[1],
+                                    )
+                                    add_edges += [out_edge]
+                    print(f"replacing {c} with group type: {group_type_count}")
+                    count += 1
+                if len(add_edges) > 0:
+                    graph.remove_nodes_from(drop_nodes)
+                    graph.remove_edges_from(drop_edges)
+                    graph.add_nodes_from(add_nodes)
+                    graph.add_edges_from(add_edges)
+            self.visualize_graph(
+                graph,
+                os.getcwd()
+                + f"/fpga_modeling_reports/layer_grouppings/graph_groups_{group_type_count}_{count}",
+            )
+            group_type_count += 1
 
     def model_partition(self, partition, name):
 
