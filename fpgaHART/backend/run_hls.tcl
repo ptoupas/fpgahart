@@ -27,8 +27,8 @@ set_top $top_level
 # ########################################################
 # Create a solution
 open_solution -reset solution1 -flow_target vivado
-# Define technology and clock rate
-set_part {xczu9eg-ffvb1156-2-e}
+# Define technology and clock rate # ZCU104==xczu7ev-ffvc1156-2-e, ZCU102==xczu9eg-ffvb1156-2-e
+set_part {xczu7ev-ffvc1156-2-e}
 create_clock -period 7 -name default
 config_dataflow -default_channel fifo
 
