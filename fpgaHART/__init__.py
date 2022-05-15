@@ -31,11 +31,11 @@ class CustomFormatter(logging.Formatter):
     @staticmethod
     def get_logger():
         logger = logging.getLogger('fpgaHART')
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
 
         # create console handler with a higher log level
         ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
+        ch.setLevel(logging.DEBUG)
 
         ch.setFormatter(CustomFormatter())
 
