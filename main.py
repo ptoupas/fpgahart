@@ -61,11 +61,11 @@ if __name__ == "__main__":
     _logger.setLevel(level=logging.DEBUG)
 
     parser = PartitionParser(
-        args.model_name,
-        args.singlethreaded,
-        args.plot_layers,
-        args.se_block,
-        args.gap_approx,
+        model_name=args.model_name,
+        se_block=args.se_block,
+        gap_approx=args.gap_approx,
+        singlethreaded=args.singlethreaded,
+        per_layer_plot=args.plot_layers,
     )
 
     # parser.model_custom_partition()

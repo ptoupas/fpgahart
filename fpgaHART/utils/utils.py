@@ -5,6 +5,7 @@ import math
 import os
 from functools import reduce
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -147,7 +148,8 @@ def plot_graph(
 
         sns.lineplot(x=pareto_front[:, 0], y=pareto_front[:, 1], color="red")
 
-    sns.scatterplot(x=np.array(throughput), y=np.array(dsp_util), size=bram_util)
+    sns.scatterplot(x=np.array(throughput),
+                    y=np.array(dsp_util), size=bram_util)
 
     plt.title(layer_name)
     plt.xlabel("Throughtput(outputs/sec)")
@@ -232,6 +234,11 @@ def plot_layers_csv(
         file_name = l + ".jpg"
         plt.savefig(os.path.join(plot_dir, file_name))
         plt.clf()
+
+
+def get_nodes_sorted(graph):
+    g_sorted = nx.topological_sort(graph)
+    return list(g_sorted)
 
 
 def generate_layer_config(layer, config):
@@ -399,7 +406,8 @@ def check_configuration_validation(config, layers):
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
             print("config for layer {} -> {}".format(name, comb[i]))
         elif isinstance(layer["layer"], ElementWiseLayer):
-            streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
+            streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams(
+            )
             streams_in1 = math.ceil(streams_in1 * config[i][0])
             streams_in2 = math.ceil(streams_in2 * config[i][1])
             streams_out = math.ceil(streams_out * config[i][2])

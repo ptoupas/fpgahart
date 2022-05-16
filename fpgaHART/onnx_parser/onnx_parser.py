@@ -68,16 +68,14 @@ def add_input_from_initializer(model: onnx.ModelProto):
 
 
 @dataclass
-class OnnxModelParser:
+class OnnxModelParser():
     model_name: str
-    model_path: str = field(init=False)
-    torch_layers: dict = field(default_factory=dict, init=False)
-    onnx_model: onnx.ModelProto = field(init=False)
 
     def __post_init__(self):
         # _logger.setLevel(level=logging.INFO)
         self.model_path = os.path.join(
             os.getcwd(), "models", self.model_name + ".onnx")
+        self.torch_layers = {}
         self.init_onnx_model()
 
     def init_onnx_model(self) -> None:

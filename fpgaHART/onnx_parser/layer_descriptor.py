@@ -1,17 +1,19 @@
 from collections import deque
+from dataclasses import dataclass, field
 
 from fpgaHART import _logger
 
 from .onnx_parser import OnnxModelParser
 
 
+@dataclass
 class ModelLayerDescriptor(OnnxModelParser):
-    def __init__(self, model_name, se_block):
-        super().__init__(model_name)
-        # _logger.setLevel(level=logging.INFO)
+    se_block: bool
 
+    def __post_init__(self):
+        # _logger.setLevel(level=logging.INFO)
+        OnnxModelParser.__post_init__(self)  # Initialize the parent class
         self.layers = {}
-        self.se_block = se_block
         self.create_layers()
 
     def create_layers(self):
@@ -36,6 +38,8 @@ class ModelLayerDescriptor(OnnxModelParser):
             input_node = [self.torch_layers[k]["input_id"][0]]
             if name == "Gemm_401":
                 input_node = self.torch_layers["GlobalAveragePool_391"]["output_id"]
+            if name == "Gemm_352":
+                input_node = self.torch_layers["GlobalAveragePool_342"]["output_id"]
             output_node = self.torch_layers[k]["output_id"]
 
             self.layers[name] = {
