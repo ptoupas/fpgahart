@@ -1,9 +1,7 @@
-import logging
 from collections import deque
 
 from .layer_descriptor import ModelLayerDescriptor
 
-logging.basicConfig(level=logging.WARNING)
 
 class PartitionDescriptor(ModelLayerDescriptor):
     def __init__(self, model_name, se_block):

@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import logging
 import os
 import time
 from multiprocessing import Pool
@@ -8,6 +9,7 @@ import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
 
+from fpgaHART import _logger
 from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
 from fpgaHART.layers.elemwise import ElementWiseLayer
 from fpgaHART.layers.gap import GAPLayer
@@ -55,6 +57,8 @@ def multithreaded_modeling(operation, input, pool):
 
 if __name__ == "__main__":
     args = parse_args()
+
+    _logger.setLevel(level=logging.DEBUG)
 
     parser = PartitionParser(
         args.model_name,
