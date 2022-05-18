@@ -9,7 +9,11 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from fpgaHART import _logger
 from matplotlib import pyplot as plt
+from scipy.spatial.distance import cdist
+from sklearn import metrics
+from sklearn.cluster import KMeans
 
 from ..layers.activation import ActivationLayer
 from ..layers.batchnorm_3d import BatchNorm3DLayer
@@ -592,3 +596,71 @@ def add_supportive_nodes_config(graph, config):
                 else config[parent_node_1]["coarse_out_factor"],
             }
     return config
+
+
+def normalizeData(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+
+def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
+    X = np.array(channels).reshape(-1, 1)
+
+    distortions = []
+    inertias = []
+    mapping1 = {}
+    mapping2 = {}
+    K = range(1, 10)
+
+    for k in K:
+        # Building and fitting the model
+        kmeanModel = KMeans(n_clusters=k).fit(X)
+
+        distortions.append(sum(np.min(cdist(X, kmeanModel.cluster_centers_,
+                                            'euclidean'), axis=1)) / X.shape[0])
+        inertias.append(kmeanModel.inertia_)
+
+        mapping1[k] = sum(np.min(cdist(X, kmeanModel.cluster_centers_,
+                                       'euclidean'), axis=1)) / X.shape[0]
+        mapping2[k] = kmeanModel.inertia_
+
+    distortions_res = normalizeData(
+        np.array(sorted(mapping1.values(), reverse=True)))
+    k_dist = 0
+    for i in range(len(distortions_res)-1):
+        dist = np.linalg.norm(distortions_res[i]-distortions_res[i+1])
+        if dist < 0.05:
+            k_dist = i + 1
+            _logger.info(f"Optimal number of clusters calculated: {i + 1}")
+            break
+
+    Kmean = KMeans(n_clusters=k_dist)
+    Kmean.fit(X)
+    kmeans_bins = np.sort(Kmean.cluster_centers_[:, 0])
+
+    if plot_lbow:
+        plt.plot(K, distortions, 'bx-')
+        plt.xlabel('Values of K')
+        plt.ylabel('Distortion')
+        plt.title('The Elbow Method using Distortion')
+        plt.show()
+
+    # inertias_res = normalizeData(
+    #     np.array(sorted(mapping2.values(), reverse=True)))
+    # k_inertia = 0
+    # for i in range(len(inertias_res)-1):
+    #     dist = np.linalg.norm(inertias_res[i]-inertias_res[i+1])
+    #     if dist < 0.1:
+    #         k_inertia = i + 1
+    #         print(f"{i + 1} -> {dist}")
+    #         break
+
+    df = pd.DataFrame({'channels': channels})
+    df['channels_bin'] = pd.qcut(df['channels'], q=k_dist)
+    bin_edges = df['channels_bin'].unique()
+
+    # bin_edges = np.histogram_bin_edges(X, bins=k_dist+1)
+    if plot_hist:
+        sns.histplot(X, bins=X.shape[0], kde=True)
+        plt.show()
+
+    return bin_edges

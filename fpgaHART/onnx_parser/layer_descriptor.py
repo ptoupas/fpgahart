@@ -16,7 +16,7 @@ class ModelLayerDescriptor(OnnxModelParser):
         self.layers = {}
         self.create_layers()
 
-    def create_layers(self):
+    def create_layers(self) -> None:
         if self.se_block:
             se_module = deque(maxlen=6)
         swish_module = deque(maxlen=2)
