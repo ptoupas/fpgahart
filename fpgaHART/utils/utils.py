@@ -642,6 +642,7 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
         plt.xlabel('Values of K')
         plt.ylabel('Distortion')
         plt.title('The Elbow Method using Distortion')
+        plt.tight_layout()
         plt.show()
 
     # inertias_res = normalizeData(
@@ -660,7 +661,8 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
 
     # bin_edges = np.histogram_bin_edges(X, bins=k_dist+1)
     if plot_hist:
-        sns.histplot(X, bins=X.shape[0], kde=True)
+        sns.histplot(X, bins=X.shape[0])
+        plt.tight_layout()
         plt.show()
 
     return bin_edges

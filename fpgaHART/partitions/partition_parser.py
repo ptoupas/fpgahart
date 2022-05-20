@@ -124,8 +124,7 @@ class PartitionParser(PartitionDescriptor):
         self.layers[layer]["shape_out"] = new_shape_out
 
         if self.layers[layer]["operation"] == "Conv":
-            new_kernel_shape = self.layers[layer]["kernel"].copy(
-            )
+            new_kernel_shape = self.layers[layer]["kernel"].copy()
             new_kernel_shape[0] = (
                 new_kernel_shape[0] // channels_reduction_rate
                 if new_kernel_shape[0] > 1
@@ -144,10 +143,7 @@ class PartitionParser(PartitionDescriptor):
                 self.layers[layer]["bias"] = new_bias
 
             if self.layers[layer]["groups"] > 1:
-                new_groups = (
-                    self.layers[layer]["groups"]
-                    // channels_reduction_rate
-                )
+                new_groups = self.layers[layer]["groups"] // channels_reduction_rate
                 self.layers[layer]["groups"] = new_groups
 
     def create_graph(self, partition: list) -> nx.DiGraph:
@@ -161,8 +157,7 @@ class PartitionParser(PartitionDescriptor):
                 hw_layer = GAPLayer(self.layers[layer])
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
-                hw_layer = Convolutional3DLayer(
-                    self.layers[layer])
+                hw_layer = Convolutional3DLayer(self.layers[layer])
                 layer_type = self.layers[layer]["operation"]
             elif (
                 self.layers[layer]["operation"] == "Relu"
@@ -175,8 +170,7 @@ class PartitionParser(PartitionDescriptor):
                 self.layers[layer]["operation"] == "Mul"
                 or self.layers[layer]["operation"] == "Add"
             ):
-                hw_layer = ElementWiseLayer(
-                    self.layers[layer])
+                hw_layer = ElementWiseLayer(self.layers[layer])
                 layer_type = "ElementWise"
             elif (
                 self.layers[layer]["operation"] == "Gemm"
@@ -184,29 +178,25 @@ class PartitionParser(PartitionDescriptor):
             ):
                 layer_type = self.layers[layer]["operation"]
                 hw_layer = FCLayer(self.layers[layer])
-            elif (
-                self.layers[layer]["operation"] == "SqueezeExcitation"
-            ):
+            elif self.layers[layer]["operation"] == "SqueezeExcitation":
                 layer_type = self.layers[layer]["operation"]
-                hw_layer = SqueezeExcitationLayer(
-                    self.layers[layer])
-            elif (
-                self.layers[layer]["operation"] == "BatchNormalization"
-            ):
+                hw_layer = SqueezeExcitationLayer(self.layers[layer])
+            elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
-                hw_layer = BatchNorm3DLayer(
-                    self.layers[layer])
+                hw_layer = BatchNorm3DLayer(self.layers[layer])
             else:
                 assert False, "{} operation in layer {} is not supported".format(
                     self.layers[layer]["operation"], layer
                 )
             if self.layers[layer]["operation"] == "Conv":
                 hw_type = self.get_conv_type(
-                    layer=self.layers[layer], discriminate_stide=False, discriminate_padding=False)
+                    layer=self.layers[layer],
+                    discriminate_stide=False,
+                    discriminate_padding=False,
+                )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
-            graph.add_node(layer, type=layer_type,
-                           hw=hw_layer, hw_type=hw_type)
+            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
         _logger.info("*" * 40)
 
         edges = []
@@ -268,8 +258,7 @@ class PartitionParser(PartitionDescriptor):
                 ), "Layers input and output shapes does not match"
                 max_shape = max(
                     max_shape,
-                    np.prod(
-                        np.array(graph.nodes[pair[0]]["hw"].output_shape[1:])),
+                    np.prod(np.array(graph.nodes[pair[0]]["hw"].output_shape[1:])),
                 )
             branch_buffer += max_shape
 
@@ -415,7 +404,7 @@ class PartitionParser(PartitionDescriptor):
                 for sub_row in sub_rows:
                     csv_writer.writerow(sub_row)
 
-    def model_layer(self, layer, layer_description):
+    def model_layer(self, layer: str, layer_description: dict) -> None:
         _logger.info("Modeling {} layer...".format(layer))
         throughput_gops, throughput_vols, latency, dsp_util, bram_util = layer_compose(
             layer, layer_description, self.layer_model_file, self.singlethreaded
@@ -504,10 +493,9 @@ class PartitionParser(PartitionDescriptor):
                 part_name = "part_{}".format(i)
                 self.model_partition(partition, name=part_name)
         end = time.time()
-        _logger.info(
-            "Partition modeling took {:.2f} seconds".format(end - start))
+        _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 
-    def model_individual_layers(self):
+    def model_individual_layers(self) -> None:
 
         with open(self.layer_model_file, mode="w") as layer_dp:
             csv_writer = csv.writer(
@@ -516,19 +504,24 @@ class PartitionParser(PartitionDescriptor):
             csv_writer.writerow(
                 [
                     "Layer",
+                    "Latency(C)-No-Depth",
                     "Latency(C)",
                     "Latency(S)",
                     "GOP/s",
+                    "GOPs",
                     "volumes/s",
                     "DSP(%)",
                     "BRAM(%)",
                     "RateIn",
                     "RateOut",
                     "Depth",
+                    "Branch Depth",
                     "Muls",
                     "Adds",
                     "Mem(W)",
                     "Mem(KB)",
+                    "DataSizeIn(MB)",
+                    "DataSizeOut(MB)",
                     "MemBoundIn",
                     "MemBoundOut",
                     "config",
@@ -541,27 +534,49 @@ class PartitionParser(PartitionDescriptor):
             csv_writer.writerow(
                 [
                     "Layer",
+                    "Latency(C)-No-Depth",
                     "Latency(C)",
                     "Latency(S)",
                     "GOP/s",
+                    "GOPs",
                     "volumes/s",
                     "DSP(%)",
                     "BRAM(%)",
                     "RateIn",
                     "RateOut",
                     "Depth",
+                    "Branch Depth",
                     "Muls",
                     "Adds",
                     "Mem(W)",
                     "Mem(KB)",
+                    "DataSizeIn(MB)",
+                    "DataSizeOut(MB)",
                     "MemBoundIn",
                     "MemBoundOut",
                     "config",
                 ]
             )
 
-        for name, descriptor in self.layers.items():
-            self.model_layer(name, descriptor)
+        name = "custom_conv_layer"
+        conv_descriptor = {
+            "operation": "Conv",
+            "shape_in": [[1, 24, 16, 32, 32]],
+            "shape_out": [1, 12, 16, 32, 32],
+            "node_in": ["575"],
+            "node_out": "576",
+            "branching": False,
+            "kernel": [12, 24, 3, 3, 3],
+            "bias": [12],
+            "padding": [1, 1, 1],
+            "stride": [1, 1, 1],
+            "groups": 1,
+            "dilation": [1, 1, 1],
+        }
+        self.model_layer(name, conv_descriptor)
+
+        # for name, descriptor in self.layers.items():
+        #     self.model_layer(name, descriptor)
 
         # utils.drop_duplicates_csv(self.layer_model_file)
         # utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
@@ -723,41 +738,29 @@ class PartitionParser(PartitionDescriptor):
         ]
         # custom_partition = ['Relu_22', 'Conv_23', 'Relu_25', 'Swish_28', 'Conv_30', 'Add_32']
 
-        self.layers["Relu_22"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Relu_22"]["shape_out"] = [
-            1, 8, 6, 12, 12]
+        self.layers["Relu_22"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Relu_22"]["shape_out"] = [1, 8, 6, 12, 12]
 
-        self.layers["Conv_23"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Conv_23"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Conv_23"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Conv_23"]["shape_out"] = [1, 12, 6, 12, 12]
         self.layers["Conv_23"]["kernel"] = [12, 8, 1, 1, 1]
         self.layers["Conv_23"]["bias"] = [12]
 
-        self.layers["Relu_25"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Relu_25"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Relu_25"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Relu_25"]["shape_out"] = [1, 12, 6, 12, 12]
 
-        self.layers["Conv_26"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Conv_26"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Conv_26"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Conv_26"]["shape_out"] = [1, 12, 6, 12, 12]
         self.layers["Conv_26"]["kernel"] = [12, 1, 3, 3, 3]
         self.layers["Conv_26"]["bias"] = [12]
         self.layers["Conv_26"]["groups"] = 12
 
-        self.layers["Swish_28"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Swish_28"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Swish_28"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Swish_28"]["shape_out"] = [1, 12, 6, 12, 12]
         # self.layers['Swish_28']['node_in'] = ['594']
 
-        self.layers["Conv_30"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Conv_30"]["shape_out"] = [
-            1, 8, 6, 12, 12]
+        self.layers["Conv_30"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Conv_30"]["shape_out"] = [1, 8, 6, 12, 12]
         self.layers["Conv_30"]["kernel"] = [8, 12, 1, 1, 1]
         self.layers["Conv_30"]["bias"] = [8]
 
@@ -786,34 +789,24 @@ class PartitionParser(PartitionDescriptor):
         ]
         # custom_partition = ['Conv_37', 'GlobalAveragePool_39', 'Conv_40', 'Relu_41', 'Conv_42', 'Sigmoid_43', 'Mul_44']
 
-        self.layers["Relu_33"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Relu_33"]["shape_out"] = [
-            1, 8, 6, 12, 12]
+        self.layers["Relu_33"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Relu_33"]["shape_out"] = [1, 8, 6, 12, 12]
 
-        self.layers["Conv_34"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Conv_34"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Conv_34"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Conv_34"]["shape_out"] = [1, 12, 6, 12, 12]
         self.layers["Conv_34"]["kernel"] = [12, 8, 1, 1, 1]
         self.layers["Conv_34"]["bias"] = [12]
 
-        self.layers["Relu_36"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Relu_36"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Relu_36"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Relu_36"]["shape_out"] = [1, 12, 6, 12, 12]
 
-        self.layers["Conv_37"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Conv_37"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Conv_37"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Conv_37"]["shape_out"] = [1, 12, 6, 12, 12]
         self.layers["Conv_37"]["kernel"] = [12, 1, 3, 3, 3]
         self.layers["Conv_37"]["bias"] = [12]
         self.layers["Conv_37"]["groups"] = 12
 
-        self.layers["GlobalAveragePool_39"]["shape_in"] = [
-            [1, 12, 6, 12, 12]
-        ]
+        self.layers["GlobalAveragePool_39"]["shape_in"] = [[1, 12, 6, 12, 12]]
         self.layers["GlobalAveragePool_39"]["shape_out"] = [
             1,
             12,
@@ -822,8 +815,7 @@ class PartitionParser(PartitionDescriptor):
             1,
         ]
 
-        self.layers["Conv_40"]["shape_in"] = [
-            [1, 12, 1, 1, 1]]
+        self.layers["Conv_40"]["shape_in"] = [[1, 12, 1, 1, 1]]
         self.layers["Conv_40"]["shape_out"] = [1, 8, 1, 1, 1]
         self.layers["Conv_40"]["kernel"] = [8, 12, 1, 1, 1]
         self.layers["Conv_40"]["bias"] = [8]
@@ -836,27 +828,20 @@ class PartitionParser(PartitionDescriptor):
         self.layers["Conv_42"]["kernel"] = [12, 8, 1, 1, 1]
         self.layers["Conv_42"]["bias"] = [12]
 
-        self.layers["Sigmoid_43"]["shape_in"] = [
-            [1, 12, 1, 1, 1]]
-        self.layers["Sigmoid_43"]["shape_out"] = [
-            1, 12, 1, 1, 1]
+        self.layers["Sigmoid_43"]["shape_in"] = [[1, 12, 1, 1, 1]]
+        self.layers["Sigmoid_43"]["shape_out"] = [1, 12, 1, 1, 1]
 
         self.layers["Mul_44"]["shape_in"] = [
             [1, 12, 6, 12, 12],
             [1, 12, 1, 1, 1],
         ]
-        self.layers["Mul_44"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Mul_44"]["shape_out"] = [1, 12, 6, 12, 12]
 
-        self.layers["Swish_45"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Swish_45"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Swish_45"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Swish_45"]["shape_out"] = [1, 12, 6, 12, 12]
 
-        self.layers["Conv_47"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Conv_47"]["shape_out"] = [
-            1, 8, 6, 12, 12]
+        self.layers["Conv_47"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Conv_47"]["shape_out"] = [1, 8, 6, 12, 12]
         self.layers["Conv_47"]["kernel"] = [8, 12, 1, 1, 1]
         self.layers["Conv_47"]["bias"] = [8]
 
@@ -885,33 +870,24 @@ class PartitionParser(PartitionDescriptor):
             "Add_68",
         ]
 
-        self.layers["Relu_50"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Relu_50"]["shape_out"] = [
-            1, 8, 6, 12, 12]
+        self.layers["Relu_50"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Relu_50"]["shape_out"] = [1, 8, 6, 12, 12]
 
-        self.layers["Conv_51"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
-        self.layers["Conv_51"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Conv_51"]["shape_in"] = [[1, 8, 6, 12, 12]]
+        self.layers["Conv_51"]["shape_out"] = [1, 12, 6, 12, 12]
         self.layers["Conv_51"]["kernel"] = [12, 8, 1, 1, 1]
         self.layers["Conv_51"]["bias"] = [12]
 
-        self.layers["Relu_53"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
-        self.layers["Relu_53"]["shape_out"] = [
-            1, 12, 6, 12, 12]
+        self.layers["Relu_53"]["shape_in"] = [[1, 12, 6, 12, 12]]
+        self.layers["Relu_53"]["shape_out"] = [1, 12, 6, 12, 12]
 
-        self.layers["Conv_54"]["shape_in"] = [
-            [1, 12, 6, 12, 12]]
+        self.layers["Conv_54"]["shape_in"] = [[1, 12, 6, 12, 12]]
         self.layers["Conv_54"]["shape_out"] = [1, 12, 6, 6, 6]
         self.layers["Conv_54"]["kernel"] = [12, 1, 3, 3, 3]
         self.layers["Conv_54"]["bias"] = [12]
         self.layers["Conv_54"]["groups"] = 12
 
-        self.layers["GlobalAveragePool_56"]["shape_in"] = [
-            [1, 12, 6, 6, 6]
-        ]
+        self.layers["GlobalAveragePool_56"]["shape_in"] = [[1, 12, 6, 6, 6]]
         self.layers["GlobalAveragePool_56"]["shape_out"] = [
             1,
             12,
@@ -920,8 +896,7 @@ class PartitionParser(PartitionDescriptor):
             1,
         ]
 
-        self.layers["Conv_57"]["shape_in"] = [
-            [1, 12, 1, 1, 1]]
+        self.layers["Conv_57"]["shape_in"] = [[1, 12, 1, 1, 1]]
         self.layers["Conv_57"]["shape_out"] = [1, 8, 1, 1, 1]
         self.layers["Conv_57"]["kernel"] = [8, 12, 1, 1, 1]
         self.layers["Conv_57"]["bias"] = [8]
@@ -934,10 +909,8 @@ class PartitionParser(PartitionDescriptor):
         self.layers["Conv_59"]["kernel"] = [12, 8, 1, 1, 1]
         self.layers["Conv_59"]["bias"] = [12]
 
-        self.layers["Sigmoid_60"]["shape_in"] = [
-            [1, 12, 1, 1, 1]]
-        self.layers["Sigmoid_60"]["shape_out"] = [
-            1, 12, 1, 1, 1]
+        self.layers["Sigmoid_60"]["shape_in"] = [[1, 12, 1, 1, 1]]
+        self.layers["Sigmoid_60"]["shape_out"] = [1, 12, 1, 1, 1]
 
         self.layers["Mul_61"]["shape_in"] = [
             [1, 12, 6, 6, 6],
@@ -945,19 +918,15 @@ class PartitionParser(PartitionDescriptor):
         ]
         self.layers["Mul_61"]["shape_out"] = [1, 12, 6, 6, 6]
 
-        self.layers["Swish_62"]["shape_in"] = [
-            [1, 12, 6, 6, 6]]
-        self.layers["Swish_62"]["shape_out"] = [
-            1, 12, 6, 6, 6]
+        self.layers["Swish_62"]["shape_in"] = [[1, 12, 6, 6, 6]]
+        self.layers["Swish_62"]["shape_out"] = [1, 12, 6, 6, 6]
 
-        self.layers["Conv_64"]["shape_in"] = [
-            [1, 12, 6, 6, 6]]
+        self.layers["Conv_64"]["shape_in"] = [[1, 12, 6, 6, 6]]
         self.layers["Conv_64"]["shape_out"] = [1, 10, 6, 6, 6]
         self.layers["Conv_64"]["kernel"] = [10, 12, 1, 1, 1]
         self.layers["Conv_64"]["bias"] = [10]
 
-        self.layers["Conv_66"]["shape_in"] = [
-            [1, 8, 6, 12, 12]]
+        self.layers["Conv_66"]["shape_in"] = [[1, 8, 6, 12, 12]]
         self.layers["Conv_66"]["shape_out"] = [1, 10, 6, 6, 6]
         self.layers["Conv_66"]["kernel"] = [10, 8, 1, 1, 1]
         self.layers["Conv_66"]["bias"] = [10]

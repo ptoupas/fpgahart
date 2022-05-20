@@ -1196,23 +1196,16 @@ def conv_3d(
     for i in range(kh):
         for j in range(kw):
             for k in range(kd - 1):
-                assert (
-                    len(window_buffer[i][j][k]) == 0
-                ), "There are still %d values in window_buffer [%d][%d][%d]" % (
-                    len(window_buffer[i][j][k]),
-                    i,
-                    j,
-                    k,
+                assert len(window_buffer[i][j][k]) == 0, (
+                    "There are still %d values in window_buffer [%d][%d][%d]"
+                    % (len(window_buffer[i][j][k]), i, j, k,)
                 )
 
     for i in range(kh):
         for j in range(kw - 1):
-            assert (
-                len(line_buffer[i][j]) == 0
-            ), "There are still %d values in line_buffer [%d][%d]" % (
-                len(line_buffer[i][j]),
-                i,
-                j,
+            assert len(line_buffer[i][j]) == 0, (
+                "There are still %d values in line_buffer [%d][%d]"
+                % (len(line_buffer[i][j]), i, j,)
             )
 
     for i in range(kh - 1):
@@ -1241,10 +1234,10 @@ def parse_args():
     parser.add_argument("--op_type", type=str, required=True)
     parser.add_argument("--prefix", type=str, required=True)
     parser.add_argument(
-        "--input_shape", nargs="+", default=[1, 24, 16, 64, 64], type=int
+        "--input_shape", nargs="+", default=[1, 24, 16, 32, 32], type=int
     )
     parser.add_argument(
-        "--input_shape_2", nargs="+", default=[1, 24, 16, 64, 64], type=int
+        "--input_shape_2", nargs="+", default=[1, 24, 16, 32, 32], type=int
     )
     parser.add_argument("--kernel_shape", nargs="+", default=[3, 3, 3], type=int)
     parser.add_argument("--filters", default=1, type=int)

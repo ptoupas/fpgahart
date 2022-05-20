@@ -2,9 +2,11 @@ import csv
 import itertools
 import os
 from multiprocessing import Pool
+from typing import Tuple
 
 import networkx as nx
 import numpy as np
+from fpgaHART import _logger
 
 from ..layers.activation import ActivationLayer
 from ..layers.batchnorm_3d import BatchNorm3DLayer
@@ -22,7 +24,9 @@ def multithreaded_modeling(operation, input, pool):
     return results
 
 
-def layer_compose(name, description, model_file, singlethreaded):
+def layer_compose(
+    name: str, description: dict, model_file: str, singlethreaded: bool
+) -> Tuple[list, list, list, list, list]:
     if description["operation"] == "Conv":
         return conv_compose(name, description, model_file, singlethreaded)
     elif description["operation"] == "BatchNormalization":
@@ -83,7 +87,7 @@ def conv_compose(name, description, model_file, singlethreaded):
     total = [fine, coarsein, coarseout, mem_bw]
     combinations = itertools.product(*total)
 
-    print(
+    _logger.info(
         "Calculating {} design points for layer {} ({}).".format(
             len(fine) * len(coarsein) * len(coarseout) * len(mem_bw), name, convtype
         )
@@ -127,27 +131,32 @@ def conv_compose(name, description, model_file, singlethreaded):
                     dsp_util.append(r["DSP"])
                     bram_util.append(r["BRAM"])
 
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
+                    # csv_writer.writerow(
+                    #     [
+                    #         name,
+                    #         r["latency(C)"] - r["depth"],
+                    #         r["latency(C)"],
+                    #         r["latency(S)"],
+                    #         r["GOP/s"],
+                    #         r["GOPs"],
+                    #         r["vols/s"],
+                    #         r["DSP"],
+                    #         r["BRAM"],
+                    #         r["rateIn"],
+                    #         r["rateOut"],
+                    #         r["depth"],
+                    #         r["branch_depth"],
+                    #         r["muls"],
+                    #         r["adds"],
+                    #         r["memWords"],
+                    #         r["memKBs"],
+                    #         r["dataSizeIn"],
+                    #         r["dataSizeOut"],
+                    #         r["memBoundedIn"],
+                    #         r["memBoundedOut"],
+                    #         r["config"],
+                    #     ]
+                    # )
 
                     if r["latency(C)"] < min_latency and (
                         r["DSP"] < 90.0 and r["BRAM"] < 90.0
@@ -163,11 +172,11 @@ def conv_compose(name, description, model_file, singlethreaded):
         else:
             for (f, c1, c2, (bw_in, bw_out)) in combinations:
                 r = conv.get_design_point(
-                    f,
-                    c1,
-                    c2,
-                    conv.mem_words_per_cycle * bw_in,
-                    conv.mem_words_per_cycle * bw_out,
+                    f_fine=f,
+                    f_coarseIn=c1,
+                    f_coarseOut=c2,
+                    mem_bw_in=conv.mem_words_per_cycle * bw_in,
+                    mem_bw_out=conv.mem_words_per_cycle * bw_out,
                 )
 
                 if r["config"]:
@@ -177,27 +186,32 @@ def conv_compose(name, description, model_file, singlethreaded):
                     dsp_util.append(r["DSP"])
                     bram_util.append(r["BRAM"])
 
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
+                    # csv_writer.writerow(
+                    #     [
+                    #         name,
+                    #         r["latency(C)"] - r["depth"],
+                    #         r["latency(C)"],
+                    #         r["latency(S)"],
+                    #         r["GOP/s"],
+                    #         r["GOPs"],
+                    #         r["vols/s"],
+                    #         r["DSP"],
+                    #         r["BRAM"],
+                    #         r["rateIn"],
+                    #         r["rateOut"],
+                    #         r["depth"],
+                    #         r["branch_depth"],
+                    #         r["muls"],
+                    #         r["adds"],
+                    #         r["memWords"],
+                    #         r["memKBs"],
+                    #         r["dataSizeIn"],
+                    #         r["dataSizeOut"],
+                    #         r["memBoundedIn"],
+                    #         r["memBoundedOut"],
+                    #         r["config"],
+                    #     ]
+                    # )
 
                     if r["latency(C)"] < min_latency and (
                         r["DSP"] < 90.0 and r["BRAM"] < 90.0
@@ -211,7 +225,33 @@ def conv_compose(name, description, model_file, singlethreaded):
                             min_latency = r["latency(C)"]
                             best = r
 
-    print(
+        csv_writer.writerow(
+            [
+                name,
+                best["latency(C)"] - best["depth"],
+                best["latency(C)"],
+                best["latency(S)"],
+                best["GOP/s"],
+                best["GOPs"],
+                best["vols/s"],
+                best["DSP"],
+                best["BRAM"],
+                best["rateIn"],
+                best["rateOut"],
+                best["depth"],
+                best["branch_depth"],
+                best["muls"],
+                best["adds"],
+                best["memWords"],
+                best["memKBs"],
+                best["dataSizeIn"],
+                best["dataSizeOut"],
+                best["memBoundedIn"],
+                best["memBoundedOut"],
+                best["config"],
+            ]
+        )
+    _logger.info(
         "Latency: {}.\n(fine={:.2f}->{}, cIn={:.2f}->{}, cOut={:.2f}->{}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSPs(%)={}({:.2f}), BRAMs(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
             best["latency(S)"],
             best["config"][0],
@@ -241,8 +281,8 @@ def conv_compose(name, description, model_file, singlethreaded):
             best["memBoundedOut"],
         )
     )
-    print("*" * 40)
-    print(
+    print("*" * 60)
+    _logger.info(
         "Searching for optimal point with simulated annealing for layer {} ({}).".format(
             name, convtype
         )
@@ -252,7 +292,7 @@ def conv_compose(name, description, model_file, singlethreaded):
 
     optimizer = SimulatedAnnealing(graph, branch_mem=0)
     optimizer.run_optimizer_layer(name)
-    print("*" * 40)
+    print("*" * 60)
 
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 

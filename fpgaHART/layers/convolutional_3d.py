@@ -2,6 +2,7 @@ import math
 
 import numpy as np
 import scipy.optimize as optimize
+from fpgaHART import _logger
 from scipy.optimize import Bounds, NonlinearConstraint
 
 from .base_layer import BaseLayer
@@ -41,6 +42,9 @@ class Convolutional3DLayer(BaseLayer):
         self.dilation = description["dilation"]
 
         self.branching = description["branching"]
+
+        self.data_size_in = np.prod(np.array(self.input_shape[1:]))
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
         self.depthwise = False
         self.pointwise = False
@@ -93,12 +97,13 @@ class Convolutional3DLayer(BaseLayer):
                 * self.channels
             )
 
-    def get_dp_info(self):
+    def get_dp_info(self) -> dict:
         dp_info = {}
 
         dp_info["latency(C)"] = self.latency_cycles
         dp_info["latency(S)"] = self.latency_sec
         dp_info["GOP/s"] = self.throughput_ops * 1e-9
+        dp_info["GOPs"] = self.get_total_workload() * 1e-9
         dp_info["vols/s"] = self.throughput_vols
         dp_info["DSP"] = self.dsps_util
         dp_info["DSP_RAW"] = self.dsp_raw
@@ -107,10 +112,13 @@ class Convolutional3DLayer(BaseLayer):
         dp_info["rateIn"] = self.full_rate_in
         dp_info["rateOut"] = self.full_rate_out
         dp_info["depth"] = self.depth
+        dp_info["branch_depth"] = 0
         dp_info["muls"] = self.max_parallel_muls
         dp_info["adds"] = self.max_parallel_adds
         dp_info["memWords"] = self.memory
         dp_info["memKBs"] = self.memoryKB
+        dp_info["dataSizeIn"] = (self.data_size_in * self.word_bytes) / 1e6
+        dp_info["dataSizeOut"] = (self.data_size_out * self.word_bytes) / 1e6
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
         dp_info["config"] = self.config
@@ -122,7 +130,14 @@ class Convolutional3DLayer(BaseLayer):
         self.max_streams_out = self.filters
         return self.max_streams_in, self.max_streams_out
 
-    def get_design_point(self, f_fine, f_coarseIn, f_coarseOut, mem_bw_in, mem_bw_out):
+    def get_design_point(
+        self,
+        f_fine: np.float64,
+        f_coarseIn: np.float64,
+        f_coarseOut: np.float64,
+        mem_bw_in: int,
+        mem_bw_out: int,
+    ) -> dict:
         self.update_layer()
 
         if self.depthwise:
@@ -263,17 +278,17 @@ class Convolutional3DLayer(BaseLayer):
             * self.get_data_matrix(mem_bw_in, mem_bw_out, f_fine)
         )
         if DEBUG:
-            print("Γ:\n{}".format(gamma_matrix))
+            _logger.debug("Γ:\n{}".format(gamma_matrix))
         gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(
             gamma_matrix.copy()
         )
         if DEBUG:
-            print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+            _logger.debug("Γ Balanced:\n{}".format(gamma_matrix_balanced))
         workload_matrix = self.get_workload_matrix()
         # TODO: Investigate whether we need to use the balancing of the matrix or not
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
         if DEBUG:
-            print("II:\n{}".format(ii_matrix))
+            _logger.debug("II:\n{}".format(ii_matrix))
 
         if not self.depthwise:
             (
@@ -341,7 +356,7 @@ class Convolutional3DLayer(BaseLayer):
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
         if DEBUG:
-            print(
+            _logger.debug(
                 f"Fine: {f_fine:.3f} ({f_fine*np.prod(np.array(self.kernel_shape))}), CoarseIn: {f_coarseIn:.3f} ({int(f_coarseIn*self.channels)}), CoarseOut: {f_coarseOut:.3f} ({int(f_coarseOut*self.filters)}), Shape in: {self.input_shape}, Shape out: {self.output_shape}, Kernel: {self.kernel_shape}"
             )
         if dsps_util < 90.0 and bram_util < 95.0:
@@ -376,7 +391,7 @@ class Convolutional3DLayer(BaseLayer):
             self.throughput_vols = thr_out
 
             if DEBUG:
-                print(
+                _logger.debug(
                     "(fine={:.2f}({}), cIn={:.2f}({}), cOut={:.2f}({}), bwIn={:.2f}, bwOut={:.2f}) DSP % = {:.2f} ({}), BRAM % = {:.2f} ({}), latency = {:.5f}({}), GOPs/s = {:.5f}, In Volumes/s = {:.5f}, Out Volumes/s = {:.5f}, depth = {}, workload(G) = {:.5f}, Mem Bound In={}, Mem Bound Out={}".format(
                         f_fine,
                         math.ceil(f_fine * kernel_elems),
@@ -404,7 +419,7 @@ class Convolutional3DLayer(BaseLayer):
         else:
             self.update_layer()
             if DEBUG:
-                print(
+                _logger.warning(
                     "Discarding design point. DSP = {:.2f} - BRAM = {:.2f}".format(
                         dsps_util, bram_util
                     )
@@ -502,7 +517,7 @@ class Convolutional3DLayer(BaseLayer):
             and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0
         ), "Rate matrix issue"
         if DEBUG:
-            print("R:\n{}".format(rate_matrix))
+            _logger.debug("R:\n{}".format(rate_matrix))
         return rate_matrix
 
     def get_stream_matrix(self, f_coarseIn, f_coarseOut):
@@ -601,7 +616,7 @@ class Convolutional3DLayer(BaseLayer):
             stream_matrix[5, 6] = 1
 
         if DEBUG:
-            print("S:\n{}".format(stream_matrix))
+            _logger.debug("S:\n{}".format(stream_matrix))
         return stream_matrix
 
     def get_data_matrix(self, mem_bw_in, mem_bw_out, f_fine):
@@ -684,7 +699,7 @@ class Convolutional3DLayer(BaseLayer):
             data_matrix[5, 6] = -mem_bw_out
 
         if DEBUG:
-            print("D:\n{}".format(data_matrix))
+            _logger.debug("D:\n{}".format(data_matrix))
         return data_matrix
 
     def get_workload_matrix(self):
@@ -784,5 +799,5 @@ class Convolutional3DLayer(BaseLayer):
             workload_matrix[5, 6] = out_volume * self.filters
 
         if DEBUG:
-            print("WL:\n{}".format(workload_matrix))
+            _logger.debug("WL:\n{}".format(workload_matrix))
         return workload_matrix
