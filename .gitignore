@@ -2,6 +2,7 @@
 __pycache__/
 generated_files/
 generated_data/
+fpgaHART.egg-info
 mlruns/
 *.py[cod]
 *$py.class
