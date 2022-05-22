@@ -13,8 +13,9 @@ from fpgaHART import _logger
 from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
 from fpgaHART.layers.elemwise import ElementWiseLayer
 from fpgaHART.layers.gap import GAPLayer
+from fpgaHART.layers.layer_parser import LayerParser
 from fpgaHART.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpgaHART.onnx_parser.partition_descriptor import PartitionDescriptor
+from fpgaHART.network_representation.partition_descriptor import PartitionDescriptor
 from fpgaHART.partitions.partition_parser import PartitionParser
 from fpgaHART.utils import utils
 
@@ -25,6 +26,12 @@ sns.set_style("whitegrid")
 def parse_args():
     parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
     parser.add_argument("model_name", help="name of the HAR model")
+    parser.add_argument(
+        "type",
+        choices=["partition", "layer"],
+        type=str,
+        help="type of processing to be performed",
+    )
     parser.add_argument(
         "--singlethreaded",
         action="store_true",
@@ -50,25 +57,32 @@ def parse_args():
     return args
 
 
-def multithreaded_modeling(operation, input, pool):
-    results = pool.starmap(operation, input)
-    return results
-
-
 if __name__ == "__main__":
     args = parse_args()
 
-    _logger.setLevel(level=logging.DEBUG)
+    _logger.setLevel(level=logging.INFO)
 
-    parser = PartitionParser(
-        model_name=args.model_name,
-        se_block=args.se_block,
-        gap_approx=args.gap_approx,
-        singlethreaded=args.singlethreaded,
-        per_layer_plot=args.plot_layers,
-    )
+    if args.type == "partition":
+        partition_parser = PartitionParser(
+            model_name=args.model_name,
+            se_block=args.se_block,
+            gap_approx=args.gap_approx,
+            singlethreaded=args.singlethreaded,
+            per_layer_plot=args.plot_layers,
+        )
 
-    # parser.model_custom_partition()
-    # parser.model_individual_layers()
-    # parser.parse()
-    parser.find_common_layers(groupping=3)
+        partition_parser.find_common_layers(groupping=3)
+        # partition_parser.model_custom_partition()
+        # partition_parser.parse()
+    elif args.type == "layer":
+        layer_parser = LayerParser(
+            model_name=args.model_name,
+            se_block=args.se_block,
+            singlethreaded=args.singlethreaded,
+            per_layer_plot=args.plot_layers,
+        )
+
+        layer_parser.model_individual_layers()
+
+    else:
+        raise ValueError("Invalid type of processing")

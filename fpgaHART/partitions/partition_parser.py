@@ -20,10 +20,9 @@ from ..layers.elemwise import ElementWiseLayer
 from ..layers.fully_connected import FCLayer
 from ..layers.gap import GAPLayer
 from ..layers.squeeze_excitation import SqueezeExcitationLayer
-from ..onnx_parser.partition_descriptor import PartitionDescriptor
+from ..network_representation.partition_descriptor import PartitionDescriptor
 from ..optimizer.simulated_annealing import SimulatedAnnealing
 from ..utils import utils
-from .layer_compose import layer_compose
 from .partition_compose import PartitionComposer
 
 
@@ -406,7 +405,13 @@ class PartitionParser(PartitionDescriptor):
 
     def model_layer(self, layer: str, layer_description: dict) -> None:
         _logger.info("Modeling {} layer...".format(layer))
-        throughput_gops, throughput_vols, latency, dsp_util, bram_util = layer_compose(
+        (
+            throughput_gops,
+            throughput_vols,
+            latency,
+            dsp_util,
+            bram_util,
+        ) = layer_design_points(
             layer, layer_description, self.layer_model_file, self.singlethreaded
         )
 

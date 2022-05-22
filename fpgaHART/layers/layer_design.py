@@ -24,27 +24,27 @@ def multithreaded_modeling(operation, input, pool):
     return results
 
 
-def layer_compose(
+def layer_design_points(
     name: str, description: dict, model_file: str, singlethreaded: bool
 ) -> Tuple[list, list, list, list, list]:
     if description["operation"] == "Conv":
-        return conv_compose(name, description, model_file, singlethreaded)
+        return conv_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "BatchNormalization":
-        return batchnorm_compose(name, description, model_file, singlethreaded)
+        return batchnorm_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "GlobalAveragePool":
-        return gap_compose(name, description, model_file, singlethreaded)
+        return gap_design_points(name, description, model_file, singlethreaded)
     elif (
         description["operation"] == "Relu"
         or description["operation"] == "Sigmoid"
         or description["operation"] == "Swish"
     ):
-        return activation_compose(name, description, model_file, singlethreaded)
+        return activation_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "SqueezeExcitation":
-        return se_compose(name, description, model_file, singlethreaded)
+        return se_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "Add" or description["operation"] == "Mul":
-        return elemwise_compose(name, description, model_file, singlethreaded)
+        return elemwise_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
-        return fc_compose(name, description, model_file, singlethreaded)
+        return fc_design_points(name, description, model_file, singlethreaded)
     else:
         assert False, "{} operation in layer {} is not supported".format(
             description["operation"], name
@@ -64,7 +64,7 @@ def contains_list(part, whole):
         return False
 
 
-def conv_compose(name, description, model_file, singlethreaded):
+def conv_design_points(name, description, model_file, singlethreaded):
     conv = Convolutional3DLayer(description)
 
     if conv.depthwise:
@@ -225,6 +225,7 @@ def conv_compose(name, description, model_file, singlethreaded):
                             min_latency = r["latency(C)"]
                             best = r
 
+        conv_config = utils.generate_layer_config(conv, best["config"][:3])
         csv_writer.writerow(
             [
                 name,
@@ -248,7 +249,7 @@ def conv_compose(name, description, model_file, singlethreaded):
                 best["dataSizeOut"],
                 best["memBoundedIn"],
                 best["memBoundedOut"],
-                best["config"],
+                conv_config,
             ]
         )
     _logger.info(
@@ -297,7 +298,7 @@ def conv_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def batchnorm_compose(name, description, model_file, singlethreaded):
+def batchnorm_design_points(name, description, model_file, singlethreaded):
     bn = BatchNorm3DLayer(description)
 
     coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
@@ -472,7 +473,7 @@ def batchnorm_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def gap_compose(name, description, model_file, singlethreaded):
+def gap_design_points(name, description, model_file, singlethreaded):
     gap = GAPLayer(description)
 
     coarse_inout = utils.get_factors(gap.channels) / np.int64(gap.channels)
@@ -647,7 +648,7 @@ def gap_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def activation_compose(name, description, model_file, singlethreaded):
+def activation_design_points(name, description, model_file, singlethreaded):
     activ = ActivationLayer(description)
 
     coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
@@ -822,7 +823,7 @@ def activation_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def se_compose(name, description, model_file, singlethreaded):
+def se_design_points(name, description, model_file, singlethreaded):
     se = SqueezeExcitationLayer(description)
 
     # layers_in_shape = []
@@ -1056,7 +1057,7 @@ def se_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def elemwise_compose(name, description, model_file, singlethreaded):
+def elemwise_design_points(name, description, model_file, singlethreaded):
     elem = ElementWiseLayer(description)
 
     coarse_inout = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
@@ -1236,7 +1237,7 @@ def elemwise_compose(name, description, model_file, singlethreaded):
     return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
-def fc_compose(name, description, model_file, singlethreaded):
+def fc_design_points(name, description, model_file, singlethreaded):
     fc = FCLayer(description)
 
     graph = nx.DiGraph()

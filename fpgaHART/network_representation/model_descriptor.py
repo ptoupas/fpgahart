@@ -68,27 +68,22 @@ class ModelLayerDescriptor(OnnxModelParser):
                 self.layers[name]["bias"] = self.torch_layers[k]["bias"]
 
             if operation == "Add" or operation == "Mul" or operation == "MatMul":
-                self.layers[name]["shape_in"].append(
-                    self.torch_layers[k]["input"][1])
-                self.layers[name]["node_in"].append(
-                    self.torch_layers[k]["input_id"][1])
+                self.layers[name]["shape_in"].append(self.torch_layers[k]["input"][1])
+                self.layers[name]["node_in"].append(self.torch_layers[k]["input_id"][1])
                 if self.model_name == "x3d_m" and operation == "MatMul":
                     self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
 
             swish_module.append([operation, name])
             if swish_module[0][0] == "Sigmoid" and swish_module[1][0] == "Mul":
-                mul_shapein_1 = self.torch_layers[swish_module[1]
-                                                  [1]]["input"][0]
-                mul_shapein_2 = self.torch_layers[swish_module[1]
-                                                  [1]]["input"][1]
+                mul_shapein_1 = self.torch_layers[swish_module[1][1]]["input"][0]
+                mul_shapein_2 = self.torch_layers[swish_module[1][1]]["input"][1]
                 if mul_shapein_1 == mul_shapein_2:
                     _logger.debug("Creating Swish Activation Module")
 
                     sigmoid_name = swish_module[0][1]
                     operation = self.torch_layers[sigmoid_name]["operation"]
                     input_shape = [self.torch_layers[sigmoid_name]["input"][0]]
-                    input_node = [
-                        self.torch_layers[sigmoid_name]["input_id"][0]]
+                    input_node = [self.torch_layers[sigmoid_name]["input_id"][0]]
                     swish_input_shape = input_shape
                     swish_input_node = input_node
                     output_shape = self.torch_layers[sigmoid_name]["output"]
@@ -230,8 +225,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                     sigmoid_name = se_module[4][1]
                     operation = self.torch_layers[sigmoid_name]["operation"]
                     input_shape = [self.torch_layers[sigmoid_name]["input"][0]]
-                    input_node = [
-                        self.torch_layers[sigmoid_name]["input_id"][0]]
+                    input_node = [self.torch_layers[sigmoid_name]["input_id"][0]]
                     output_shape = self.torch_layers[sigmoid_name]["output"]
                     output_node = self.torch_layers[sigmoid_name]["output_id"]
                     se_branch_shape = output_shape
