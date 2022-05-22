@@ -10,9 +10,9 @@ from .onnx_parser import OnnxModelParser
 class ModelLayerDescriptor(OnnxModelParser):
     se_block: bool
 
-    def __post_init__(self):
-        # _logger.setLevel(level=logging.INFO)
+    def __post_init__(self) -> None:
         OnnxModelParser.__post_init__(self)  # Initialize the parent class
+        # _logger.setLevel(level=logging.INFO)
         self.layers = {}
         self.create_layers()
 

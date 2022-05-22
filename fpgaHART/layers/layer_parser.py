@@ -24,7 +24,7 @@ class LayerParser(ModelLayerDescriptor):
     singlethreaded: bool = False
     per_layer_plot: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
 
@@ -54,7 +54,7 @@ class LayerParser(ModelLayerDescriptor):
             layer, layer_description, self.layer_model_file, self.singlethreaded
         )
 
-    def model_individual_layers(self) -> None:
+    def parse(self) -> None:
 
         with open(self.layer_model_file, mode="w") as layer_dp:
             csv_writer = csv.writer(
@@ -119,6 +119,47 @@ class LayerParser(ModelLayerDescriptor):
                     ]
                 )
 
+        for name, descriptor in self.layers.items():
+            self.model_layer(name, descriptor)
+
+        if self.pareto_results:
+            utils.drop_duplicates_csv(self.layer_model_file)
+            utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
+            if self.per_layer_plot:
+                utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
+
+    def model_custom_layer(self) -> None:
+        with open(self.layer_model_file, mode="w") as layer_dp:
+            csv_writer = csv.writer(
+                layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
+            )
+            csv_writer.writerow(
+                [
+                    "Layer",
+                    "Latency(C)-No-Depth",
+                    "Latency(C)",
+                    "Latency(S)",
+                    "GOP/s",
+                    "GOPs",
+                    "volumes/s",
+                    "DSP(%)",
+                    "BRAM(%)",
+                    "RateIn",
+                    "RateOut",
+                    "Depth",
+                    "Branch Depth",
+                    "Muls",
+                    "Adds",
+                    "Mem(W)",
+                    "Mem(KB)",
+                    "DataSizeIn(MB)",
+                    "DataSizeOut(MB)",
+                    "MemBoundIn",
+                    "MemBoundOut",
+                    "config",
+                ]
+            )
+
         name = "custom_conv_layer"
         conv_descriptor = {
             "operation": "Conv",
@@ -135,12 +176,3 @@ class LayerParser(ModelLayerDescriptor):
             "dilation": [1, 1, 1],
         }
         self.model_layer(name, conv_descriptor)
-
-        # for name, descriptor in self.layers.items():
-        #     self.model_layer(name, descriptor)
-
-        if self.pareto_results:
-            utils.drop_duplicates_csv(self.layer_model_file)
-            utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
-            if self.per_layer_plot:
-                utils.plot_layers_csv(self.layer_model_file_par, self.model_name)

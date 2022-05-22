@@ -68,13 +68,12 @@ def add_input_from_initializer(model: onnx.ModelProto):
 
 
 @dataclass
-class OnnxModelParser():
+class OnnxModelParser:
     model_name: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # _logger.setLevel(level=logging.INFO)
-        self.model_path = os.path.join(
-            os.getcwd(), "models", self.model_name + ".onnx")
+        self.model_path = os.path.join(os.getcwd(), "models", self.model_name + ".onnx")
         self.torch_layers = {}
         self.init_onnx_model()
 
@@ -102,8 +101,7 @@ class OnnxModelParser():
         self.parse_layers()
         onnx.save(
             self.onnx_model,
-            os.path.join(os.getcwd(), "models",
-                         self.model_name + "_optimized.onnx"),
+            os.path.join(os.getcwd(), "models", self.model_name + "_optimized.onnx"),
         )
 
     def fix_classifier_shapes(self) -> None:
@@ -127,8 +125,7 @@ class OnnxModelParser():
                             "971", onnx.TensorProto.FLOAT, [1, 2048]
                         )
                     )
-            self.onnx_model.graph.value_info.append(
-                self.onnx_model.graph.output[0])
+            self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
         if self.model_name == "x3d_m_seq":
             for i in range(len(self.onnx_model.graph.value_info)):
                 if self.onnx_model.graph.value_info[i].name == "919":
@@ -149,17 +146,14 @@ class OnnxModelParser():
                             "922", onnx.TensorProto.FLOAT, [1, 2048]
                         )
                     )
-            self.onnx_model.graph.value_info.append(
-                self.onnx_model.graph.output[0])
+            self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
 
     def get_config(self) -> None:
         config = configparser.ConfigParser()
         config.read(
-            os.path.join(os.getcwd(), "fpgaHART",
-                         "config", "config_pytorch.ini")
+            os.path.join(os.getcwd(), "fpgaHART", "config", "config_pytorch.ini")
         )
-        self.supported_operations = config.get(
-            "Onnx Supported", "layers").split(",")
+        self.supported_operations = config.get("Onnx Supported", "layers").split(",")
 
     def get_tensor_shape(self, tensor_name: str, is_initializer: bool = False) -> list:
         if is_initializer:
@@ -188,8 +182,7 @@ class OnnxModelParser():
         return tensor_shape
 
     def parse_layers(self) -> None:
-        input_shape = self.get_tensor_shape(
-            self.onnx_model.graph.input[0].name)
+        input_shape = self.get_tensor_shape(self.onnx_model.graph.input[0].name)
 
         _logger.debug("Model input shape = {}".format(input_shape))
         # assert len(self.onnx_model.graph.input) == 1, "Model has multiple inputs or the initializers are duplicated to inputs as well. Aborting..."
@@ -373,7 +366,9 @@ class OnnxModelParser():
                     )
                 )
 
-    def get_model_initializer(self, name: str, to_tensor: bool = True) -> Tuple[np.ndarray, onnx.TensorProto]:
+    def get_model_initializer(
+        self, name: str, to_tensor: bool = True
+    ) -> Tuple[np.ndarray, onnx.TensorProto]:
         for node in self.onnx_model.graph.initializer:
             if node.name == name:  # exact match
                 if to_tensor:
@@ -400,16 +395,14 @@ class OnnxModelParser():
             if node.op_type == "MatMul":
                 # update the weights
                 transpose_connection = False
-                init = self.get_model_initializer(
-                    node.input[1], to_tensor=False)
+                init = self.get_model_initializer(node.input[1], to_tensor=False)
                 if init is None:
                     transpose_connection = True
                     input_node = self.get_model_node(node.input[1])
                     init = self.get_model_initializer(
                         input_node.input[0], to_tensor=False
                     )
-                init_index = list(
-                    self.onnx_model.graph.initializer).index(init)
+                init_index = list(self.onnx_model.graph.initializer).index(init)
                 weights = onnx.numpy_helper.to_array(init)
                 weights = np.swapaxes(weights, 0, 1)
                 if transpose_connection:
@@ -478,8 +471,7 @@ class OnnxModelParser():
                     new_node = onnx.helper.make_node(
                         "Gemm",
                         name="Gemm" + node.name.split("MatMul")[-1],
-                        inputs=[*node.input,
-                                ".".join([input_node.input[0], "bias"])],
+                        inputs=[*node.input, ".".join([input_node.input[0], "bias"])],
                         outputs=node.output,
                     )
                 # remove old node and add new one

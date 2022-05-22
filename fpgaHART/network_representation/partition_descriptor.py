@@ -15,9 +15,9 @@ from .model_descriptor import ModelLayerDescriptor
 
 @dataclass
 class PartitionDescriptor(ModelLayerDescriptor):
-    def __post_init__(self):
-        # _logger.setLevel(level=logging.DEBUG)
+    def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
+        # _logger.setLevel(level=logging.DEBUG)
         self.partitions = self.create_partitions(self.layers)
         self.hw_pe = list()
 

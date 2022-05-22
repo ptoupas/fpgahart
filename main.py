@@ -71,9 +71,9 @@ if __name__ == "__main__":
             per_layer_plot=args.plot_layers,
         )
 
-        partition_parser.find_common_layers(groupping=3)
-        # partition_parser.model_custom_partition()
         # partition_parser.parse()
+        # partition_parser.model_custom_partition()
+        partition_parser.find_common_layers(groupping=3)
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,
@@ -82,7 +82,8 @@ if __name__ == "__main__":
             per_layer_plot=args.plot_layers,
         )
 
-        layer_parser.model_individual_layers()
+        # layer_parser.parse()
+        layer_parser.model_custom_layer()
 
     else:
         raise ValueError("Invalid type of processing")

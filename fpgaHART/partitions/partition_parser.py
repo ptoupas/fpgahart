@@ -37,9 +37,9 @@ class PartitionParser(PartitionDescriptor):
     singlethreaded: bool
     per_layer_plot: bool
 
-    def __post_init__(self):
-        # _logger.setLevel(level=logging.DEBUG)
+    def __post_init__(self) -> None:
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class
+        # _logger.setLevel(level=logging.DEBUG)
 
         if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports")):
             os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports"))
@@ -403,18 +403,6 @@ class PartitionParser(PartitionDescriptor):
                 for sub_row in sub_rows:
                     csv_writer.writerow(sub_row)
 
-    def model_layer(self, layer: str, layer_description: dict) -> None:
-        _logger.info("Modeling {} layer...".format(layer))
-        (
-            throughput_gops,
-            throughput_vols,
-            latency,
-            dsp_util,
-            bram_util,
-        ) = layer_design_points(
-            layer, layer_description, self.layer_model_file, self.singlethreaded
-        )
-
     def idetify_duplicates(self):
         partitions = {}
         for i, partition in enumerate(self.partitions):
@@ -499,94 +487,6 @@ class PartitionParser(PartitionDescriptor):
                 self.model_partition(partition, name=part_name)
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
-
-    def model_individual_layers(self) -> None:
-
-        with open(self.layer_model_file, mode="w") as layer_dp:
-            csv_writer = csv.writer(
-                layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
-            csv_writer.writerow(
-                [
-                    "Layer",
-                    "Latency(C)-No-Depth",
-                    "Latency(C)",
-                    "Latency(S)",
-                    "GOP/s",
-                    "GOPs",
-                    "volumes/s",
-                    "DSP(%)",
-                    "BRAM(%)",
-                    "RateIn",
-                    "RateOut",
-                    "Depth",
-                    "Branch Depth",
-                    "Muls",
-                    "Adds",
-                    "Mem(W)",
-                    "Mem(KB)",
-                    "DataSizeIn(MB)",
-                    "DataSizeOut(MB)",
-                    "MemBoundIn",
-                    "MemBoundOut",
-                    "config",
-                ]
-            )
-        with open(self.layer_model_file_par, mode="w") as layer_dp:
-            csv_writer = csv.writer(
-                layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
-            csv_writer.writerow(
-                [
-                    "Layer",
-                    "Latency(C)-No-Depth",
-                    "Latency(C)",
-                    "Latency(S)",
-                    "GOP/s",
-                    "GOPs",
-                    "volumes/s",
-                    "DSP(%)",
-                    "BRAM(%)",
-                    "RateIn",
-                    "RateOut",
-                    "Depth",
-                    "Branch Depth",
-                    "Muls",
-                    "Adds",
-                    "Mem(W)",
-                    "Mem(KB)",
-                    "DataSizeIn(MB)",
-                    "DataSizeOut(MB)",
-                    "MemBoundIn",
-                    "MemBoundOut",
-                    "config",
-                ]
-            )
-
-        name = "custom_conv_layer"
-        conv_descriptor = {
-            "operation": "Conv",
-            "shape_in": [[1, 24, 16, 32, 32]],
-            "shape_out": [1, 12, 16, 32, 32],
-            "node_in": ["575"],
-            "node_out": "576",
-            "branching": False,
-            "kernel": [12, 24, 3, 3, 3],
-            "bias": [12],
-            "padding": [1, 1, 1],
-            "stride": [1, 1, 1],
-            "groups": 1,
-            "dilation": [1, 1, 1],
-        }
-        self.model_layer(name, conv_descriptor)
-
-        # for name, descriptor in self.layers.items():
-        #     self.model_layer(name, descriptor)
-
-        # utils.drop_duplicates_csv(self.layer_model_file)
-        # utils.get_paretto_csv(self.layer_model_file_par, self.layer_model_file)
-        # if self.per_layer_plot:
-        #     utils.plot_layers_csv(self.layer_model_file_par, self.model_name)
 
     def model_custom_partition(self):
         self.partition_model_file = os.path.join(
