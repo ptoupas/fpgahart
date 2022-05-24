@@ -460,41 +460,6 @@ def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
         raise Exception("Format not supported")
 
 
-def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
-    if not os.path.exists(prefix + "/shish_3d"):
-        os.makedirs(prefix + "/shish_3d")
-
-    x = torch.randn(input_shape)
-    print(x.numpy())
-    print(x.numpy().shape)
-    write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
-    if file_format == "bin":
-        write_input_binary.tofile(prefix + "/shish_3d/input.dat")
-    elif file_format == "txt":
-        np.savetxt(
-            prefix + "/shish_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
-        )
-    else:
-        raise Exception("Format not supported")
-
-    sigmoid = torch.nn.Sigmoid()
-    out = sigmoid(x)
-    out = out * x
-
-    print(out.detach().numpy())
-    print(out.detach().numpy().shape)
-
-    write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
-    if file_format == "bin":
-        write_out_binary.tofile(prefix + "/shish_3d/output.dat")
-    elif file_format == "txt":
-        np.savetxt(
-            prefix + "/shish_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
-        )
-    else:
-        raise Exception("Format not supported")
-
-
 def sigmoid_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
     if not os.path.exists(prefix + "/sigmoid_3d"):
         os.makedirs(prefix + "/sigmoid_3d")
@@ -925,9 +890,10 @@ def conv_3d(
     coarse_out,
     file_format,
     prefix="generated_data",
+    layer_name="conv_3d",
 ):
-    if not os.path.exists(prefix + "/conv_3d"):
-        os.makedirs(prefix + "/conv_3d")
+    if not os.path.exists(prefix + "/" + layer_name):
+        os.makedirs(prefix + "/" + layer_name)
 
     x = torch.randn(input_shape)
     # print(x.numpy())
@@ -935,10 +901,12 @@ def conv_3d(
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/conv_3d/input.dat")
+        write_input_binary.tofile(prefix + "/" + layer_name + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/conv_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            prefix + "/" + layer_name + "/input.dat",
+            write_input_binary.flatten(),
+            fmt="%.8f",
         )
     else:
         raise Exception("Format not supported")
@@ -959,9 +927,9 @@ def conv_3d(
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     # if file_format == "bin":
-    # 	write_weights_binary.tofile(prefix + "/conv_3d/weights.dat")
+    # 	write_weights_binary.tofile(prefix + "/" + layer_name + "/weights.dat")
     # elif file_format == "txt":
-    # 	np.savetxt(prefix + "/conv_3d/weights.dat", write_weights_binary.flatten(), fmt='%.8f')
+    # 	np.savetxt(prefix + "/" + layer_name + "/weights.dat", write_weights_binary.flatten(), fmt='%.8f')
     # else:
     # 	raise Exception("Format not supported")
 
@@ -978,7 +946,7 @@ def conv_3d(
         weights_transformed = transform_weights(
             write_weights_binary, coarse_in, coarse_out, 1, 1, groups=groups
         )
-    with open(prefix + "/conv_3d/weights.csv", "w") as f:
+    with open(prefix + "/" + layer_name + "/weights.csv", "w") as f:
         f.write(array_init(weights_transformed[0]))
 
     print("=" * 40)
@@ -988,10 +956,12 @@ def conv_3d(
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/conv_3d/output.dat")
+        write_out_binary.tofile(prefix + "/" + layer_name + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/conv_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            prefix + "/" + layer_name + "/output.dat",
+            write_out_binary.flatten(),
+            fmt="%.8f",
         )
     else:
         raise Exception("Format not supported")

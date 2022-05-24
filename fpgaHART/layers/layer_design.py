@@ -28,23 +28,23 @@ def layer_design_points(
     name: str, description: dict, model_file: str, singlethreaded: bool
 ) -> Tuple[list, list, list, list, list]:
     if description["operation"] == "Conv":
-        return conv_design_points(name, description, model_file, singlethreaded)
+        conv_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "BatchNormalization":
-        return batchnorm_design_points(name, description, model_file, singlethreaded)
+        batchnorm_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "GlobalAveragePool":
-        return gap_design_points(name, description, model_file, singlethreaded)
+        gap_design_points(name, description, model_file, singlethreaded)
     elif (
         description["operation"] == "Relu"
         or description["operation"] == "Sigmoid"
         or description["operation"] == "Swish"
     ):
-        return activation_design_points(name, description, model_file, singlethreaded)
+        activation_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "SqueezeExcitation":
-        return se_design_points(name, description, model_file, singlethreaded)
+        se_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "Add" or description["operation"] == "Mul":
-        return elemwise_design_points(name, description, model_file, singlethreaded)
+        elemwise_design_points(name, description, model_file, singlethreaded)
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
-        return fc_design_points(name, description, model_file, singlethreaded)
+        fc_design_points(name, description, model_file, singlethreaded)
     else:
         assert False, "{} operation in layer {} is not supported".format(
             description["operation"], name
@@ -134,6 +134,7 @@ def conv_design_points(name, description, model_file, singlethreaded):
                     # csv_writer.writerow(
                     #     [
                     #         name,
+                    #         "Conv",
                     #         r["latency(C)"] - r["depth"],
                     #         r["latency(C)"],
                     #         r["latency(S)"],
@@ -189,6 +190,7 @@ def conv_design_points(name, description, model_file, singlethreaded):
                     # csv_writer.writerow(
                     #     [
                     #         name,
+                    #         "Conv",
                     #         r["latency(C)"] - r["depth"],
                     #         r["latency(C)"],
                     #         r["latency(S)"],
@@ -229,6 +231,7 @@ def conv_design_points(name, description, model_file, singlethreaded):
         csv_writer.writerow(
             [
                 name,
+                "Conv",
                 best["latency(C)"] - best["depth"],
                 best["latency(C)"],
                 best["latency(S)"],
@@ -294,8 +297,6 @@ def conv_design_points(name, description, model_file, singlethreaded):
     optimizer = SimulatedAnnealing(graph, branch_mem=0)
     optimizer.run_optimizer_layer(name)
     print("*" * 60)
-
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
 def batchnorm_design_points(name, description, model_file, singlethreaded):
@@ -470,8 +471,6 @@ def batchnorm_design_points(name, description, model_file, singlethreaded):
     optimizer.run_optimizer_layer(name)
     print("*" * 40)
 
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
-
 
 def gap_design_points(name, description, model_file, singlethreaded):
     gap = GAPLayer(description)
@@ -645,8 +644,6 @@ def gap_design_points(name, description, model_file, singlethreaded):
     optimizer.run_optimizer_layer(name)
     print("*" * 40)
 
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
-
 
 def activation_design_points(name, description, model_file, singlethreaded):
     activ = ActivationLayer(description)
@@ -819,8 +816,6 @@ def activation_design_points(name, description, model_file, singlethreaded):
     optimizer = SimulatedAnnealing(graph, branch_mem=0)
     optimizer.run_optimizer_layer(name)
     print("*" * 40)
-
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
 
 
 def se_design_points(name, description, model_file, singlethreaded):
@@ -1054,8 +1049,6 @@ def se_design_points(name, description, model_file, singlethreaded):
     )
     print("*" * 40)
 
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
-
 
 def elemwise_design_points(name, description, model_file, singlethreaded):
     elem = ElementWiseLayer(description)
@@ -1234,8 +1227,6 @@ def elemwise_design_points(name, description, model_file, singlethreaded):
     optimizer.run_optimizer_layer(name)
     print("*" * 40)
 
-    return throughput_gops, throughput_vols, latency, dsp_util, bram_util
-
 
 def fc_design_points(name, description, model_file, singlethreaded):
     fc = FCLayer(description)
@@ -1251,4 +1242,3 @@ def fc_design_points(name, description, model_file, singlethreaded):
     optimizer = SimulatedAnnealing(graph=graph, branch_mem=0)
     optimizer.run_optimizer_layer(name)
     print("*" * 40)
-    return [], [], [], [], []

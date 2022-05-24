@@ -44,13 +44,7 @@ class LayerParser(ModelLayerDescriptor):
 
     def model_layer(self, layer: str, layer_description: dict) -> None:
         _logger.info("Modeling {} layer...".format(layer))
-        (
-            throughput_gops,
-            throughput_vols,
-            latency,
-            dsp_util,
-            bram_util,
-        ) = layer_design_points(
+        layer_design_points(
             layer, layer_description, self.layer_model_file, self.singlethreaded
         )
 
@@ -63,6 +57,7 @@ class LayerParser(ModelLayerDescriptor):
             csv_writer.writerow(
                 [
                     "Layer",
+                    "Type",
                     "Latency(C)-No-Depth",
                     "Latency(C)",
                     "Latency(S)",
@@ -95,6 +90,7 @@ class LayerParser(ModelLayerDescriptor):
                 csv_writer.writerow(
                     [
                         "Layer",
+                        "Type",
                         "Latency(C)-No-Depth",
                         "Latency(C)",
                         "Latency(S)",
@@ -136,6 +132,7 @@ class LayerParser(ModelLayerDescriptor):
             csv_writer.writerow(
                 [
                     "Layer",
+                    "Type",
                     "Latency(C)-No-Depth",
                     "Latency(C)",
                     "Latency(S)",
