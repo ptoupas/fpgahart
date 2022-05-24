@@ -408,12 +408,14 @@ class SimulatedAnnealing(BaseLayer):
                     prev_state_1 = copy.deepcopy(new_state_1)
                     prev_state_2 = copy.deepcopy(new_state_2)
                     prev_cost = copy.deepcopy(new_cost)
-                    solution_mem_1, solution_dp_1 = copy.deepcopy(
-                        new_mem_bw_1
-                    ), copy.deepcopy(new_dp_info_1)
-                    solution_mem_2, solution_dp_2 = copy.deepcopy(
-                        new_mem_bw_2
-                    ), copy.deepcopy(new_dp_info_2)
+                    solution_mem_1, solution_dp_1 = (
+                        copy.deepcopy(new_mem_bw_1),
+                        copy.deepcopy(new_dp_info_1),
+                    )
+                    solution_mem_2, solution_dp_2 = (
+                        copy.deepcopy(new_mem_bw_2),
+                        copy.deepcopy(new_dp_info_2),
+                    )
                     self.visualize_graph(
                         graph_1,
                         os.getcwd()
@@ -435,12 +437,14 @@ class SimulatedAnnealing(BaseLayer):
                         prev_state_1 = copy.deepcopy(new_state_1)
                         prev_state_2 = copy.deepcopy(new_state_2)
                         prev_cost = copy.deepcopy(new_cost)
-                        solution_mem_1, solution_dp_1 = copy.deepcopy(
-                            new_mem_bw_1
-                        ), copy.deepcopy(new_dp_info_1)
-                        solution_mem_2, solution_dp_2 = copy.deepcopy(
-                            new_mem_bw_2
-                        ), copy.deepcopy(new_dp_info_2)
+                        solution_mem_1, solution_dp_1 = (
+                            copy.deepcopy(new_mem_bw_1),
+                            copy.deepcopy(new_dp_info_1),
+                        )
+                        solution_mem_2, solution_dp_2 = (
+                            copy.deepcopy(new_mem_bw_2),
+                            copy.deepcopy(new_dp_info_2),
+                        )
                         self.visualize_graph(
                             graph_1,
                             os.getcwd()
@@ -504,7 +508,7 @@ class SimulatedAnnealing(BaseLayer):
                 solution_dp_2["config"],
             )
         )
-        print("*" * 40)
+        print("*" * 60)
         return (
             self.mem_words_per_cycle,
             [solution_mem_1, solution_mem_2],
@@ -617,18 +621,20 @@ class SimulatedAnnealing(BaseLayer):
                         if cost_diff >= 0:
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
-                            solution_mem, solution_dp = copy.deepcopy(
-                                new_mem_bw
-                            ), copy.deepcopy(new_dp_info)
+                            solution_mem, solution_dp = (
+                                copy.deepcopy(new_mem_bw),
+                                copy.deepcopy(new_dp_info),
+                            )
                         else:
                             if random.uniform(0, 1) < math.exp(
                                 cost_diff / current_temp
                             ):
                                 prev_state = copy.deepcopy(new_state)
                                 prev_cost = copy.deepcopy(new_cost)
-                                solution_mem, solution_dp = copy.deepcopy(
-                                    new_mem_bw
-                                ), copy.deepcopy(new_dp_info)
+                                solution_mem, solution_dp = (
+                                    copy.deepcopy(new_mem_bw),
+                                    copy.deepcopy(new_dp_info),
+                                )
 
                     current_temp *= self.cooling_rate
                     print(
@@ -682,7 +688,7 @@ class SimulatedAnnealing(BaseLayer):
                 best_solution_dp["config"],
             )
         )
-        print("*" * 40)
+        print("*" * 60)
         return self.mem_words_per_cycle, [best_solution_mem], [best_solution_dp]
 
     def get_cost(
@@ -1210,18 +1216,20 @@ class SimulatedAnnealing(BaseLayer):
                 if cost_diff >= 0:
                     prev_state = copy.deepcopy(new_state)
                     prev_cost = copy.deepcopy(new_cost)
-                    solution_mem, solution_dp = copy.deepcopy(
-                        new_mem_bw
-                    ), copy.deepcopy(new_dp_info)
+                    solution_mem, solution_dp = (
+                        copy.deepcopy(new_mem_bw),
+                        copy.deepcopy(new_dp_info),
+                    )
                 else:
                     if random.uniform(0, 1) < math.exp(
                         (cost_diff / (self.k * current_temp))
                     ):
                         prev_state = copy.deepcopy(new_state)
                         prev_cost = copy.deepcopy(new_cost)
-                        solution_mem, solution_dp = copy.deepcopy(
-                            new_mem_bw
-                        ), copy.deepcopy(new_dp_info)
+                        solution_mem, solution_dp = (
+                            copy.deepcopy(new_mem_bw),
+                            copy.deepcopy(new_dp_info),
+                        )
 
             current_temp *= self.cooling_rate
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r")
@@ -1251,7 +1259,7 @@ class SimulatedAnnealing(BaseLayer):
                 solution_dp["config"],
             )
         )
-        print("*" * 40)
+        print("*" * 60)
 
     def get_cost_layer(self, config, mem_bw, layer):
         hw = self.graph.nodes[layer]["hw"]
