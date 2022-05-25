@@ -118,7 +118,7 @@ def generate_partition_code(
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(partition_name, prefix, hls_project_path)
+    generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False)
 
 
 def identify_streams_mismatches(layers_config, connections):

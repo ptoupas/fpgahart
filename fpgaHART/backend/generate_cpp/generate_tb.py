@@ -3,7 +3,7 @@ import os
 from layers.codegen import *
 
 
-def generate_tb_cpp(partition_name, prefix, hls_project_path):
+def generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer):
     partition_name_lower = partition_name.lower()
     partition_name_upper = partition_name.upper()
 
@@ -17,12 +17,22 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         )
     )
 
-    cpp(f'#include "common.hpp"')
-    cpp(f'#include "common_tb.hpp"')
+    cpp(f'#include "common_.hpp"')
+    cpp(f'#include "common_tb_.hpp"')
     cpp(f'#include "{partition_name_lower}.hpp"', newlines=2)
 
     cpp(f'#define DATA_DIR "{data_dir}"', newlines=2)
 
+    if is_layer:
+        data_type_postfix_in = "data_t"
+        data_type_postfix_out = "data_t"
+        input_streams = "COARSE_IN"
+        output_streams = "COARSE_OUT"
+    else:
+        data_type_postfix_in = "input_t"
+        data_type_postfix_out = "output_t"
+        input_streams = "STREAMS_IN"
+        output_streams = "STREAMS_OUT"
     with cpp.block("int main()"):
         cpp("int err = 0;", newlines=2)
 
@@ -33,38 +43,38 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         )
 
         cpp(
-            f"stream_t({partition_name_lower}_input_t) in[{partition_name_upper}_STREAMS_IN];"
+            f"stream_t({partition_name_lower}_{data_type_postfix_in}) in[{partition_name_upper}_{input_streams}];"
         )
         cpp(
-            f"stream_t({partition_name_lower}_output_t) out[{partition_name_upper}_STREAMS_OUT];"
+            f"stream_t({partition_name_lower}_{data_type_postfix_out}) out[{partition_name_upper}_{output_streams}];"
         )
         cpp(
-            f"stream_t({partition_name_lower}_output_t) out_correct[{partition_name_upper}_STREAMS_OUT];",
+            f"stream_t({partition_name_lower}_{data_type_postfix_out}) out_correct[{partition_name_upper}_{output_streams}];",
             newlines=2,
         )
 
         cpp("#ifdef MALLOC_USAGE")
         cpp(
-            f"{partition_name_lower}_input_t* test_in = ({partition_name_lower}_input_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_IN*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN * sizeof({partition_name_lower}_input_t));"
+            f"{partition_name_lower}_{data_type_postfix_in}* test_in = ({partition_name_lower}_{data_type_postfix_in}*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_IN*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN * sizeof({partition_name_lower}_{data_type_postfix_in}));"
         )
         cpp(
-            f"{partition_name_lower}_output_t* test_out = ({partition_name_lower}_input_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT * sizeof({partition_name_lower}_input_t));"
+            f"{partition_name_lower}_{data_type_postfix_out}* test_out = ({partition_name_lower}_{data_type_postfix_in}*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT * sizeof({partition_name_lower}_{data_type_postfix_in}));"
         )
         cpp("#else")
         cpp(
-            f"static {partition_name_lower}_input_t test_in[{partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_STREAMS_IN)*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN][{partition_name_upper}_STREAMS_IN];"
+            f"static {partition_name_lower}_{data_type_postfix_in} test_in[{partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_{input_streams})*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN][{partition_name_upper}_{input_streams}];"
         )
         cpp(
-            f"static {partition_name_lower}_output_t test_out[{partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_STREAMS_OUT)*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT][{partition_name_upper}_STREAMS_OUT];"
+            f"static {partition_name_lower}_{data_type_postfix_out} test_out[{partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_{output_streams})*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT][{partition_name_upper}_{output_streams}];"
         )
         cpp("#endif", newlines=2)
 
         cpp("// load input data")
         cpp(
             f"load_data<\n\
-                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_STREAMS_IN)*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN,\n\
-                {partition_name_upper}_STREAMS_IN,\n\
-                {partition_name_lower}_input_t\n\
+                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_{input_streams})*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN,\n\
+                {partition_name_upper}_{input_streams},\n\
+                {partition_name_lower}_{data_type_postfix_in}\n\
               >(input_path, test_in);",
             newlines=2,
         )
@@ -72,9 +82,9 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         cpp("// load output data")
         cpp(
             f"load_data<\n\
-                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_STREAMS_OUT)*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT,\n\
-                {partition_name_upper}_STREAMS_OUT,\n\
-                {partition_name_lower}_output_t\n\
+                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_{output_streams})*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT,\n\
+                {partition_name_upper}_{output_streams},\n\
+                {partition_name_lower}_{data_type_postfix_out}\n\
               >(output_path, test_out);",
             newlines=2,
         )
@@ -82,9 +92,9 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         cpp("// convert input to streams")
         cpp(
             f"to_stream<\n\
-                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_STREAMS_IN)*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN,\n\
-                {partition_name_upper}_STREAMS_IN,\n\
-                {partition_name_lower}_input_t\n\
+                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN,{partition_name_upper}_{input_streams})*{partition_name_upper}_HEIGHT_IN*{partition_name_upper}_WIDTH_IN*{partition_name_upper}_DEPTH_IN,\n\
+                {partition_name_upper}_{input_streams},\n\
+                {partition_name_lower}_{data_type_postfix_in}\n\
               >(test_in, in);",
             newlines=2,
         )
@@ -92,16 +102,19 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         cpp("// convert output to streams")
         cpp(
             f"to_stream<\n\
-                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_STREAMS_OUT)*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT,\n\
-                {partition_name_upper}_STREAMS_OUT,\n\
-                {partition_name_lower}_output_t\n\
+                {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT,{partition_name_upper}_{output_streams})*{partition_name_upper}_HEIGHT_OUT*{partition_name_upper}_WIDTH_OUT*{partition_name_upper}_DEPTH_OUT,\n\
+                {partition_name_upper}_{output_streams},\n\
+                {partition_name_lower}_{data_type_postfix_out}\n\
               >(test_out, out_correct);",
             newlines=2,
         )
 
-        cpp(f"{partition_name_lower}_top(in, out);", newlines=2)
+        if is_layer:
+            cpp(f"{partition_name_lower}_layer(in, out);", newlines=2)
+        else:
+            cpp(f"{partition_name_lower}_top(in, out);", newlines=2)
 
-        with cpp.block(f"for(int i=0;i<{partition_name_upper}_STREAMS_OUT;i++)"):
+        with cpp.block(f"for(int i=0;i<{partition_name_upper}_{output_streams};i++)"):
             cpp('printf("TESTING OUTPUT %d: ",i);')
             cpp("err += checkStreamEqual(out[i], out_correct[i]);")
             cpp(
@@ -112,7 +125,7 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path):
         cpp("return err;")
 
 
-def generate_tb_files(partition_name, prefix, hls_project_path):
+def generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False):
     if not os.path.exists(
         os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}/tb")
     ):
@@ -122,4 +135,4 @@ def generate_tb_files(partition_name, prefix, hls_project_path):
             )
         )
 
-    generate_tb_cpp(partition_name, prefix, hls_project_path)
+    generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer)

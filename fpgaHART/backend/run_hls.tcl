@@ -19,7 +19,7 @@ foreach s_f $src_files {
 }
 
 foreach t_f $tb_files {
-	add_files -tb $t_f -cflags "-Itb -Idata -Isrc -I../../include -Wno-unknown-pragmas" -csimflags "-Wno-unknown-pragmas"
+	add_files -tb $t_f -cflags "-Itb -Idata -Isrc -Wno-unknown-pragmas" -csimflags "-Wno-unknown-pragmas"
 }
 
 set_top $top_level

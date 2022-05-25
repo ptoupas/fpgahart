@@ -94,7 +94,7 @@ def generate_layer_code(
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(layer_name, prefix, hls_project_path)
+    generate_tb_files(layer_name, prefix, hls_project_path, is_layer=True)
 
     # Generate testbench data
     if "Swish" in layers_type:

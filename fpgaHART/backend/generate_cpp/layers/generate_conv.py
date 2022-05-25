@@ -342,10 +342,10 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
     hpp(f"#define {layer_name_upper}_POINTWISE {pointwise}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_BATCH_SIZE {batch_size}")
-    hpp(f"#define {layer_name_upper}_CHANNELS {channels}")
-    hpp(f"#define {layer_name_upper}_DEPTH {depth}")
-    hpp(f"#define {layer_name_upper}_HEIGHT {height}")
-    hpp(f"#define {layer_name_upper}_WIDTH {width}")
+    hpp(f"#define {layer_name_upper}_CHANNELS_IN {channels}")
+    hpp(f"#define {layer_name_upper}_DEPTH_IN {depth}")
+    hpp(f"#define {layer_name_upper}_HEIGHT_IN {height}")
+    hpp(f"#define {layer_name_upper}_WIDTH_IN {width}")
     hpp(f"#define {layer_name_upper}_KERNEL_SIZE_DEPTH {kd}")
     hpp(f"#define {layer_name_upper}_KERNEL_SIZE_HEIGHT {kh}")
     hpp(f"#define {layer_name_upper}_KERNEL_SIZE_WIDTH {kw}")
@@ -366,17 +366,18 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
         hpp(f"#define {layer_name_upper}_COARSE_OUT {coarse_out_factor}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_FILTERS {filters}")
+    hpp(f"#define {layer_name_upper}_CHANNELS_OUT {filters}")
     hpp(f"#define {layer_name_upper}_DEPTH_OUT {depth_out}")
     hpp(f"#define {layer_name_upper}_HEIGHT_OUT {height_out}")
     hpp(f"#define {layer_name_upper}_WIDTH_OUT {width_out}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_SW_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
-        f"#define {layer_name_upper}_SW_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)"
+        f"#define {layer_name_upper}_SW_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"
     )
-    hpp(f"#define {layer_name_upper}_SW_DEPTH \t{layer_name_upper}_DEPTH")
-    hpp(f"#define {layer_name_upper}_SW_HEIGHT \t{layer_name_upper}_HEIGHT")
-    hpp(f"#define {layer_name_upper}_SW_WIDTH \t{layer_name_upper}_WIDTH")
+    hpp(f"#define {layer_name_upper}_SW_DEPTH \t{layer_name_upper}_DEPTH_IN")
+    hpp(f"#define {layer_name_upper}_SW_HEIGHT \t{layer_name_upper}_HEIGHT_IN")
+    hpp(f"#define {layer_name_upper}_SW_WIDTH \t{layer_name_upper}_WIDTH_IN")
     hpp(
         f"#define {layer_name_upper}_SW_KERNEL_SIZE_DEPTH \t{layer_name_upper}_KERNEL_SIZE_DEPTH"
     )
@@ -400,16 +401,16 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
 
     hpp(f"#define {layer_name_upper}_FORK_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
-        f"#define {layer_name_upper}_FORK_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)"
+        f"#define {layer_name_upper}_FORK_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"
     )
     if not pointwise:
         hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH_OUT")
         hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
         hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH_OUT")
     else:
-        hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH")
-        hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT")
-        hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH")
+        hpp(f"#define {layer_name_upper}_FORK_DEPTH \t{layer_name_upper}_DEPTH_IN")
+        hpp(f"#define {layer_name_upper}_FORK_HEIGHT \t{layer_name_upper}_HEIGHT_IN")
+        hpp(f"#define {layer_name_upper}_FORK_WIDTH \t{layer_name_upper}_WIDTH_IN")
         hpp(
             f"#define {layer_name_upper}_FORK_STRIDE_DEPTH \t{layer_name_upper}_STRIDE_DEPTH"
         )
@@ -441,7 +442,7 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
 
     hpp(f"#define {layer_name_upper}_CONV_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
-        f"#define {layer_name_upper}_CONV_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)"
+        f"#define {layer_name_upper}_CONV_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"
     )
     if depthwise:
         hpp(
@@ -468,7 +469,7 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
 
     hpp(f"#define {layer_name_upper}_ACCUM_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
-        f"#define {layer_name_upper}_ACCUM_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)"
+        f"#define {layer_name_upper}_ACCUM_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"
     )
     if depthwise:
         hpp(
@@ -488,7 +489,7 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
 
     hpp(f"#define {layer_name_upper}_GLUE_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
-        f"#define {layer_name_upper}_GLUE_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)"
+        f"#define {layer_name_upper}_GLUE_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"
     )
     hpp(f"#define {layer_name_upper}_GLUE_FILTERS \t{layer_name_upper}_FILTERS")
     hpp(f"#define {layer_name_upper}_GLUE_DEPTH \t{layer_name_upper}_DEPTH_OUT")
@@ -516,7 +517,7 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
         hpp(
             f'static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
                                         [{layer_name_upper}_COARSE_OUT_INNER]\n\
-                                        [DIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)]\n\
+                                        [DIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)]\n\
                                         [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT_INNER*{layer_name_upper}_GROUPS)]\n\
                                         [{layer_name_upper}_KERNEL_SIZE_HEIGHT]\n\
                                         [{layer_name_upper}_KERNEL_SIZE_WIDTH]\n\
@@ -528,7 +529,7 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
         hpp(
             f'static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
                                             [{layer_name_upper}_COARSE_OUT]\n\
-                                            [DIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE_IN)]\n\
+                                            [DIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)]\n\
                                             [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT*{layer_name_upper}_GROUPS)]\n\
                                             [{layer_name_upper}_KERNEL_SIZE_HEIGHT]\n\
                                             [{layer_name_upper}_KERNEL_SIZE_WIDTH]\n\
