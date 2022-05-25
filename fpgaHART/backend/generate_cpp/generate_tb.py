@@ -1,12 +1,13 @@
-from layers.codegen import *
 import os
 
+from layers.codegen import *
 
-def generate_tb_cpp(partition_name, prefix):
+
+def generate_tb_cpp(partition_name, prefix, hls_project_path):
     partition_name_lower = partition_name.lower()
     partition_name_upper = partition_name.upper()
 
-    data_dir = f"/data/HLS_projects/fpgaHART_hls/{prefix}/{partition_name}/data"
+    data_dir = f"{hls_project_path}/{prefix}/{partition_name}/data"
 
     cpp = CppFile(
         os.path.join(
@@ -111,7 +112,7 @@ def generate_tb_cpp(partition_name, prefix):
         cpp("return err;")
 
 
-def generate_tb_files(partition_name, prefix):
+def generate_tb_files(partition_name, prefix, hls_project_path):
     if not os.path.exists(
         os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}/tb")
     ):
@@ -121,4 +122,4 @@ def generate_tb_files(partition_name, prefix):
             )
         )
 
-    generate_tb_cpp(partition_name, prefix)
+    generate_tb_cpp(partition_name, prefix, hls_project_path)

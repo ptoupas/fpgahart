@@ -6,9 +6,9 @@ LAYER_NAME="custom_conv"
 CONFIG_FILE="fpga_modeling_reports/x3d_m_seq_layers.csv"
 HLS_PARENT_DIR="/home/ptoupas/Development/hls_single_layers"
 
-# python main.py $MODEL_NAME $EXECUTION_TYPE
+python main.py $MODEL_NAME $EXECUTION_TYPE
 
-# python fpgaHART/backend/generate_cpp/generate_layer.py --model_name $MODEL_NAME --prefix $LAYER_NAME --config_file $CONFIG_FILE
+python fpgaHART/backend/generate_cpp/generate_layer.py --model_name $MODEL_NAME --prefix $LAYER_NAME --config_file $CONFIG_FILE --hls_project_path $HLS_PARENT_DIR
 
 for file in generated_data/$LAYER_NAME/*;
 do

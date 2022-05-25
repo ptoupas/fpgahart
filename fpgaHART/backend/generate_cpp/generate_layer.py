@@ -30,6 +30,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
     parser.add_argument("--model_name", help="name of the HAR model", required=True)
     parser.add_argument(
+        "--hls_project_path",
+        help="path of the HLS project to be generated",
+        required=True,
+    )
+    parser.add_argument(
         "--prefix",
         help="the parent folder in which to store the model's partitions",
         type=str,
@@ -64,7 +69,9 @@ def get_layers_configurations(config_file):
     return result
 
 
-def generate_layer_code(layers_config, layers_type, layer_name, parser, prefix):
+def generate_layer_code(
+    layers_config, layers_type, layer_name, parser, prefix, hls_project_path
+):
     # Generate layers files
     if "Swish" in layers_type:
         generate_swish_files(layer_name, layers_config, f"{prefix}/{layer_name}")
@@ -75,7 +82,9 @@ def generate_layer_code(layers_config, layers_type, layer_name, parser, prefix):
     elif "Add" in layers_type or "Mul" in layers_type:
         generate_elemwise_files(layer_name, layers_config, f"{prefix}/{layer_name}")
     elif "Conv" in layers_type:
-        generate_conv_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_conv_files(
+            layer_name, layers_config, f"{prefix}/{layer_name}", hls_project_path
+        )
     elif "GlobalAveragePool" in layers_type:
         generate_gap_files(layer_name, layers_config, f"{prefix}/{layer_name}")
     else:
@@ -85,7 +94,7 @@ def generate_layer_code(layers_config, layers_type, layer_name, parser, prefix):
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(layer_name, prefix)
+    generate_tb_files(layer_name, prefix, hls_project_path)
 
     # Generate testbench data
     if "Swish" in layers_type:
@@ -146,5 +155,5 @@ if __name__ == "__main__":
 
     for k, v in layer_configuration.items():
         generate_layer_code(
-            v["config"], v["type"], k, parser, args.prefix,
+            v["config"], v["type"], k, parser, args.prefix, args.hls_project_path
         )

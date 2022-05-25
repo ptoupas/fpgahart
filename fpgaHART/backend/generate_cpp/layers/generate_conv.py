@@ -292,7 +292,7 @@ def generate_conv_cpp(name, config, partition_name):
     cpp.close()
 
 
-def generate_conv_hpp(name, config, partition_name):
+def generate_conv_hpp(name, config, partition_name, hls_project_path):
     batch_size = config["shape_in"][0]
     channels = config["shape_in"][1]
     depth = config["shape_in"][2]
@@ -322,7 +322,7 @@ def generate_conv_hpp(name, config, partition_name):
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    weights_file_path = f"/data/HLS_projects/fpgaHART_hls/{partition_name}/data/weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv"
+    weights_file_path = f"{hls_project_path}/{partition_name}/data/weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv"
 
     hpp = CppFile(
         os.path.join(
@@ -546,9 +546,9 @@ def generate_conv_hpp(name, config, partition_name):
     hpp.close()
 
 
-def generate_conv_files(name, config, partition_name):
+def generate_conv_files(name, config, partition_name, hls_project_path):
     if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
         os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
 
-    generate_conv_hpp(name, config, partition_name)
+    generate_conv_hpp(name, config, partition_name, hls_project_path)
     generate_conv_cpp(name, config, partition_name)

@@ -22,6 +22,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
     parser.add_argument("--model_name", help="name of the HAR model", required=True)
     parser.add_argument(
+        "--hls_project_path",
+        help="path of the HLS project to be generated",
+        required=True,
+    )
+    parser.add_argument(
         "--prefix",
         help="the parent folder in which to store the model's partitions",
         type=str,
@@ -59,7 +64,7 @@ def get_partitions_configurations(config_file):
 
 
 def generate_partition_code(
-    layers_config, branch_depth, partition_name, parser, prefix
+    layers_config, branch_depth, partition_name, parser, prefix, hls_project_path
 ):
     # Generate layers files
     for l in [*layers_config]:
@@ -72,7 +77,9 @@ def generate_partition_code(
         elif "Add" in l or "Mul" in l:
             generate_elemwise_files(l, layers_config[l], f"{prefix}/{partition_name}")
         elif "Conv" in l:
-            generate_conv_files(l, layers_config[l], f"{prefix}/{partition_name}")
+            generate_conv_files(
+                l, layers_config[l], f"{prefix}/{partition_name}", hls_project_path
+            )
         elif "GlobalAveragePool" in l:
             shorted_name = "Gap_" + l.split("_")[1]
             generate_gap_files(
@@ -111,7 +118,7 @@ def generate_partition_code(
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(partition_name, prefix)
+    generate_tb_files(partition_name, prefix, hls_project_path)
 
 
 def identify_streams_mismatches(layers_config, connections):
@@ -147,4 +154,5 @@ if __name__ == "__main__":
             p,
             parser,
             args.prefix,
+            args.hls_project_path,
         )

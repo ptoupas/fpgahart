@@ -10,7 +10,7 @@ python main.py $MODEL_NAME $EXECUTION_TYPE
 
 python fpgaHART/backend/python_prototyping/generate_data.py --op_type 3d_part --prefix $PARTITION_NAME --config_file $CONFIG_FILE
 
-python fpgaHART/backend/generate_cpp/generate_partition.py --model_name $MODEL_NAME --prefix $PARTITION_NAME --config_file $CONFIG_FILE
+python fpgaHART/backend/generate_cpp/generate_partition.py --model_name $MODEL_NAME --prefix $PARTITION_NAME --config_file $CONFIG_FILE --hls_project_path $HLS_PARENT_DIR
 
 for file in generated_data/$PARTITION_NAME/*;
 do

@@ -946,7 +946,10 @@ def conv_3d(
         weights_transformed = transform_weights(
             write_weights_binary, coarse_in, coarse_out, 1, 1, groups=groups
         )
-    with open(prefix + "/" + layer_name + "/weights.csv", "w") as f:
+    with open(
+        f"{prefix}/{layer_name}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
+        "w",
+    ) as f:
         f.write(array_init(weights_transformed[0]))
 
     print("=" * 40)
