@@ -20,7 +20,7 @@ void sliding_window_3d_windows(
 		hls::stream<T> frame_buffer[K_H][K_W][K_D])
 {
 
-#pragma HLS INLINE off
+#pragma HLS INLINE OFF
 
     // set all parameters as constants
     const unsigned int batch        = BATCH;
@@ -263,7 +263,7 @@ void sliding_window_3d_filtered_windows(
 		hls::stream<T> out[K_H][K_W][K_D])
 {
 
-#pragma HLS INLINE off
+#pragma HLS INLINE OFF
 
     // set all parameters as constants
     const unsigned int batch        = BATCH;
@@ -354,7 +354,7 @@ void sliding_window_3d(
 		hls::stream<sw_t> out[K_H][K_W][K_D])
 {
 
-#pragma HLS INLINE off
+#pragma HLS INLINE OFF
 
 #pragma HLS DATAFLOW
 
