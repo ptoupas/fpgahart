@@ -287,10 +287,10 @@ class PartitionDescriptor(ModelLayerDescriptor):
         for layer, config in self.layers.items():
             layers.append(layer)
 
+        plt.figure(figsize=(20, 10))
         graph = self.create_graph(layers)
         self.update_layer_types(graph=graph, plot_types=False)
 
-        plt.figure(figsize=(20, 10))
         for i in range(1, 4):
             self.update_hw_pe(graph=graph, groupping=i)
             self.schedule_ops(graph=graph, groupping=i, plot_pe=True)

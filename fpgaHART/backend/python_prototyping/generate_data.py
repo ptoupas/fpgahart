@@ -897,7 +897,7 @@ def conv_3d(
 
     x = torch.randn(input_shape)
     # print(x.numpy())
-    print(x.numpy().shape)
+    print(f"input shape: {x.numpy().shape}")
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
@@ -922,7 +922,7 @@ def conv_3d(
     )
     weights = conv.weight
     # print(weights.detach().numpy())
-    print(weights.detach().numpy().shape)
+    print(f"weights shape: {weights.detach().numpy().shape}")
     out = conv(x)
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
@@ -935,12 +935,7 @@ def conv_3d(
 
     if depthwise:
         weights_transformed = transform_weights(
-            write_weights_binary,
-            1,
-            coarse_out,
-            1,
-            coarse_group=coarse_in,
-            groups=groups,
+            write_weights_binary, 1, 1, 1, coarse_group=coarse_in, groups=groups,
         )
     else:
         weights_transformed = transform_weights(
@@ -955,7 +950,7 @@ def conv_3d(
     print("=" * 40)
     print("=" * 40)
     # print(out.detach().numpy())
-    print(out.detach().numpy().shape)
+    print(f"output shape: {out.detach().numpy().shape}")
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
@@ -1215,7 +1210,7 @@ def parse_args():
     parser.add_argument("--kernel_shape", nargs="+", default=[3, 3, 3], type=int)
     parser.add_argument("--filters", default=1, type=int)
     parser.add_argument("--groups", default=1, type=int)
-    parser.add_argument("--padding", nargs="+", default=[0, 0, 0], type=int)
+    parser.add_argument("--padding", nargs="+", default=[1, 1, 1], type=int)
     parser.add_argument("--stride", nargs="+", default=[1, 1, 1], type=int)
     parser.add_argument("--depthwise", default=False, action="store_true")
     parser.add_argument("--coarse_in", default=1, type=int)

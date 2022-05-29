@@ -65,7 +65,7 @@ def generate_conv_cpp(name, config, partition_name):
         cpp(
             f"#pragma HLS ARRAY_PARTITION variable=weights_{layer_name_lower} complete dim=2"
         )
-        cpp(f"#pragma HLS BIND_STORAGE variable=weights_{layer_name_lower} type=ram_2p")
+        # cpp(f"#pragma HLS BIND_STORAGE variable=weights_{layer_name_lower} type=ram_2p")
         cpp(f"#pragma HLS STABLE variable=weights_{layer_name_lower}", newlines=2)
 
         if not pointwise:
