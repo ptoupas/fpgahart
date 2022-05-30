@@ -427,6 +427,11 @@ class Convolutional3DLayer(BaseLayer):
         return self.get_dp_info()
 
     def get_rate_matrix(self, f_fine, f_coarseIn, f_coarseOut):
+        in_volume_pad = (
+            (self.depth_in + 2 * self.padding[0])
+            * (self.rows_in + 2 * self.padding[1])
+            * (self.cols_in + 2 * self.padding[2])
+        )
         if self.depthwise:
             rate_matrix = np.zeros(shape=(5, 6), dtype=float)
 
@@ -434,9 +439,9 @@ class Convolutional3DLayer(BaseLayer):
 
             # Sliding Window
             rate_matrix[0, 1] = 1
-            rate_matrix[1, 1] = (self.depth_out * self.rows_out * self.cols_out) / (
-                self.depth_in * self.rows_in * self.cols_in
-            )
+            rate_matrix[1, 1] = (
+                self.depth_out * self.rows_out * self.cols_out
+            ) / in_volume_pad
 
             # Fork
             rate_matrix[1, 2] = 1
@@ -485,11 +490,10 @@ class Convolutional3DLayer(BaseLayer):
             rate_matrix[0, 0] = 1
 
             # Sliding Window
-            # TODO: We have to take into account the padding effect as well
             rate_matrix[0, 1] = 1
-            rate_matrix[1, 1] = (self.depth_out * self.rows_out * self.cols_out) / (
-                self.depth_in * self.rows_in * self.cols_in
-            )
+            rate_matrix[1, 1] = (
+                self.depth_out * self.rows_out * self.cols_out
+            ) / in_volume_pad
 
             # Fork
             rate_matrix[1, 2] = 1
@@ -753,7 +757,7 @@ class Convolutional3DLayer(BaseLayer):
             workload_matrix[0, 0] = in_volume * self.channels
 
             # Sliding Window
-            workload_matrix[0, 1] = in_volume * self.channels
+            workload_matrix[0, 1] = in_volume_pad * self.channels
             workload_matrix[1, 1] = out_volume * kernel_volume * self.channels
 
             # Fork
@@ -803,7 +807,7 @@ class Convolutional3DLayer(BaseLayer):
             workload_matrix[0, 0] = in_volume * self.channels
 
             # Sliding Window
-            workload_matrix[0, 1] = in_volume * self.channels
+            workload_matrix[0, 1] = in_volume_pad * self.channels
             workload_matrix[1, 1] = out_volume * kernel_volume * self.channels
 
             # Fork
