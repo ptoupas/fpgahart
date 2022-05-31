@@ -1,20 +1,8 @@
 import argparse
-import itertools
-import os
-import time
-from multiprocessing import Pool
 
-import numpy as np
 import seaborn as sns
-from matplotlib import pyplot as plt
 
-from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
-from fpgaHART.layers.elemwise import ElementWiseLayer
-from fpgaHART.layers.gap import GAPLayer
-from fpgaHART.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpgaHART.onnx_parser.partition_descriptor import PartitionDescriptor
 from fpgaHART.partitions.partition_parser import PartitionParser
-from fpgaHART.utils import utils
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
@@ -44,13 +32,7 @@ def parse_args():
         help="whether to use historical data as approximation for GAP layers or not",
     )
 
-    args = parser.parse_args()
-    return args
-
-
-def multithreaded_modeling(operation, input, pool):
-    results = pool.starmap(operation, input)
-    return results
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
