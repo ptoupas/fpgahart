@@ -17,4 +17,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        python -m pylint --fail-under=9.5 main.py #$(git ls-files '*.py')
+        python -m pylint --fail-under=8.0 main.py #$(git ls-files '*.py')
