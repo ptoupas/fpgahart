@@ -1,14 +1,11 @@
 import argparse
 
-import seaborn as sns
-
 from fpgaHART.partitions.partition_parser import PartitionParser
 
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
-
-
 def parse_args():
+    """
+        Argument parser function.
+    """
     parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
     parser.add_argument("model_name", help="name of the HAR model")
     parser.add_argument(
@@ -38,7 +35,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    parser = PartitionParser(
+    partition_parser = PartitionParser(
         args.model_name,
         args.singlethreaded,
         args.plot_layers,
@@ -46,6 +43,6 @@ if __name__ == "__main__":
         args.gap_approx,
     )
 
-    # parser.model_custom_partition()
-    # parser.model_individual_layers()
-    parser.parse()
+    # partition_parser.model_custom_partition()
+    # partition_parser.model_individual_layers()
+    partition_parser.parse()
