@@ -6,9 +6,9 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v1
     - name: Set up Python 3.9
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v1
       with:
         python-version: 3.9
     - name: Install dependencies
@@ -17,4 +17,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint main.py --fail-under=5.0 #$(git ls-files '*.py')
+        python -m pylint --fail-under=5.0 main.py #$(git ls-files '*.py')
