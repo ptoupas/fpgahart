@@ -77,16 +77,7 @@ def generate_conv_cpp(name, config, partition_name):
                 "#pragma HLS ARRAY_PARTITION variable=sw_out complete dim=0", newlines=2
             )
 
-            if depthwise:
-                cpp(
-                    f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT_INNER][{layer_name_upper}_KERNEL_SIZE_HEIGHT][{layer_name_upper}_KERNEL_SIZE_WIDTH][{layer_name_upper}_KERNEL_SIZE_DEPTH];"
-                )
-                cpp("#pragma HLS STREAM variable=fork_out")
-                cpp(
-                    "#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0",
-                    newlines=2,
-                )
-            else:
+            if not depthwise:
                 cpp(
                     f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT][{layer_name_upper}_KERNEL_SIZE_HEIGHT][{layer_name_upper}_KERNEL_SIZE_WIDTH][{layer_name_upper}_KERNEL_SIZE_DEPTH];"
                 )
@@ -96,16 +87,7 @@ def generate_conv_cpp(name, config, partition_name):
                     newlines=2,
                 )
         else:
-            if depthwise:
-                cpp(
-                    f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT_INNER];"
-                )
-                cpp("#pragma HLS STREAM variable=fork_out")
-                cpp(
-                    "#pragma HLS ARRAY_PARTITION variable=fork_out complete dim=0",
-                    newlines=2,
-                )
-            else:
+            if not depthwise:
                 cpp(
                     f"stream_t({layer_name_lower}_data_t) fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];"
                 )
@@ -148,42 +130,64 @@ def generate_conv_cpp(name, config, partition_name):
             cpp("#pragma HLS unroll", newlines=2)
 
             if not pointwise:
-                cpp(
-                    f"sliding_window_3d<\n\
-                    {layer_name_upper}_SW_BATCH_SIZE,\n\
-                    {layer_name_upper}_SW_CHANNELS,\n\
-                    {layer_name_upper}_SW_HEIGHT,\n\
-                    {layer_name_upper}_SW_WIDTH,\n\
-                    {layer_name_upper}_SW_DEPTH,\n\
-                    {layer_name_upper}_SW_KERNEL_SIZE_HEIGHT,\n\
-                    {layer_name_upper}_SW_KERNEL_SIZE_WIDTH,\n\
-                    {layer_name_upper}_SW_KERNEL_SIZE_DEPTH,\n\
-                    {layer_name_upper}_SW_PAD_HEIGHT,\n\
-                    {layer_name_upper}_SW_PAD_WIDTH,\n\
-                    {layer_name_upper}_SW_PAD_DEPTH,\n\
-                    {layer_name_upper}_SW_STRIDE_HEIGHT,\n\
-                    {layer_name_upper}_SW_STRIDE_WIDTH,\n\
-                    {layer_name_upper}_SW_STRIDE_DEPTH,\n\
-                    {layer_name_lower}_data_t\n\
-                >(in[i],sw_out[i]);",
-                    newlines=2,
-                )
+                if not depthwise:
+                    cpp(
+                        f"sliding_window_3d<\n\
+                        {layer_name_upper}_SW_BATCH_SIZE,\n\
+                        {layer_name_upper}_SW_CHANNELS,\n\
+                        {layer_name_upper}_SW_HEIGHT,\n\
+                        {layer_name_upper}_SW_WIDTH,\n\
+                        {layer_name_upper}_SW_DEPTH,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_HEIGHT,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_WIDTH,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_DEPTH,\n\
+                        {layer_name_upper}_SW_PAD_HEIGHT,\n\
+                        {layer_name_upper}_SW_PAD_WIDTH,\n\
+                        {layer_name_upper}_SW_PAD_DEPTH,\n\
+                        {layer_name_upper}_SW_STRIDE_HEIGHT,\n\
+                        {layer_name_upper}_SW_STRIDE_WIDTH,\n\
+                        {layer_name_upper}_SW_STRIDE_DEPTH,\n\
+                        {layer_name_lower}_data_t\n\
+                    >(in[i],sw_out[i]);",
+                        newlines=2,
+                    )
 
-                cpp(
-                    f"fork_3d<\n\
-                    {layer_name_upper}_FORK_BATCH_SIZE,\n\
-                    {layer_name_upper}_FORK_CHANNELS,\n\
-                    {layer_name_upper}_FORK_HEIGHT,\n\
-                    {layer_name_upper}_FORK_WIDTH,\n\
-                    {layer_name_upper}_FORK_DEPTH,\n\
-                    {layer_name_upper}_FORK_COARSE,\n\
-                    {layer_name_upper}_FORK_KERNEL_SIZE_HEIGHT,\n\
-                    {layer_name_upper}_FORK_KERNEL_SIZE_WIDTH,\n\
-                    {layer_name_upper}_FORK_KERNEL_SIZE_DEPTH,\n\
-                    {layer_name_lower}_data_t\n\
-                >(sw_out[i],fork_out[i]);",
-                    newlines=2,
-                )
+                    cpp(
+                        f"fork_3d<\n\
+                        {layer_name_upper}_FORK_BATCH_SIZE,\n\
+                        {layer_name_upper}_FORK_CHANNELS,\n\
+                        {layer_name_upper}_FORK_HEIGHT,\n\
+                        {layer_name_upper}_FORK_WIDTH,\n\
+                        {layer_name_upper}_FORK_DEPTH,\n\
+                        {layer_name_upper}_FORK_COARSE,\n\
+                        {layer_name_upper}_FORK_KERNEL_SIZE_HEIGHT,\n\
+                        {layer_name_upper}_FORK_KERNEL_SIZE_WIDTH,\n\
+                        {layer_name_upper}_FORK_KERNEL_SIZE_DEPTH,\n\
+                        {layer_name_lower}_data_t\n\
+                    >(sw_out[i],fork_out[i]);",
+                        newlines=2,
+                    )
+                else:
+                    cpp(
+                        f"sliding_window_3d<\n\
+                        {layer_name_upper}_SW_BATCH_SIZE,\n\
+                        {layer_name_upper}_SW_CHANNELS,\n\
+                        {layer_name_upper}_SW_HEIGHT,\n\
+                        {layer_name_upper}_SW_WIDTH,\n\
+                        {layer_name_upper}_SW_DEPTH,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_HEIGHT,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_WIDTH,\n\
+                        {layer_name_upper}_SW_KERNEL_SIZE_DEPTH,\n\
+                        {layer_name_upper}_SW_PAD_HEIGHT,\n\
+                        {layer_name_upper}_SW_PAD_WIDTH,\n\
+                        {layer_name_upper}_SW_PAD_DEPTH,\n\
+                        {layer_name_upper}_SW_STRIDE_HEIGHT,\n\
+                        {layer_name_upper}_SW_STRIDE_WIDTH,\n\
+                        {layer_name_upper}_SW_STRIDE_DEPTH,\n\
+                        {layer_name_lower}_data_t\n\
+                    >(in[i],sw_out[i]);",
+                        newlines=2,
+                    )
             else:
                 cpp(
                     f"fork_3d<\n\
@@ -201,62 +205,82 @@ def generate_conv_cpp(name, config, partition_name):
                     newlines=2,
                 )
 
-            with cpp.block(f"for(int j=0; j<{inner_block_loop}; j++)"):
+            if not depthwise:
+                with cpp.block(f"for(int j=0; j<{inner_block_loop}; j++)"):
 
-                cpp("#pragma HLS unroll", newlines=2)
+                    cpp("#pragma HLS unroll", newlines=2)
 
-                if pointwise and not depthwise:
-                    cpp(
-                        f"conv_3d<\n\
-                    {layer_name_upper}_CONV_BATCH_SIZE,\n\
-                    {layer_name_upper}_CONV_CHANNELS,\n\
-                    {layer_name_upper}_CONV_FILTERS,\n\
-                    {layer_name_upper}_CONV_HEIGHT,\n\
-                    {layer_name_upper}_CONV_WIDTH,\n\
-                    {layer_name_upper}_CONV_DEPTH,\n\
-                    {layer_name_upper}_CONV_GROUPS,\n\
-                    {layer_name_lower}_data_t,\n\
-                    {layer_name_lower}_data_t,\n\
-                    accum_data_t\n\
-                >(fork_out[i][j],weights_{layer_name_lower}[i][j],conv_out[i][j]);",
-                        newlines=2,
-                    )
-                else:
-                    cpp(
-                        f"conv_3d<\n\
-                    {layer_name_upper}_CONV_BATCH_SIZE,\n\
-                    {layer_name_upper}_CONV_CHANNELS,\n\
-                    {layer_name_upper}_CONV_FILTERS,\n\
-                    {layer_name_upper}_CONV_HEIGHT,\n\
-                    {layer_name_upper}_CONV_WIDTH,\n\
-                    {layer_name_upper}_CONV_DEPTH,\n\
-                    {layer_name_upper}_CONV_KERNEL_SIZE_HEIGHT,\n\
-                    {layer_name_upper}_CONV_KERNEL_SIZE_WIDTH,\n\
-                    {layer_name_upper}_CONV_KERNEL_SIZE_DEPTH,\n\
-                    {layer_name_upper}_CONV_FINE,\n\
-                    {layer_name_upper}_CONV_GROUPS,\n\
-                    {layer_name_lower}_data_t,\n\
-                    {layer_name_lower}_data_t,\n\
-                    accum_data_t\n\
-                >(fork_out[i][j],weights_{layer_name_lower}[i][j],conv_out[i][j]);",
-                        newlines=2,
-                    )
+                    if pointwise and not depthwise:
+                        cpp(
+                            f"conv_3d<\n\
+                        {layer_name_upper}_CONV_BATCH_SIZE,\n\
+                        {layer_name_upper}_CONV_CHANNELS,\n\
+                        {layer_name_upper}_CONV_FILTERS,\n\
+                        {layer_name_upper}_CONV_HEIGHT,\n\
+                        {layer_name_upper}_CONV_WIDTH,\n\
+                        {layer_name_upper}_CONV_DEPTH,\n\
+                        {layer_name_upper}_CONV_GROUPS,\n\
+                        {layer_name_lower}_data_t,\n\
+                        {layer_name_lower}_data_t,\n\
+                        accum_data_t\n\
+                    >(fork_out[i][j],weights_{layer_name_lower}[i][j],conv_out[i][j]);",
+                            newlines=2,
+                        )
+                    else:
+                        cpp(
+                            f"conv_3d<\n\
+                        {layer_name_upper}_CONV_BATCH_SIZE,\n\
+                        {layer_name_upper}_CONV_CHANNELS,\n\
+                        {layer_name_upper}_CONV_FILTERS,\n\
+                        {layer_name_upper}_CONV_HEIGHT,\n\
+                        {layer_name_upper}_CONV_WIDTH,\n\
+                        {layer_name_upper}_CONV_DEPTH,\n\
+                        {layer_name_upper}_CONV_KERNEL_SIZE_HEIGHT,\n\
+                        {layer_name_upper}_CONV_KERNEL_SIZE_WIDTH,\n\
+                        {layer_name_upper}_CONV_KERNEL_SIZE_DEPTH,\n\
+                        {layer_name_upper}_CONV_FINE,\n\
+                        {layer_name_upper}_CONV_GROUPS,\n\
+                        {layer_name_lower}_data_t,\n\
+                        {layer_name_lower}_data_t,\n\
+                        accum_data_t\n\
+                    >(fork_out[i][j],weights_{layer_name_lower}[i][j],conv_out[i][j]);",
+                            newlines=2,
+                        )
 
-                if not depthwise:
-                    cpp(
-                        f"accum_3d<\n\
-                    {layer_name_upper}_ACCUM_BATCH_SIZE,\n\
-                    {layer_name_upper}_ACCUM_CHANNELS,\n\
-                    {layer_name_upper}_ACCUM_FILTERS,\n\
-                    {layer_name_upper}_ACCUM_HEIGHT,\n\
-                    {layer_name_upper}_ACCUM_WIDTH,\n\
-                    {layer_name_upper}_ACCUM_DEPTH,\n\
-                    {layer_name_upper}_ACCUM_GROUPS,\n\
-                    accum_data_t\n\
-                >(conv_out[i][j],accum_out[i][j]);",
-                        newlines=2,
-                    )
-
+                    if not depthwise:
+                        cpp(
+                            f"accum_3d<\n\
+                        {layer_name_upper}_ACCUM_BATCH_SIZE,\n\
+                        {layer_name_upper}_ACCUM_CHANNELS,\n\
+                        {layer_name_upper}_ACCUM_FILTERS,\n\
+                        {layer_name_upper}_ACCUM_HEIGHT,\n\
+                        {layer_name_upper}_ACCUM_WIDTH,\n\
+                        {layer_name_upper}_ACCUM_DEPTH,\n\
+                        {layer_name_upper}_ACCUM_GROUPS,\n\
+                        accum_data_t\n\
+                    >(conv_out[i][j],accum_out[i][j]);",
+                            newlines=2,
+                        )
+            else:
+                cpp(
+                    f"conv_3d<\n\
+                {layer_name_upper}_CONV_BATCH_SIZE,\n\
+                {layer_name_upper}_CONV_CHANNELS,\n\
+                {layer_name_upper}_CONV_FILTERS,\n\
+                {layer_name_upper}_CONV_HEIGHT,\n\
+                {layer_name_upper}_CONV_WIDTH,\n\
+                {layer_name_upper}_CONV_DEPTH,\n\
+                {layer_name_upper}_CONV_KERNEL_SIZE_HEIGHT,\n\
+                {layer_name_upper}_CONV_KERNEL_SIZE_WIDTH,\n\
+                {layer_name_upper}_CONV_KERNEL_SIZE_DEPTH,\n\
+                {layer_name_upper}_CONV_FINE,\n\
+                {layer_name_upper}_CONV_GROUPS,\n\
+                {layer_name_lower}_data_t,\n\
+                {layer_name_lower}_data_t,\n\
+                accum_data_t\n\
+            >(sw_out[i],weights_{layer_name_lower}[i][0],conv_out[i][0]);",
+                    newlines=2,
+                )
         if not depthwise:
             cpp(
                 f"glue_3d<\n\

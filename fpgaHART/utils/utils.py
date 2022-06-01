@@ -42,7 +42,7 @@ def get_factors(n):
         set(
             reduce(
                 list.__add__,
-                ([i, n // i] for i in range(1, int(n**0.5) + 1) if n % i == 0),
+                ([i, n // i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0),
             )
         )
     )
@@ -152,8 +152,7 @@ def plot_graph(
 
         sns.lineplot(x=pareto_front[:, 0], y=pareto_front[:, 1], color="red")
 
-    sns.scatterplot(x=np.array(throughput),
-                    y=np.array(dsp_util), size=bram_util)
+    sns.scatterplot(x=np.array(throughput), y=np.array(dsp_util), size=bram_util)
 
     plt.title(layer_name)
     plt.xlabel("Throughtput(outputs/sec)")
@@ -410,8 +409,7 @@ def check_configuration_validation(config, layers):
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
             print("config for layer {} -> {}".format(name, comb[i]))
         elif isinstance(layer["layer"], ElementWiseLayer):
-            streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams(
-            )
+            streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
             streams_in1 = math.ceil(streams_in1 * config[i][0])
             streams_in2 = math.ceil(streams_in2 * config[i][1])
             streams_out = math.ceil(streams_out * config[i][2])
@@ -615,19 +613,22 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
         # Building and fitting the model
         kmeanModel = KMeans(n_clusters=k).fit(X)
 
-        distortions.append(sum(np.min(cdist(X, kmeanModel.cluster_centers_,
-                                            'euclidean'), axis=1)) / X.shape[0])
+        distortions.append(
+            sum(np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"), axis=1))
+            / X.shape[0]
+        )
         inertias.append(kmeanModel.inertia_)
 
-        mapping1[k] = sum(np.min(cdist(X, kmeanModel.cluster_centers_,
-                                       'euclidean'), axis=1)) / X.shape[0]
+        mapping1[k] = (
+            sum(np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"), axis=1))
+            / X.shape[0]
+        )
         mapping2[k] = kmeanModel.inertia_
 
-    distortions_res = normalizeData(
-        np.array(sorted(mapping1.values(), reverse=True)))
+    distortions_res = normalizeData(np.array(sorted(mapping1.values(), reverse=True)))
     k_dist = 0
-    for i in range(len(distortions_res)-1):
-        dist = np.linalg.norm(distortions_res[i]-distortions_res[i+1])
+    for i in range(len(distortions_res) - 1):
+        dist = np.linalg.norm(distortions_res[i] - distortions_res[i + 1])
         if dist < 0.05:
             k_dist = i + 1
             _logger.info(f"Optimal number of clusters calculated: {i + 1}")
@@ -638,10 +639,10 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
     kmeans_bins = np.sort(Kmean.cluster_centers_[:, 0])
 
     if plot_lbow:
-        plt.plot(K, distortions, 'bx-')
-        plt.xlabel('Values of K')
-        plt.ylabel('Distortion')
-        plt.title('The Elbow Method using Distortion')
+        plt.plot(K, distortions, "bx-")
+        plt.xlabel("Values of K")
+        plt.ylabel("Distortion")
+        plt.title("The Elbow Method using Distortion")
         plt.tight_layout()
         plt.show()
 
@@ -655,9 +656,9 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
     #         print(f"{i + 1} -> {dist}")
     #         break
 
-    df = pd.DataFrame({'channels': channels})
-    df['channels_bin'] = pd.qcut(df['channels'], q=k_dist)
-    bin_edges = df['channels_bin'].unique()
+    df = pd.DataFrame({"channels": channels})
+    df["channels_bin"] = pd.qcut(df["channels"], q=k_dist)
+    bin_edges = df["channels_bin"].unique()
 
     # bin_edges = np.histogram_bin_edges(X, bins=k_dist+1)
     if plot_hist:
@@ -666,3 +667,31 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
         plt.show()
 
     return bin_edges
+
+
+def get_conv_type(
+    layer: dict(),
+    discriminate_stide: bool = False,
+    discriminate_padding: bool = False,
+    discriminate_channels_filters: bool = False,
+) -> str:
+    conv_type = "Conv"
+    cin = layer["shape_in"][0][1]
+    cout = layer["shape_out"][1]
+    kernel_shape = layer["kernel"][2:]
+    padding = layer["padding"]
+    stride = layer["stride"]
+    groups = layer["groups"]
+    if cin == cout and groups == cout:
+        conv_type += "Dw"
+    if kernel_shape.count(1) == len(kernel_shape):
+        conv_type += "Pw"
+    conv_type += "k{}".format("".join(map(str, kernel_shape)))
+    if discriminate_stide:
+        conv_type += "s{}".format("".join(map(str, stride)))
+    if discriminate_padding:
+        conv_type += "p{}".format("".join(map(str, padding)))
+    if discriminate_channels_filters:
+        conv_type += "c{}".format(cin)
+        conv_type += "f{}".format(cout)
+    return conv_type

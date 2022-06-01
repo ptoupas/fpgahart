@@ -1,29 +1,20 @@
 import argparse
-import itertools
 import logging
-import os
-import time
-from multiprocessing import Pool
 
-import numpy as np
 import seaborn as sns
-from matplotlib import pyplot as plt
 
 from fpgaHART import _logger
-from fpgaHART.layers.convolutional_3d import Convolutional3DLayer
-from fpgaHART.layers.elemwise import ElementWiseLayer
-from fpgaHART.layers.gap import GAPLayer
 from fpgaHART.layers.layer_parser import LayerParser
-from fpgaHART.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpgaHART.network_representation.partition_descriptor import PartitionDescriptor
 from fpgaHART.partitions.partition_parser import PartitionParser
-from fpgaHART.utils import utils
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
 
 def parse_args():
+    """
+        Argument parser function.
+    """
     parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
     parser.add_argument("model_name", help="name of the HAR model")
     parser.add_argument(
@@ -53,8 +44,7 @@ def parse_args():
         help="whether to use historical data as approximation for GAP layers or not",
     )
 
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -73,7 +63,8 @@ if __name__ == "__main__":
 
         # partition_parser.parse()
         # partition_parser.model_custom_partition()
-        partition_parser.find_common_layers(groupping=3)
+        # partition_parser.find_common_layers(groupping=3)
+        partition_parser.group_conv_layers()
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,

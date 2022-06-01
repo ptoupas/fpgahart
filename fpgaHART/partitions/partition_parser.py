@@ -188,7 +188,7 @@ class PartitionParser(PartitionDescriptor):
                     self.layers[layer]["operation"], layer
                 )
             if self.layers[layer]["operation"] == "Conv":
-                hw_type = self.get_conv_type(
+                hw_type = utils.get_conv_type(
                     layer=self.layers[layer],
                     discriminate_stide=False,
                     discriminate_padding=False,
@@ -210,26 +210,6 @@ class PartitionParser(PartitionDescriptor):
             graph.add_edge(*edge)
 
         return graph
-
-    @staticmethod
-    def get_conv_type(layer, discriminate_stide=False, discriminate_padding=False):
-        conv_type = "Conv"
-        cin = layer["kernel"][1]
-        cout = layer["kernel"][0]
-        kernel_shape = layer["kernel"][2:]
-        padding = layer["padding"]
-        stride = layer["stride"]
-        groups = layer["groups"]
-        if cin == 1 and groups == cout:
-            conv_type += "Dw"
-        if kernel_shape.count(1) == len(kernel_shape):
-            conv_type += "Pw"
-        conv_type += "k{}".format("".join(map(str, kernel_shape)))
-        if discriminate_stide:
-            conv_type += "s{}".format("".join(map(str, stride)))
-        if discriminate_padding:
-            conv_type += "p{}".format("".join(map(str, padding)))
-        return conv_type
 
     def model_partition(self, partition, name):
 

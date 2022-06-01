@@ -358,7 +358,7 @@ class Convolutional3DLayer(BaseLayer):
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
         _logger.debug(
-            f"Fine: {f_fine:.3f} ({f_fine*np.prod(np.array(self.kernel_shape))}), CoarseIn: {f_coarseIn:.3f} ({int(f_coarseIn*self.channels)}), CoarseOut: {f_coarseOut:.3f} ({int(f_coarseOut*self.filters)}), Shape in: {self.input_shape}, Shape out: {self.output_shape}, Kernel: {self.kernel_shape}"
+            f"Fine: {f_fine:.3f} ({f_fine*np.prod(np.array(self.kernel_shape))}), CoarseIn: {f_coarseIn:.3f} ({int(f_coarseIn*self.channels)}), CoarseOut: {f_coarseOut if not self.depthwise else f_coarseIn:.3f} ({int(f_coarseOut*self.filters) if not self.depthwise else int(f_coarseIn*self.channels)}), Shape in: {self.input_shape}, Shape out: {self.output_shape}, Kernel: {self.kernel_shape}"
         )
         if dsps_util < 90.0 and bram_util < 95.0:
 
@@ -397,8 +397,10 @@ class Convolutional3DLayer(BaseLayer):
                     math.ceil(f_fine * kernel_elems),
                     f_coarseIn,
                     math.ceil(self.channels * f_coarseIn),
-                    f_coarseOut,
-                    math.ceil(self.filters * f_coarseOut),
+                    f_coarseOut if not self.depthwise else f_coarseIn,
+                    math.ceil(self.filters * f_coarseOut)
+                    if not self.depthwise
+                    else math.ceil(self.channels * f_coarseIn),
                     mem_bw_in,
                     mem_bw_out,
                     dsps_util,
@@ -418,7 +420,7 @@ class Convolutional3DLayer(BaseLayer):
             )
         else:
             self.update_layer()
-            _logger.warning(
+            _logger.debug(
                 "Discarding design point. DSP = {:.2f} - BRAM = {:.2f}".format(
                     dsps_util, bram_util
                 )

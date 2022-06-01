@@ -13,7 +13,7 @@ class BaseLayer:
         assert (
             data_format == "NHWDC" or data_format == "NCHWD"
         ), "Wrong data format. Accepted formats are 'NHWDC' or 'NCHWD'"
-        _logger.setLevel(level=logging.DEBUG)
+        # _logger.setLevel(level=logging.DEBUG)
 
         self.get_config()
         self.data_format = data_format

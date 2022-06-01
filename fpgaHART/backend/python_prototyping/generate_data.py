@@ -265,11 +265,11 @@ def transform_weights(
     # parameters
     num_filters = int(weights_raw.shape[0] / (groups * coarse_out * wr_factor))
     num_channels = int(weights_raw.shape[1] / coarse_in)
-    k_size_k = weights_raw.shape[2]
-    k_size_x = weights_raw.shape[3]
-    k_size_y = weights_raw.shape[4]
+    kd_size = weights_raw.shape[2]
+    kh_size = weights_raw.shape[3]
+    kw_size = weights_raw.shape[4]
     print(
-        f"num_filters={num_filters}  |  num_channels={num_channels}  |  k_size_k={k_size_k}  |  k_size_x={k_size_x}  |  k_size_y={k_size_y}"
+        f"num_filters={num_filters}  |  num_channels={num_channels}  |  kd_size={kd_size}  |  kh_size={kh_size}  |  kw_size={kw_size}"
     )
     # correct output shape for weights
     weights = np.ndarray(
@@ -281,9 +281,9 @@ def transform_weights(
             int(groups / coarse_group),
             num_channels,
             num_filters,
-            k_size_x,
-            k_size_y,
-            k_size_k,
+            kh_size,
+            kw_size,
+            kd_size,
         ),
         dtype=float,
         order="C",
@@ -313,9 +313,9 @@ def transform_weights(
             coarse_out,
             int(groups / coarse_group) * num_channels,
             num_filters,
-            k_size_x,
-            k_size_y,
-            k_size_k,
+            kh_size,
+            kw_size,
+            kd_size,
         ]
     )
     weights = np.reshape(
@@ -326,9 +326,9 @@ def transform_weights(
             coarse_out,
             int(groups / coarse_group) * num_channels,
             num_filters,
-            k_size_x,
-            k_size_y,
-            k_size_k,
+            kh_size,
+            kw_size,
+            kd_size,
         ],
     )
     # print(weights)
@@ -896,8 +896,8 @@ def conv_3d(
         os.makedirs(prefix + "/" + layer_name)
 
     x = torch.randn(input_shape)
-    # print(x.numpy())
     print(f"input shape: {x.numpy().shape}")
+    # print(x.numpy())
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
@@ -921,8 +921,8 @@ def conv_3d(
         bias=False,
     )
     weights = conv.weight
-    # print(weights.detach().numpy())
     print(f"weights shape: {weights.detach().numpy().shape}")
+    # print(weights.detach().numpy().transpose(0, 1, 3, 4, 2))
     out = conv(x)
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
@@ -935,11 +935,21 @@ def conv_3d(
 
     if depthwise:
         weights_transformed = transform_weights(
-            write_weights_binary, 1, 1, 1, coarse_group=coarse_in, groups=groups,
+            weights_raw=write_weights_binary,
+            coarse_in=1,
+            coarse_out=1,
+            wr_factor=1,
+            coarse_group=coarse_in,
+            groups=groups,
         )
     else:
         weights_transformed = transform_weights(
-            write_weights_binary, coarse_in, coarse_out, 1, 1, groups=groups
+            weights_raw=write_weights_binary,
+            coarse_in=coarse_in,
+            coarse_out=coarse_out,
+            wr_factor=1,
+            coarse_group=1,
+            groups=groups,
         )
     with open(
         f"{prefix}/{layer_name}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",

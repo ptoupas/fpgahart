@@ -111,13 +111,13 @@ void glue_dw_3d(
 
     pixel_loop: for(unsigned long pixel_index=0;pixel_index<batch*height*width*depth;pixel_index++) {
     	channel_loop: for(unsigned int channel_index=0;channel_index<channels;channel_index++) {
-			filter_loop: for(unsigned int filter_index=0;filter_index<filters_per_group;filter_index++) {
+//			filter_loop: for(unsigned int filter_index=0;filter_index<filters_per_group;filter_index++) {
 #pragma HLS LOOP_FLATTEN
 #pragma HLS PIPELINE II=1 rewind
-				coarse_out_loop: for(unsigned int out_index=0; out_index<coarse_out; out_index++) {
+//				coarse_out_loop: for(unsigned int out_index=0; out_index<coarse_out; out_index++) {
 					coarse_in_loop: for(unsigned int in_index=0; in_index<coarse_in; in_index++) {
 						// update accumulation cache
-						glue_acc_t tmp = in[in_index][out_index].read();
+						glue_acc_t tmp = in[in_index][0].read();
 #ifdef DEBUG_PRINTS
 						cout << "read in[" << in_index << "][" << out_index << "] = " << tmp << endl;
 						cout << "WRITE out[" << out_index << "] = " << tmp << endl;
@@ -125,8 +125,8 @@ void glue_dw_3d(
 						// write to output stream
 						out[in_index].write( glue_data_t(tmp) ) ;
 					}
-				}
-			}
+//				}
+//			}
     	}
     }
 }
