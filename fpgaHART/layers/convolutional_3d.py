@@ -15,7 +15,7 @@ np.seterr(divide="ignore", invalid="ignore")
 class Convolutional3DLayer(BaseLayer):
     def __init__(self, description):
         super().__init__()
-        _logger.setLevel(level=logging.DEBUG)
+        # _logger.setLevel(level=logging.DEBUG)
 
         self.input_shape = description["shape_in"][0]
         self.depth_in = self.input_shape[2]
