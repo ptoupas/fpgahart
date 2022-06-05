@@ -30,7 +30,7 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
     def get_logger(self, level=logging.INFO):
-        self.logger = logging.getLogger('fpgaHART')
+        self.logger = logging.getLogger('fpga-hart')
         self.logger.setLevel(level)
 
         # create console handler with a higher log level

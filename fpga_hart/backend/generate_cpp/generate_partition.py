@@ -3,8 +3,8 @@ import json
 import os
 
 import pandas as pd
-from fpgaHART.partitions.partition_parser import PartitionParser
-from fpgaHART.utils import utils
+from fpga_hart.partitions.partition_parser import PartitionParser
+from fpga_hart.utils import utils
 
 from generate_tb import generate_tb_files
 from generate_top_level import generate_top_level_files
@@ -19,8 +19,10 @@ from layers.generate_swish import generate_swish_files
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
-    parser.add_argument("--model_name", help="name of the HAR model", required=True)
+    parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
+    parser.add_argument("--model_name",
+                        help="name of the HAR model",
+                        required=True)
     parser.add_argument(
         "--hls_project_path",
         help="path of the HLS project to be generated",
@@ -32,9 +34,9 @@ def parse_args():
         type=str,
         required=True,
     )
-    parser.add_argument(
-        "--config_file", help="name of the model's configuration file", required=True
-    )
+    parser.add_argument("--config_file",
+                        help="name of the model's configuration file",
+                        required=True)
 
     args = parser.parse_args()
     return args
@@ -46,15 +48,15 @@ def get_partitions_configurations(config_file):
     configuration = pd.read_csv(config_file)
     partitions = configuration["Part"].to_list()
     for p in partitions:
-        partition_layers_config = configuration[configuration["Part"] == p][
-            "config"
-        ].to_dict()
-        partition_layers_config = partition_layers_config[[*partition_layers_config][0]]
+        partition_layers_config = configuration[configuration["Part"] ==
+                                                p]["config"].to_dict()
+        partition_layers_config = partition_layers_config[[
+            *partition_layers_config
+        ][0]]
         partition_layers_config = partition_layers_config.replace("'", '"')
         partition_layers_config = json.loads(partition_layers_config)
-        partition_branch_depth = configuration[configuration["Part"] == p][
-            "Branch Depth"
-        ].values[0]
+        partition_branch_depth = configuration[configuration["Part"] ==
+                                               p]["Branch Depth"].values[0]
         result[p] = {
             "layers": partition_layers_config,
             "branch_depth": partition_branch_depth,
@@ -63,28 +65,29 @@ def get_partitions_configurations(config_file):
     return result
 
 
-def generate_partition_code(
-    layers_config, branch_depth, partition_name, parser, prefix, hls_project_path
-):
+def generate_partition_code(layers_config, branch_depth, partition_name,
+                            parser, prefix, hls_project_path):
     # Generate layers files
     for l in [*layers_config]:
         if "Swish" in l:
-            generate_swish_files(l, layers_config[l], f"{prefix}/{partition_name}")
+            generate_swish_files(l, layers_config[l],
+                                 f"{prefix}/{partition_name}")
         elif "Relu" in l:
-            generate_relu_files(l, layers_config[l], f"{prefix}/{partition_name}")
+            generate_relu_files(l, layers_config[l],
+                                f"{prefix}/{partition_name}")
         elif "Sigmoid" in l:
-            generate_sigmoid_files(l, layers_config[l], f"{prefix}/{partition_name}")
+            generate_sigmoid_files(l, layers_config[l],
+                                   f"{prefix}/{partition_name}")
         elif "Add" in l or "Mul" in l:
-            generate_elemwise_files(l, layers_config[l], f"{prefix}/{partition_name}")
+            generate_elemwise_files(l, layers_config[l],
+                                    f"{prefix}/{partition_name}")
         elif "Conv" in l:
-            generate_conv_files(
-                l, layers_config[l], f"{prefix}/{partition_name}", hls_project_path
-            )
+            generate_conv_files(l, layers_config[l],
+                                f"{prefix}/{partition_name}", hls_project_path)
         elif "GlobalAveragePool" in l:
             shorted_name = "Gap_" + l.split("_")[1]
-            generate_gap_files(
-                shorted_name, layers_config[l], f"{prefix}/{partition_name}"
-            )
+            generate_gap_files(shorted_name, layers_config[l],
+                               f"{prefix}/{partition_name}")
         else:
             raise Exception(f"Layer {l} not supported")
 
@@ -94,7 +97,8 @@ def generate_partition_code(
     # Generate extra supporting files (split, squeeze)
     split_points = utils.get_split_points(graph)
     for sf in split_points:
-        generate_split_files(sf, layers_config[sf], f"{prefix}/{partition_name}")
+        generate_split_files(sf, layers_config[sf],
+                             f"{prefix}/{partition_name}")
 
     squeeze_layers = identify_streams_mismatches(layers_config, graph.edges)
     for sl in squeeze_layers:
@@ -107,15 +111,17 @@ def generate_partition_code(
         )
 
     # Update the graph with the supporting layers
-    graph = utils.update_graph(
-        graph, split_points=split_points, squeeze_layers=squeeze_layers
-    )
+    graph = utils.update_graph(graph,
+                               split_points=split_points,
+                               squeeze_layers=squeeze_layers)
     if not os.path.exists(f"generated_files/{prefix}/graphs/"):
         os.makedirs(f"generated_files/{prefix}/graphs/")
-    parser.visualize_graph(graph, f"generated_files/{prefix}/graphs/{partition_name}")
+    parser.visualize_graph(
+        graph, f"generated_files/{prefix}/graphs/{partition_name}")
 
     # Generate top level partition file
-    generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
+    generate_top_level_files(graph, branch_depth, layers_config,
+                             partition_name, prefix)
 
     # Generate testbench file
     generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False)

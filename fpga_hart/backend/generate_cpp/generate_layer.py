@@ -3,16 +3,14 @@ import json
 import os
 
 import pandas as pd
-from fpgaHART.backend.python_prototyping.generate_data import (
-    conv_3d,
-    elemwise_3d,
-    gap_3d,
-    relu_3d,
-    shish_3d,
-    sigmoid_3d,
-)
-from fpgaHART.layers.layer_parser import LayerParser
-from fpgaHART.utils import utils
+from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
+                                                                elemwise_3d,
+                                                                gap_3d,
+                                                                relu_3d,
+                                                                shish_3d,
+                                                                sigmoid_3d)
+from fpga_hart.layers.layer_parser import LayerParser
+from fpga_hart.utils import utils
 
 from generate_tb import generate_tb_files
 from generate_top_level import generate_top_level_files
@@ -27,7 +25,7 @@ from layers.generate_swish import generate_swish_files
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
+    parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
     parser.add_argument("--model_name", help="name of the HAR model", required=True)
     parser.add_argument(
         "--hls_project_path",

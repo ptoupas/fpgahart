@@ -9,7 +9,7 @@ import mlflow
 import networkx as nx
 import numpy as np
 import pandas as pd
-from fpgaHART import _logger
+from fpga_hart import _logger
 from matplotlib import pyplot as plt
 from nltk import ngrams
 
@@ -41,23 +41,24 @@ class PartitionParser(PartitionDescriptor):
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
 
-        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports")):
+        if not os.path.exists(
+                os.path.join(os.getcwd(), "fpga_modeling_reports")):
             os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports"))
 
         if self.se_block:
-            self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_se.csv"
-            )
+            self.layer_model_file = os.path.join(os.getcwd(),
+                                                 "fpga_modeling_reports",
+                                                 self.model_name + "_se.csv")
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_se_pareto.csv"
-            )
+                os.getcwd(), "fpga_modeling_reports",
+                self.model_name + "_se_pareto.csv")
         else:
-            self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + ".csv"
-            )
+            self.layer_model_file = os.path.join(os.getcwd(),
+                                                 "fpga_modeling_reports",
+                                                 self.model_name + ".csv")
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_pareto.csv"
-            )
+                os.getcwd(), "fpga_modeling_reports",
+                self.model_name + "_pareto.csv")
 
     def is_partition_input(self, partition, node_ids):
         if len(node_ids) > 1:
@@ -98,42 +99,32 @@ class PartitionParser(PartitionDescriptor):
         for i, node_in in enumerate(self.layers[layer]["shape_in"]):
             new_shape_in = node_in.copy()
             new_shape_in[1] = new_shape_in[1] // channels_reduction_rate
-            new_shape_in[2] = (
-                new_shape_in[2] // depth_reduction_rate if new_shape_in[2] > 1 else 1
-            )
-            new_shape_in[3] = (
-                new_shape_in[3] // height_reduction_rate if new_shape_in[3] > 1 else 1
-            )
-            new_shape_in[4] = (
-                new_shape_in[4] // width_reduction_rate if new_shape_in[4] > 1 else 1
-            )
+            new_shape_in[2] = (new_shape_in[2] // depth_reduction_rate
+                               if new_shape_in[2] > 1 else 1)
+            new_shape_in[3] = (new_shape_in[3] // height_reduction_rate
+                               if new_shape_in[3] > 1 else 1)
+            new_shape_in[4] = (new_shape_in[4] // width_reduction_rate
+                               if new_shape_in[4] > 1 else 1)
             self.layers[layer]["shape_in"][i] = new_shape_in
 
         new_shape_out = self.layers[layer]["shape_out"].copy()
         new_shape_out[1] = new_shape_out[1] // channels_reduction_rate
-        new_shape_out[2] = (
-            new_shape_out[2] // depth_reduction_rate if new_shape_out[2] > 1 else 1
-        )
-        new_shape_out[3] = (
-            new_shape_out[3] // height_reduction_rate if new_shape_out[3] > 1 else 1
-        )
-        new_shape_out[4] = (
-            new_shape_out[4] // width_reduction_rate if new_shape_out[4] > 1 else 1
-        )
+        new_shape_out[2] = (new_shape_out[2] // depth_reduction_rate
+                            if new_shape_out[2] > 1 else 1)
+        new_shape_out[3] = (new_shape_out[3] // height_reduction_rate
+                            if new_shape_out[3] > 1 else 1)
+        new_shape_out[4] = (new_shape_out[4] // width_reduction_rate
+                            if new_shape_out[4] > 1 else 1)
         self.layers[layer]["shape_out"] = new_shape_out
 
         if self.layers[layer]["operation"] == "Conv":
             new_kernel_shape = self.layers[layer]["kernel"].copy()
-            new_kernel_shape[0] = (
-                new_kernel_shape[0] // channels_reduction_rate
-                if new_kernel_shape[0] > 1
-                else 1
-            )
-            new_kernel_shape[1] = (
-                new_kernel_shape[1] // channels_reduction_rate
-                if new_kernel_shape[1] > 1
-                else 1
-            )
+            new_kernel_shape[0] = (new_kernel_shape[0] //
+                                   channels_reduction_rate
+                                   if new_kernel_shape[0] > 1 else 1)
+            new_kernel_shape[1] = (new_kernel_shape[1] //
+                                   channels_reduction_rate
+                                   if new_kernel_shape[1] > 1 else 1)
             self.layers[layer]["kernel"] = new_kernel_shape
 
             if self.layers[layer]["bias"]:
@@ -142,7 +133,8 @@ class PartitionParser(PartitionDescriptor):
                 self.layers[layer]["bias"] = new_bias
 
             if self.layers[layer]["groups"] > 1:
-                new_groups = self.layers[layer]["groups"] // channels_reduction_rate
+                new_groups = self.layers[layer][
+                    "groups"] // channels_reduction_rate
                 self.layers[layer]["groups"] = new_groups
 
     def create_graph(self, partition: list) -> nx.DiGraph:
@@ -158,23 +150,17 @@ class PartitionParser(PartitionDescriptor):
             elif self.layers[layer]["operation"] == "Conv":
                 hw_layer = Convolutional3DLayer(self.layers[layer])
                 layer_type = self.layers[layer]["operation"]
-            elif (
-                self.layers[layer]["operation"] == "Relu"
-                or self.layers[layer]["operation"] == "Sigmoid"
-                or self.layers[layer]["operation"] == "Swish"
-            ):
+            elif (self.layers[layer]["operation"] == "Relu"
+                  or self.layers[layer]["operation"] == "Sigmoid"
+                  or self.layers[layer]["operation"] == "Swish"):
                 hw_layer = ActivationLayer(self.layers[layer])
                 layer_type = "Activation"
-            elif (
-                self.layers[layer]["operation"] == "Mul"
-                or self.layers[layer]["operation"] == "Add"
-            ):
+            elif (self.layers[layer]["operation"] == "Mul"
+                  or self.layers[layer]["operation"] == "Add"):
                 hw_layer = ElementWiseLayer(self.layers[layer])
                 layer_type = "ElementWise"
-            elif (
-                self.layers[layer]["operation"] == "Gemm"
-                or self.layers[layer]["operation"] == "MatMul"
-            ):
+            elif (self.layers[layer]["operation"] == "Gemm"
+                  or self.layers[layer]["operation"] == "MatMul"):
                 layer_type = self.layers[layer]["operation"]
                 hw_layer = FCLayer(self.layers[layer])
             elif self.layers[layer]["operation"] == "SqueezeExcitation":
@@ -185,8 +171,7 @@ class PartitionParser(PartitionDescriptor):
                 hw_layer = BatchNorm3DLayer(self.layers[layer])
             else:
                 assert False, "{} operation in layer {} is not supported".format(
-                    self.layers[layer]["operation"], layer
-                )
+                    self.layers[layer]["operation"], layer)
             if self.layers[layer]["operation"] == "Conv":
                 hw_type = utils.get_conv_type(
                     layer=self.layers[layer],
@@ -195,7 +180,10 @@ class PartitionParser(PartitionDescriptor):
                 )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
-            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
+            graph.add_node(layer,
+                           type=layer_type,
+                           hw=hw_layer,
+                           hw_type=hw_type)
         _logger.info("*" * 40)
 
         edges = []
@@ -221,23 +209,20 @@ class PartitionParser(PartitionDescriptor):
         for edge in branch_edges:
             max_shape = 0
             for pair in edge:
-                if (
-                    graph.nodes[pair[0]]["type"] == "ElementWise"
-                    and graph.nodes[pair[0]]["hw"].type == "Mul"
-                ) or (
-                    graph.nodes[pair[1]]["type"] == "ElementWise"
-                    and graph.nodes[pair[1]]["hw"].type == "Mul"
-                ):
+                if (graph.nodes[pair[0]]["type"] == "ElementWise"
+                        and graph.nodes[pair[0]]["hw"].type == "Mul") or (
+                            graph.nodes[pair[1]]["type"] == "ElementWise"
+                            and graph.nodes[pair[1]]["hw"].type == "Mul"):
                     continue
-                assert (
-                    graph.nodes[pair[0]]["hw"].output_shape
-                    == graph.nodes[pair[1]]["hw"].input_shape_1
-                    or graph.nodes[pair[0]]["hw"].output_shape
-                    == graph.nodes[pair[1]]["hw"].input_shape_2
-                ), "Layers input and output shapes does not match"
+                assert (graph.nodes[pair[0]]["hw"].output_shape
+                        == graph.nodes[pair[1]]["hw"].input_shape_1
+                        or graph.nodes[pair[0]]["hw"].output_shape
+                        == graph.nodes[pair[1]]["hw"].input_shape_2
+                        ), "Layers input and output shapes does not match"
                 max_shape = max(
                     max_shape,
-                    np.prod(np.array(graph.nodes[pair[0]]["hw"].output_shape[1:])),
+                    np.prod(
+                        np.array(graph.nodes[pair[0]]["hw"].output_shape[1:])),
                 )
             branch_buffer += max_shape
 
@@ -251,9 +236,10 @@ class PartitionParser(PartitionDescriptor):
 
         _logger.info("Partition: {}: ".format(name))
         # optimizer = SimulatedAnnealing(graph, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx)
-        optimizer = SimulatedAnnealing(
-            graph, partition_name=name, gap_approx=self.gap_approx, ml_flow_id=run_id
-        )
+        optimizer = SimulatedAnnealing(graph,
+                                       partition_name=name,
+                                       gap_approx=self.gap_approx,
+                                       ml_flow_id=run_id)
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
@@ -261,9 +247,10 @@ class PartitionParser(PartitionDescriptor):
         num_graphs = len(solution_mem)
 
         with open(self.partition_model_file, mode="a") as res_file:
-            csv_writer = csv.writer(
-                res_file, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
+            csv_writer = csv.writer(res_file,
+                                    delimiter=",",
+                                    quotechar='"',
+                                    quoting=csv.QUOTE_MINIMAL)
 
             if num_graphs == 1:
                 mem_config = (
@@ -391,20 +378,17 @@ class PartitionParser(PartitionDescriptor):
             for node in graph.nodes():
                 hw = graph.nodes[node]["hw"]
                 if graph.nodes[node]["type"] == "Conv":
-                    nodes_list.append(
-                        [
-                            hw.input_shape,
-                            hw.output_shape,
-                            hw.kernel_shape,
-                            hw.padding,
-                            hw.stride,
-                            hw.groups,
-                        ]
-                    )
+                    nodes_list.append([
+                        hw.input_shape,
+                        hw.output_shape,
+                        hw.kernel_shape,
+                        hw.padding,
+                        hw.stride,
+                        hw.groups,
+                    ])
                 elif graph.nodes[node]["type"] == "ElementWise":
                     nodes_list.append(
-                        [hw.input_shape_1, hw.input_shape_2, hw.output_shape]
-                    )
+                        [hw.input_shape_1, hw.input_shape_2, hw.output_shape])
                 else:
                     nodes_list.append([hw.input_shape, hw.output_shape])
             partitions[i] = nodes_list
@@ -425,40 +409,39 @@ class PartitionParser(PartitionDescriptor):
         self.idetify_duplicates()
 
         self.partition_model_file = os.path.join(
-            os.getcwd(), "fpga_modeling_reports", self.model_name + "_partitions.csv"
-        )
+            os.getcwd(), "fpga_modeling_reports",
+            self.model_name + "_partitions.csv")
 
         with open(self.partition_model_file, mode="w") as partition_dp:
-            csv_writer = csv.writer(
-                partition_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
-            csv_writer.writerow(
-                [
-                    "Part",
-                    "Latency(C)-No-Depth",
-                    "Latency(C)",
-                    "Latency(S)",
-                    "GOP/s",
-                    "GOPs",
-                    "volumes/s",
-                    "DSP(%)",
-                    "BRAM(%)",
-                    "RateIn",
-                    "RateOut",
-                    "Depth",
-                    "Branch Depth",
-                    "Muls",
-                    "Adds",
-                    "Mem(W)",
-                    "Mem(KB)",
-                    "DataSizeIn(MB)",
-                    "DataSizeOut(MB)",
-                    "MemBoundIn",
-                    "MemBoundOut",
-                    "config",
-                    "memconfig",
-                ]
-            )
+            csv_writer = csv.writer(partition_dp,
+                                    delimiter=",",
+                                    quotechar='"',
+                                    quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow([
+                "Part",
+                "Latency(C)-No-Depth",
+                "Latency(C)",
+                "Latency(S)",
+                "GOP/s",
+                "GOPs",
+                "volumes/s",
+                "DSP(%)",
+                "BRAM(%)",
+                "RateIn",
+                "RateOut",
+                "Depth",
+                "Branch Depth",
+                "Muls",
+                "Adds",
+                "Mem(W)",
+                "Mem(KB)",
+                "DataSizeIn(MB)",
+                "DataSizeOut(MB)",
+                "MemBoundIn",
+                "MemBoundOut",
+                "config",
+                "memconfig",
+            ])
 
         start = time.time()
         for i, partition in enumerate(self.partitions):
@@ -466,7 +449,8 @@ class PartitionParser(PartitionDescriptor):
                 part_name = "part_{}".format(i)
                 self.model_partition(partition, name=part_name)
         end = time.time()
-        _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
+        _logger.info("Partition modeling took {:.2f} seconds".format(end -
+                                                                     start))
 
     def model_custom_partition(self):
         self.partition_model_file = os.path.join(
@@ -476,36 +460,35 @@ class PartitionParser(PartitionDescriptor):
         )
 
         with open(self.partition_model_file, mode="w") as partition_dp:
-            csv_writer = csv.writer(
-                partition_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
-            csv_writer.writerow(
-                [
-                    "Part",
-                    "Latency(C)-No-Depth",
-                    "Latency(C)",
-                    "Latency(S)",
-                    "GOP/s",
-                    "GOPs",
-                    "volumes/s",
-                    "DSP(%)",
-                    "BRAM(%)",
-                    "RateIn",
-                    "RateOut",
-                    "Depth",
-                    "Branch Depth",
-                    "Muls",
-                    "Adds",
-                    "Mem(W)",
-                    "Mem(KB)",
-                    "DataSizeIn(MB)",
-                    "DataSizeOut(MB)",
-                    "MemBoundIn",
-                    "MemBoundOut",
-                    "config",
-                    "memconfig",
-                ]
-            )
+            csv_writer = csv.writer(partition_dp,
+                                    delimiter=",",
+                                    quotechar='"',
+                                    quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow([
+                "Part",
+                "Latency(C)-No-Depth",
+                "Latency(C)",
+                "Latency(S)",
+                "GOP/s",
+                "GOPs",
+                "volumes/s",
+                "DSP(%)",
+                "BRAM(%)",
+                "RateIn",
+                "RateOut",
+                "Depth",
+                "Branch Depth",
+                "Muls",
+                "Adds",
+                "Mem(W)",
+                "Mem(KB)",
+                "DataSizeIn(MB)",
+                "DataSizeOut(MB)",
+                "MemBoundIn",
+                "MemBoundOut",
+                "config",
+                "memconfig",
+            ])
 
         # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90']
         # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90', 'Mul_91', 'Swish_92']

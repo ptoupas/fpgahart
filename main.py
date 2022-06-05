@@ -3,9 +3,9 @@ import logging
 
 import seaborn as sns
 
-from fpgaHART import _logger
-from fpgaHART.layers.layer_parser import LayerParser
-from fpgaHART.partitions.partition_parser import PartitionParser
+from fpga_hart import _logger
+from fpga_hart.layers.layer_parser import LayerParser
+from fpga_hart.partitions.partition_parser import PartitionParser
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
@@ -15,7 +15,7 @@ def parse_args():
     """
         Argument parser function.
     """
-    parser = argparse.ArgumentParser(description="fpgaHART toolflow parser")
+    parser = argparse.ArgumentParser(description="fpga-hart toolflow parser")
     parser.add_argument("model_name", help="name of the HAR model")
     parser.add_argument(
         "type",
@@ -41,7 +41,8 @@ def parse_args():
     parser.add_argument(
         "--gap_approx",
         action="store_true",
-        help="whether to use historical data as approximation for GAP layers or not",
+        help=
+        "whether to use historical data as approximation for GAP layers or not",
     )
 
     return parser.parse_args()
@@ -64,7 +65,7 @@ if __name__ == "__main__":
         # partition_parser.parse()
         # partition_parser.model_custom_partition()
         # partition_parser.find_common_layers(groupping=3)
-        partition_parser.group_conv_layers()
+        partition_parser.group_conv_layers(plot_summaries=False)
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,

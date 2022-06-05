@@ -1,7 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 
-from fpgaHART import _logger
+from fpga_hart import _logger
 
 from .onnx_parser import OnnxModelParser
 
@@ -37,9 +37,11 @@ class ModelLayerDescriptor(OnnxModelParser):
             output_shape = self.torch_layers[k]["output"]
             input_node = [self.torch_layers[k]["input_id"][0]]
             if name == "Gemm_401":
-                input_node = self.torch_layers["GlobalAveragePool_391"]["output_id"]
+                input_node = self.torch_layers["GlobalAveragePool_391"][
+                    "output_id"]
             if name == "Gemm_352":
-                input_node = self.torch_layers["GlobalAveragePool_342"]["output_id"]
+                input_node = self.torch_layers["GlobalAveragePool_342"][
+                    "output_id"]
             output_node = self.torch_layers[k]["output_id"]
 
             self.layers[name] = {
@@ -57,33 +59,43 @@ class ModelLayerDescriptor(OnnxModelParser):
                 self.layers[name]["padding"] = self.torch_layers[k]["padding"]
                 self.layers[name]["stride"] = self.torch_layers[k]["stride"]
                 self.layers[name]["groups"] = self.torch_layers[k]["groups"]
-                self.layers[name]["dilation"] = self.torch_layers[k]["dilation"]
+                self.layers[name]["dilation"] = self.torch_layers[k][
+                    "dilation"]
             elif operation == "BatchNormalization":
                 self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
                 self.layers[name]["bias"] = self.torch_layers[k]["bias"]
-                self.layers[name]["running_mean"] = self.torch_layers[k]["running_mean"]
-                self.layers[name]["running_var"] = self.torch_layers[k]["running_var"]
+                self.layers[name]["running_mean"] = self.torch_layers[k][
+                    "running_mean"]
+                self.layers[name]["running_var"] = self.torch_layers[k][
+                    "running_var"]
             elif operation == "Gemm":
                 self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
                 self.layers[name]["bias"] = self.torch_layers[k]["bias"]
 
             if operation == "Add" or operation == "Mul" or operation == "MatMul":
-                self.layers[name]["shape_in"].append(self.torch_layers[k]["input"][1])
-                self.layers[name]["node_in"].append(self.torch_layers[k]["input_id"][1])
+                self.layers[name]["shape_in"].append(
+                    self.torch_layers[k]["input"][1])
+                self.layers[name]["node_in"].append(
+                    self.torch_layers[k]["input_id"][1])
                 if self.model_name == "x3d_m" and operation == "MatMul":
-                    self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
+                    self.layers[name]["kernel"] = self.torch_layers[k][
+                        "kernel"]
 
             swish_module.append([operation, name])
             if swish_module[0][0] == "Sigmoid" and swish_module[1][0] == "Mul":
-                mul_shapein_1 = self.torch_layers[swish_module[1][1]]["input"][0]
-                mul_shapein_2 = self.torch_layers[swish_module[1][1]]["input"][1]
+                mul_shapein_1 = self.torch_layers[swish_module[1]
+                                                  [1]]["input"][0]
+                mul_shapein_2 = self.torch_layers[swish_module[1]
+                                                  [1]]["input"][1]
                 if mul_shapein_1 == mul_shapein_2:
                     _logger.debug("Creating Swish Activation Module")
 
                     sigmoid_name = swish_module[0][1]
                     operation = self.torch_layers[sigmoid_name]["operation"]
                     input_shape = [self.torch_layers[sigmoid_name]["input"][0]]
-                    input_node = [self.torch_layers[sigmoid_name]["input_id"][0]]
+                    input_node = [
+                        self.torch_layers[sigmoid_name]["input_id"][0]
+                    ]
                     swish_input_shape = input_shape
                     swish_input_node = input_node
                     output_shape = self.torch_layers[sigmoid_name]["output"]
@@ -126,7 +138,10 @@ class ModelLayerDescriptor(OnnxModelParser):
                         "node_out": swish_output_node,
                         "shape_branch": swish_input_shape,
                         "branching": True,
-                        "primitive_ops": {sigmoid_name: sigmoid, mul_name: mul},
+                        "primitive_ops": {
+                            sigmoid_name: sigmoid,
+                            mul_name: mul
+                        },
                     }
 
                     del self.layers[sigmoid_name]
@@ -134,14 +149,12 @@ class ModelLayerDescriptor(OnnxModelParser):
 
             if self.se_block:
                 se_module.append([operation, name])
-                if (
-                    se_module[0][0] == "GlobalAveragePool"
-                    and se_module[1][0] == "Conv"
-                    and se_module[2][0] == "Relu"
-                    and se_module[3][0] == "Conv"
-                    and se_module[4][0] == "Sigmoid"
-                    and se_module[5][0] == "Mul"
-                ):
+                if (se_module[0][0] == "GlobalAveragePool"
+                        and se_module[1][0] == "Conv"
+                        and se_module[2][0] == "Relu"
+                        and se_module[3][0] == "Conv"
+                        and se_module[4][0] == "Sigmoid"
+                        and se_module[5][0] == "Mul"):
                     _logger.debug("Creating Squeeze and Excitation Module")
 
                     gap_name = se_module[0][1]
@@ -225,7 +238,9 @@ class ModelLayerDescriptor(OnnxModelParser):
                     sigmoid_name = se_module[4][1]
                     operation = self.torch_layers[sigmoid_name]["operation"]
                     input_shape = [self.torch_layers[sigmoid_name]["input"][0]]
-                    input_node = [self.torch_layers[sigmoid_name]["input_id"][0]]
+                    input_node = [
+                        self.torch_layers[sigmoid_name]["input_id"][0]
+                    ]
                     output_shape = self.torch_layers[sigmoid_name]["output"]
                     output_node = self.torch_layers[sigmoid_name]["output_id"]
                     se_branch_shape = output_shape
