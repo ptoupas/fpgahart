@@ -1409,7 +1409,9 @@ class SimulatedAnnealing(BaseLayer):
 
         return bblocks
 
-    def generate_building_blocks_config(self, bblocks: list) -> dict:
+    def generate_building_blocks_config(
+        self, bblocks: list, previous_config: dict = None
+    ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
         from all its instances across the graph of the network.
@@ -1425,7 +1427,9 @@ class SimulatedAnnealing(BaseLayer):
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
 
-            shape_in, shape_out = utils.get_random_shape(self.graph, bb)
+            shape_in, shape_out = utils.get_random_shape(
+                self.graph, bb, previous_config=previous_config
+            )
             _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
             (
                 _,
@@ -1482,10 +1486,12 @@ class SimulatedAnnealing(BaseLayer):
             dsp_util, bram_util = 100, 100
             while dsp_util > (90 - total_dsp) or bram_util > (90 - total_bram):
                 coarse_in = (
-                    np.random.choice(np.arange(channels_in_dim) + 1) / channels_in_dim
+                    np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
+                    / channels_in_dim
                 )
                 coarse_out = (
-                    np.random.choice(np.arange(channels_out_dim) + 1) / channels_out_dim
+                    np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
+                    / channels_out_dim
                 )
                 if bb == "Conv3DDw":
                     coarse_out = coarse_in
@@ -1555,7 +1561,7 @@ class SimulatedAnnealing(BaseLayer):
                 * hw.input_shape[4]
                 / bblocks_config[bb_type]["HINT_shape_in"][4]
             )
- 
+
             r = bblocks_config[bb_type]["hw"].get_design_point(
                 f_fine=1,
                 f_coarseIn=bblocks_config[bb_type]["coarse_in"],
@@ -1587,6 +1593,7 @@ class SimulatedAnnealing(BaseLayer):
         bblocks = self.generate_building_blocks()
 
         with mlflow.start_run(run_id=self.ml_flow_id):
+            mlflow.log_param("config_generation", "mape_c70_w100")
 
             bblocks_config = self.generate_building_blocks_config(bblocks)
             cost, scheduling, dsp_util, bram_util = self.get_cost_e2e(bblocks_config)
@@ -1600,7 +1607,7 @@ class SimulatedAnnealing(BaseLayer):
                     if cost is not None:
                         break
                 if cost is None:
-                    print("No configuration found in 500 iterations. Exiting...")
+                    print("No configuration found in 100 iterations. Exiting...")
                     return None
 
             prev_state = bblocks_config
@@ -1613,7 +1620,9 @@ class SimulatedAnnealing(BaseLayer):
                 mlflow.log_metric("running_temp", current_temp)
                 mlflow.log_metric("running_latency", prev_cost)
                 for i in range(self.iterationPerTemp):
-                    new_state = self.generate_building_blocks_config(bblocks)
+                    new_state = self.generate_building_blocks_config(
+                        bblocks, previous_config=prev_state
+                    )
                     new_cost, new_scheduling, _, _ = self.get_cost_e2e(new_state)
 
                     if new_cost is None:

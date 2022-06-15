@@ -253,13 +253,16 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.tight_layout()
             plt.show()
 
-    def latency_driven_design(self, run_name: str, plot_summaries: bool = False) -> None:
+    def latency_driven_design(
+        self, run_name: str, plot_summaries: bool = False
+    ) -> None:
         """
         Try to find the best configurations to be used for a hardware
         processing element to support all the convolutional layers in the graph.
         """
 
         with mlflow.start_run(run_name=run_name) as run:
+            mlflow.set_tag("stable-state", "16.06.22")
             run_id = run.info.run_id
 
         # Here we get all the convolutional layers in the graph but the first two

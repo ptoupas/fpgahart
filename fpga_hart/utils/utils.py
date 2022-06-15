@@ -704,7 +704,9 @@ def get_conv_type(
     return conv_type
 
 
-def get_random_shape(graph: nx.DiGraph, bb_type: str) -> np.array:
+def get_random_shape(
+    graph: nx.DiGraph, bb_type: str, previous_config: dict = None
+) -> np.array:
     shapes_list = []
     for n in graph.nodes():
         bb = graph.nodes[n]["hw_type"]
@@ -713,10 +715,23 @@ def get_random_shape(graph: nx.DiGraph, bb_type: str) -> np.array:
                 [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
             )
 
-    final_shapes = random.choice(shapes_list)
-    shape_in = final_shapes[0]
-    shape_out = final_shapes[1]
-
+    while True:
+        final_shapes = random.choice(shapes_list)
+        shape_in = final_shapes[0]
+        shape_out = final_shapes[1]
+        if previous_config is not None:
+            prev_shape_in = previous_config[bb_type]["HINT_shape_in"]
+            mape_channels = (
+                abs(prev_shape_in[1] - shape_in[1]) / abs(prev_shape_in[1])
+            ) * 100
+            mape_width = (
+                abs(prev_shape_in[4] - shape_in[4]) / abs(prev_shape_in[4])
+            ) * 100
+            if mape_channels > 70 or mape_width > 100:
+                continue
+            break
+        else:
+            break
     return shape_in, shape_out
 
 
