@@ -3,6 +3,7 @@ import os
 from collections import Counter, deque
 from dataclasses import dataclass, field
 
+import mlflow
 import networkx as nx
 import numpy as np
 import seaborn as sns
@@ -10,13 +11,13 @@ from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
 from fpga_hart.network_representation.model_descriptor import \
     ModelLayerDescriptor
+from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
 
 
 @dataclass
 class PartitionDescriptor(ModelLayerDescriptor):
-
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
@@ -59,9 +60,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
                     "Conv",
                     "Add",
                 ]
-                layer_type_3 = [
-                    "Relu", "Conv", "Relu", "Conv", "Swish", "Conv", "Add"
-                ]
+                layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Swish", "Conv", "Add"]
                 layer_type_4 = [
                     "Conv",
                     "Conv",
@@ -126,9 +125,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
                     "Conv",
                     "Add",
                 ]
-                layer_type_3 = [
-                    "Relu", "Conv", "Relu", "Conv", "Swish", "Conv", "Add"
-                ]
+                layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Swish", "Conv", "Add"]
                 layer_type_4 = ["Conv", "Conv"]
                 layer_type_5 = [
                     "Relu",
@@ -150,19 +147,17 @@ class PartitionDescriptor(ModelLayerDescriptor):
                         final_layers.append(list(layer_queue)[:-1])
                     if list(layer_queue_operations)[:-2] == layer_type_3:
                         final_layers.append(list(layer_queue)[:-2])
-                    if (list(layer_queue_operations)[:-7] == layer_type_4
-                            and "Conv_0" in list(layer_queue)[:-7]):
+                    if (
+                        list(layer_queue_operations)[:-7] == layer_type_4
+                        and "Conv_0" in list(layer_queue)[:-7]
+                    ):
                         final_layers.append(list(layer_queue)[:-7])
                     if list(layer_queue_operations)[2:] == layer_type_5:
                         final_layers.append(list(layer_queue)[2:])
             return final_layers
         elif self.model_name == "i3d":
-            layer_type_1 = [
-                "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Add"
-            ]
-            layer_type_2 = [
-                "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"
-            ]
+            layer_type_1 = ["Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Add"]
+            layer_type_2 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
             layer_queue = deque(maxlen=7)
             layer_queue_operations = deque(maxlen=7)
             for k in layers.keys():
@@ -175,12 +170,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
             return final_layers
 
     def update_hw_pe(self, graph: nx.DiGraph, groupping: int = 1) -> None:
-        # for node in graph.nodes():
-        #     if graph.in_degree[node] == 0:
-        #         first_node = node
-        #         break
-        # successors = nx.dfs_successors(graph, source=first_node)
-
         nodes = utils.get_nodes_sorted(graph)
         for i in range(0, len(nodes), groupping):
             node_type = ""
@@ -192,15 +181,9 @@ class PartitionDescriptor(ModelLayerDescriptor):
             if node_type not in self.hw_pe:
                 self.hw_pe.append(node_type)
 
-    def schedule_ops(self,
-                     graph: nx.DiGraph,
-                     groupping: int = 1,
-                     plot_pe: bool = False) -> list:
-        # for node in graph.nodes():
-        #     if graph.in_degree[node] == 0:
-        #         first_node = node
-        #         break
-        # successors = nx.dfs_successors(graph, source=first_node)
+    def schedule_ops(
+        self, graph: nx.DiGraph, groupping: int = 1, plot_pe: bool = False
+    ) -> list:
 
         static_schedule = []
         nodes = utils.get_nodes_sorted(graph)
@@ -214,8 +197,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
             if hw_op in self.hw_pe:
                 static_schedule.append(hw_op)
             else:
-                _logger.critical(
-                    msg=f"Hardware type {hw_op} not found in PE list")
+                _logger.critical(msg=f"Hardware type {hw_op} not found in PE list")
                 exit()
 
         if plot_pe:
@@ -229,15 +211,13 @@ class PartitionDescriptor(ModelLayerDescriptor):
                 plt.text(value, index, str(value))
             plt.tight_layout()
             plt.savefig(
-                os.getcwd() +
-                f"/fpga_modeling_reports/layer_grouppings/hw_pe_group_{groupping}.png"
+                os.getcwd()
+                + f"/fpga_modeling_reports/layer_grouppings/hw_pe_group_{groupping}.png"
             )
 
         return static_schedule
 
-    def update_layer_types(self,
-                           graph: nx.DiGraph,
-                           plot_types: bool = False) -> None:
+    def update_layer_types(self, graph: nx.DiGraph, plot_types: bool = False) -> None:
         layer_channels = []
         for node in utils.get_nodes_sorted(graph):
             if graph.nodes[node]["hw_type"] == "Gemm":
@@ -245,9 +225,9 @@ class PartitionDescriptor(ModelLayerDescriptor):
             layer_channels.append(graph.nodes[node]["hw"].input_shape[1])
 
         comb_dict = dict(Counter(layer_channels))
-        channels_bins = utils.get_channels_bins(layer_channels,
-                                                plot_lbow=False,
-                                                plot_hist=False)
+        channels_bins = utils.get_channels_bins(
+            layer_channels, plot_lbow=False, plot_hist=False
+        )
 
         layer_types = []
         for node in utils.get_nodes_sorted(graph):
@@ -273,27 +253,60 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.tight_layout()
             plt.show()
 
-    def group_conv_layers(self, plot_summaries=False) -> None:
+    def latency_driven_design(self, run_name: str, plot_summaries: bool = False) -> None:
         """
         Try to find the best configurations to be used for a hardware
         processing element to support all the convolutional layers in the graph.
         """
 
+        with mlflow.start_run(run_name=run_name) as run:
+            run_id = run.info.run_id
+
+        # Here we get all the convolutional layers in the graph but the first two
         conv_layers = [
-            layer for layer, config in self.layers.items()
+            layer
+            for layer, config in self.layers.items()
             if config["operation"] == "Conv"
         ][2:]
+
+        # Create a graph with the convolutional layers in sequential order
+        count = 0
+        for layer in conv_layers:
+            self.layers[layer]["node_in"] = [str(count)]
+            self.layers[layer]["node_out"] = str(count + 1)
+            count += 1
+        graph = self.create_graph(conv_layers)
+        self.visualize_graph(
+            graph,
+            os.getcwd() + "/fpga_modeling_reports/graphs/x3d_m/sequential_conv",
+            run_id,
+        )
+
+        optimizer = SimulatedAnnealing(
+            graph,
+            t_min=1e-5,
+            t_max=5,
+            iterationPerTemp=10,
+            cooling_rate=0.98,
+            ml_flow_id=run_id,
+        )
+        # We somehow need to identify and search for the best unique blocks
+        optimizer.run_optimizer_latency()
+        return
+
         conv_types = []
         for layer in conv_layers:
             conv_types.append(
                 utils.get_conv_type(
                     self.layers[layer],
+                    discriminate_kernel_size=True,
                     discriminate_stide=True,
                     discriminate_channels_filters=True,
-                ))
+                )
+            )
         comb_dict = dict(Counter(conv_types))
         comb_dict = dict(sorted(comb_dict.items(), key=lambda item: item[0]))
-        _logger.debug(comb_dict)
+        _logger.warning(comb_dict)
         if plot_summaries:
             keys = list(comb_dict.keys())
             values = list(comb_dict.values())
@@ -303,18 +316,16 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.tight_layout()
             plt.show()
 
-        cin_list = []
-        cout_list = []
+        cin_cout_list = []
         for layer, config in self.layers.items():
             if config["operation"] == "Conv":
                 layer_type = utils.get_conv_type(
                     config,
+                    discriminate_kernel_size=True,
                     discriminate_stide=True,
                     discriminate_channels_filters=True,
                 )
-                if (
-                        layer_type == "ConvPwk111s111c48f108"
-                ):  # "ConvPwk111s111c108f48" "ConvPwk111s111c48f108" "ConvDwk333s111c108f108"
+                if "Dw" in layer_type:
                     _logger.warning(
                         f"Searching design points for layer {layer} with type {layer_type}"
                     )
@@ -324,26 +335,13 @@ class PartitionDescriptor(ModelLayerDescriptor):
                         model_file="random_file.csv",
                         singlethreaded=True,
                     )
-                    cin_list.append(cin)
-                    cout_list.append(cout)
-                    break
+                    cin_cout_list.append(f"{int(cin)}_{int(cout)}")
+                    # exit()
 
         if plot_summaries:
-            comb_dict = dict(Counter(cin_list))
-            comb_dict = dict(
-                sorted(comb_dict.items(), key=lambda item: item[0]))
-            _logger.debug(comb_dict)
-            keys = list(comb_dict.keys())
-            values = list(comb_dict.values())
-            plt.cla()
-            plt.bar(keys, values)
-            plt.tight_layout()
-            plt.show()
-
-            comb_dict = dict(Counter(cout_list))
-            comb_dict = dict(
-                sorted(comb_dict.items(), key=lambda item: item[0]))
-            _logger.debug(comb_dict)
+            comb_dict = dict(Counter(cin_cout_list))
+            comb_dict = dict(sorted(comb_dict.items(), key=lambda item: item[0]))
+            _logger.warning(comb_dict)
             keys = list(comb_dict.keys())
             values = list(comb_dict.values())
             plt.cla()
@@ -352,9 +350,8 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.show()
         """
             Based on the results from the for loop above we can see that:
-                1. The most used coarse in factor across all the DW convolutional layers is 18 (same as coarse out).
-                2. The most used coarse in factor across all the PW convolutional layers is 8 (2nd used is 27).
-                3. The most used coarse out factor across all the PW convolutional layers is 48.
+                1. The most used coarse in factor across all the DW convolutional layers is 18 (same as coarse out). -> DSP=28.12%, BRAM=92.31%
+                2. The most used coarse in / coarse out factor combinations across all the PW convolutional layers (with resource contraint at 62 %, abstracting the DW block implementation resources) is 4_216 -> DSP=50.00%, BRAM=0.0% (the one we will use for now is 16_64 -> DSP=59.26%, BRAM=0.0%).
             We have assumed the fine factor to be the maximum possible for the sake of simplicity.
             Based on these observations we can procceed and create a harware building block supporting up to 18 parallel streams in its input and 48 parallel streams in its output, and try to map and create a schedule for all the convolutional layers of the network.
         """

@@ -64,7 +64,7 @@ if __name__ == "__main__":
         # partition_parser.parse()
         # partition_parser.model_custom_partition()
         # partition_parser.find_common_layers(groupping=3)
-        partition_parser.group_conv_layers(
+        partition_parser.latency_driven_design(
             run_name="latency_driven_modeling", plot_summaries=False
         )
     elif args.type == "layer":

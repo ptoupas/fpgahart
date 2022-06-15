@@ -1,14 +1,17 @@
 import copy
 import itertools
+import logging
 import math
 import os
 import random
 from collections import deque
+from copy import deepcopy
 
 import mlflow
 import networkx as nx
 import numpy as np
 import scipy.constants as sc
+from fpga_hart import _logger
 
 from ..layers.activation import ActivationLayer
 from ..layers.base_layer import BaseLayer
@@ -37,6 +40,7 @@ class SimulatedAnnealing(BaseLayer):
         ml_flow_id=None,
     ):
         super().__init__()
+        # _logger.setLevel(level=logging.DEBUG)
         self.gap_approx = gap_approx
         self.ml_flow_id = ml_flow_id
         self.part_name = partition_name
@@ -57,6 +61,8 @@ class SimulatedAnnealing(BaseLayer):
         self.iterationPerTemp = iterationPerTemp
         self.param_changes = 0
         self.freeze_param = False
+        self.DSP_budget = 92.0
+        self.BRAM_budget = 92.0
 
     def has_gap(self):
         result = False
@@ -1367,3 +1373,269 @@ class SimulatedAnnealing(BaseLayer):
             mem_config_in, mem_config_out = self.get_mem_bw_feasible(n_in=1, n_out=1)
 
         return config, [mem_config_in, mem_config_out]
+
+    def validate_building_blocks_setup(self, bblocks: list) -> bool:
+        """
+        Validate the building blocks setup by producing a valid scedulilng of the building blocks that
+        can execute the complete network graph.
+        """
+
+        nodes = utils.get_nodes_sorted(self.graph)
+        for n in nodes:
+            bb = self.graph.nodes[n]["hw_type"]
+            if bb in bblocks:
+                continue
+            else:
+                _logger.critical(
+                    msg=f"Hardware building block {bb} not found in existing building blocks list"
+                )
+                return False
+
+        return True
+
+    def generate_building_blocks(self) -> list:
+        """
+        Generate a set of hardware building blocks that can be used to execute the graph's workload.
+
+        Returns:
+            dict: bb_setup
+        """
+
+        # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
+        bblocks = ["Conv3DDw", "Conv3DPw"]
+        assert self.validate_building_blocks_setup(
+            bblocks
+        ), "Invalid building blocks setup. Cannot find a valid scheduling."
+
+        return bblocks
+
+    def generate_building_blocks_config(self, bblocks: list) -> dict:
+        """
+        Generate a configuration for each building block based on the min and max channels and filters values
+        from all its instances across the graph of the network.
+
+        Returns:
+            dict: bb_setup
+        """
+
+        bb_setup = dict()
+        total_dsp = 0
+        total_bram = 0
+        for bb in bblocks:
+            if not bb in bb_setup.keys():
+                bb_setup[bb] = dict()
+
+            shape_in, shape_out = utils.get_random_shape(self.graph, bb)
+            _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
+            (
+                _,
+                channels_out_dim,
+                depth_out_dim,
+                height_out_dim,
+                width_out_dim,
+            ) = shape_out
+
+            if bb == "Conv3DDw":
+                bb_descriptor = {
+                    "operation": "Conv",
+                    "shape_in": [
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+                    ],
+                    "shape_out": [
+                        1,
+                        channels_in_dim,
+                        depth_out_dim,
+                        height_out_dim,
+                        width_out_dim,
+                    ],
+                    "kernel": [channels_in_dim, 1, 3, 3, 3],
+                    "bias": [channels_in_dim],
+                    "padding": [1, 1, 1],
+                    "stride": [1, 1, 1],
+                    "groups": channels_in_dim,
+                    "dilation": [1, 1, 1],
+                    "branching": False,
+                }
+            elif bb == "Conv3DPw":
+                bb_descriptor = {
+                    "operation": "Conv",
+                    "shape_in": [
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+                    ],
+                    "shape_out": [
+                        1,
+                        channels_out_dim,
+                        depth_out_dim,
+                        height_out_dim,
+                        width_out_dim,
+                    ],
+                    "kernel": [channels_out_dim, channels_in_dim, 1, 1, 1],
+                    "bias": [channels_out_dim],
+                    "padding": [0, 0, 0],
+                    "stride": [1, 1, 1],
+                    "groups": 1,
+                    "dilation": [1, 1, 1],
+                    "branching": False,
+                }
+
+            bb_setup[bb]["hw"] = Convolutional3DLayer(bb_descriptor)
+            dsp_util, bram_util = 100, 100
+            while dsp_util > (90 - total_dsp) or bram_util > (90 - total_bram):
+                coarse_in = (
+                    np.random.choice(np.arange(channels_in_dim) + 1) / channels_in_dim
+                )
+                coarse_out = (
+                    np.random.choice(np.arange(channels_out_dim) + 1) / channels_out_dim
+                )
+                if bb == "Conv3DDw":
+                    coarse_out = coarse_in
+                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                    f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
+                )
+
+            bb_setup[bb]["HINT_shape_in"] = [
+                1,
+                channels_in_dim,
+                depth_in_dim,
+                height_in_dim,
+                width_in_dim,
+            ]
+            bb_setup[bb]["coarse_in"] = coarse_in
+            bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
+            bb_setup[bb]["interleaving_in"] = 1 // coarse_in
+            bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
+                channels_in_dim * coarse_in
+            )
+            bb_setup[bb]["HINT_shape_out"] = [
+                1,
+                channels_out_dim,
+                depth_out_dim,
+                height_out_dim,
+                width_out_dim,
+            ]
+            bb_setup[bb]["coarse_out"] = coarse_out
+            bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
+            bb_setup[bb]["interleaving_out"] = 1 // coarse_out
+            bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
+                channels_out_dim * coarse_out
+            )
+            bb_setup[bb]["DSP_util"] = dsp_util
+            bb_setup[bb]["BRAM_util"] = bram_util
+            total_dsp += dsp_util
+            total_bram += bram_util
+
+        return bb_setup
+
+    def get_cost_e2e(self, bblocks_config: dict) -> float:
+        cost = 0.0
+        scheduling = {}
+        for node in self.graph.nodes:
+            bb_type = self.graph.nodes[node]["hw_type"]
+            hw = self.graph.nodes[node]["hw"]
+
+            in_calls = math.ceil(
+                hw.input_shape[1]
+                / (
+                    bblocks_config[bb_type]["streams_in"]
+                    * bblocks_config[bb_type]["interleaving_in"]
+                )
+            )
+            out_calls = math.ceil(
+                hw.output_shape[1]
+                / (
+                    bblocks_config[bb_type]["streams_out"]
+                    * bblocks_config[bb_type]["interleaving_out"]
+                )
+            )
+            shape_calls = (
+                hw.input_shape[2]
+                / bblocks_config[bb_type]["HINT_shape_in"][2]
+                * hw.input_shape[3]
+                / bblocks_config[bb_type]["HINT_shape_in"][3]
+                * hw.input_shape[4]
+                / bblocks_config[bb_type]["HINT_shape_in"][4]
+            )
+ 
+            r = bblocks_config[bb_type]["hw"].get_design_point(
+                f_fine=1,
+                f_coarseIn=bblocks_config[bb_type]["coarse_in"],
+                f_coarseOut=bblocks_config[bb_type]["coarse_out"],
+                mem_bw_in=100000,
+                mem_bw_out=100000,
+            )
+            latency = r["latency(S)"] * math.ceil(in_calls * out_calls * shape_calls)
+            assert (
+                math.ceil(in_calls * out_calls * shape_calls) > 0
+            ), "Zero calls aborting..."
+            scheduling[node] = {
+                "Block Type": bb_type,
+                "Times Called": math.ceil(in_calls * out_calls * shape_calls),
+                "Latency": latency,
+                "Base Latency": r["latency(S)"],
+            }
+            cost += latency
+
+        final_DSP = 0
+        final_BRAM = 0
+        for bb in bblocks_config:
+            final_DSP += bblocks_config[bb]["DSP_util"]
+            final_BRAM += bblocks_config[bb]["BRAM_util"]
+        return cost, scheduling, final_DSP, final_BRAM
+
+    def run_optimizer_latency(self):
+
+        bblocks = self.generate_building_blocks()
+
+        with mlflow.start_run(run_id=self.ml_flow_id):
+
+            bblocks_config = self.generate_building_blocks_config(bblocks)
+            cost, scheduling, dsp_util, bram_util = self.get_cost_e2e(bblocks_config)
+
+            if cost is None:
+                for _ in range(100):
+                    bblocks_config = self.generate_building_blocks_config(bblocks)
+                    cost, scheduling, dsp_util, bram_util = self.get_cost_e2e(
+                        bblocks_config
+                    )
+                    if cost is not None:
+                        break
+                if cost is None:
+                    print("No configuration found in 500 iterations. Exiting...")
+                    return None
+
+            prev_state = bblocks_config
+            prev_scheduling = scheduling
+            prev_cost = cost
+
+            current_temp = self.t_max
+            print(f"Temperature  |  Latency    ")
+            while current_temp > self.t_min:
+                mlflow.log_metric("running_temp", current_temp)
+                mlflow.log_metric("running_latency", prev_cost)
+                for i in range(self.iterationPerTemp):
+                    new_state = self.generate_building_blocks_config(bblocks)
+                    new_cost, new_scheduling, _, _ = self.get_cost_e2e(new_state)
+
+                    if new_cost is None:
+                        continue
+
+                    cost_diff = prev_cost - new_cost
+                    if cost_diff >= 0:
+                        prev_state = copy.deepcopy(new_state)
+                        prev_cost = copy.deepcopy(new_cost)
+                        prev_scheduling = copy.deepcopy(new_scheduling)
+                    else:
+                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
+                            prev_state = copy.deepcopy(new_state)
+                            prev_cost = copy.deepcopy(new_cost)
+                            prev_scheduling = copy.deepcopy(new_scheduling)
+
+                current_temp *= self.cooling_rate
+                print(
+                    f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r",
+                )
+
+            print(f"{current_temp:.5e}\t{prev_cost:.5e}")
+            print(f"Optimization finished. Block setup: {prev_state}")
+            print(f"Final per layer configuration: {prev_scheduling}")
+            mlflow.log_dict(prev_scheduling, "scheduling.json")
