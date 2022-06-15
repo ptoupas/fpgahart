@@ -3,6 +3,7 @@ import itertools
 import json
 import math
 import os
+import random
 from functools import reduce
 
 import networkx as nx
@@ -27,7 +28,7 @@ sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
 
-def get_factors(n):
+def get_factors(n, max_parallel=None) -> list:
     """
     Parameters
     ----------
@@ -38,13 +39,18 @@ def get_factors(n):
     list
         list of integers that are factors of `n`
     """
-    return list(
-        set(
-            reduce(
-                list.__add__,
-                ([i, n // i] for i in range(1,
-                                            int(n**0.5) + 1) if n % i == 0),
-            )))
+    if max_parallel is None:
+        return list(
+            set(
+                reduce(
+                    list.__add__,
+                    ([i, n // i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0),
+                )
+            )
+        )
+    else:
+        factors = np.arange(n) + 1
+        return (factors[factors <= max_parallel]).tolist()
 
 
 def get_fine_feasible(kernel_size):
@@ -100,17 +106,17 @@ def find_pareto(scores, domination_type="MaxMin"):
             # Check if our 'i' pint is dominated by out 'j' point
             # print("[{}][0] = {}. [{}][0] = {}. [{}][1] = {}. [{}][1] = {}.".format(j, scores[j][0], i, scores[i][0], j, scores[j][1], i, scores[i][1]))
             if domination_type == "MaxMin":
-                if (scores[j][0] >= scores[i][0] and scores[j][1] <=
-                        scores[i][1]) and (scores[j][0] > scores[i][0]
-                                           or scores[j][1] < scores[i][1]):
+                if (scores[j][0] >= scores[i][0] and scores[j][1] <= scores[i][1]) and (
+                    scores[j][0] > scores[i][0] or scores[j][1] < scores[i][1]
+                ):
                     # j dominates i. Label 'i' point as not on Pareto front
                     pareto_front[i] = 0
                     # Stop further comparisons with 'i' (no more comparisons needed)
                     break
             elif domination_type == "MinMin":
-                if (scores[j][0] <= scores[i][0] and scores[j][1] <=
-                        scores[i][1]) and (scores[j][0] < scores[i][0]
-                                           or scores[j][1] < scores[i][1]):
+                if (scores[j][0] <= scores[i][0] and scores[j][1] <= scores[i][1]) and (
+                    scores[j][0] < scores[i][0] or scores[j][1] < scores[i][1]
+                ):
                     # j dominates i. Label 'i' point as not on Pareto front
                     pareto_front[i] = 0
                     # Stop further comparisons with 'i' (no more comparisons needed)
@@ -131,8 +137,9 @@ def plot_graph(
     pareto_type="MaxMin",
 ):
     throughput = throughput_vols
-    dsps_dir = os.path.join(os.getcwd(), "fpga_modeling_reports", "graphs",
-                            model_name, "throughput_dsps")
+    dsps_dir = os.path.join(
+        os.getcwd(), "fpga_modeling_reports", "graphs", model_name, "throughput_dsps"
+    )
     if not os.path.exists(dsps_dir):
         os.makedirs(dsps_dir)
 
@@ -150,9 +157,7 @@ def plot_graph(
 
         sns.lineplot(x=pareto_front[:, 0], y=pareto_front[:, 1], color="red")
 
-    sns.scatterplot(x=np.array(throughput),
-                    y=np.array(dsp_util),
-                    size=bram_util)
+    sns.scatterplot(x=np.array(throughput), y=np.array(dsp_util), size=bram_util)
 
     plt.title(layer_name)
     plt.xlabel("Throughtput(outputs/sec)")
@@ -187,8 +192,7 @@ def drop_duplicates_csv(file_name):
 
     layers_df = layers_df.drop_duplicates(subset=columns, ignore_index=True)
     final_size = len(layers_df.index)
-    print("Dropped {} rows due to duplicate".format(original_size -
-                                                    final_size))
+    print("Dropped {} rows due to duplicate".format(original_size - final_size))
 
     os.remove(file_name)
     layers_df.to_csv(file_name, index=False)
@@ -202,8 +206,9 @@ def plot_layers_csv(
     xaxis="volumes/s",
     yaxis="DSP(%)",
 ):
-    plot_dir = os.path.join(os.getcwd(), "fpga_modeling_reports", "graphs",
-                            model_name, "throughput_dsps")
+    plot_dir = os.path.join(
+        os.getcwd(), "fpga_modeling_reports", "graphs", model_name, "throughput_dsps"
+    )
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
 
@@ -276,8 +281,9 @@ def generate_layer_config(layer, config):
         layer_config["pointwise"] = pointwise
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_in_factor"] = coarse_in_factor
-        layer_config["coarse_out_factor"] = (coarse_out_factor if not depthwise
-                                             else coarse_in_factor)
+        layer_config["coarse_out_factor"] = (
+            coarse_out_factor if not depthwise else coarse_in_factor
+        )
     elif isinstance(layer, ActivationLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
@@ -330,8 +336,7 @@ def get_config_points(name, file_name, is_partitioning=False):
     if not is_partitioning:
         return curr_layer_df["config"].apply(lambda x: json.loads(x)).to_list()
     else:
-        if "BatchNormalization" in name.split("_") or "Swish" in name.split(
-                "_"):
+        if "BatchNormalization" in name.split("_") or "Swish" in name.split("_"):
             first_point = math.floor(len(curr_layer_df["config"]) * 0.25)
             second_point = math.floor(len(curr_layer_df["config"]) * 0.75)
             return [
@@ -339,21 +344,17 @@ def get_config_points(name, file_name, is_partitioning=False):
                 json.loads(curr_layer_df["config"][second_point]),
             ]
         else:
-            return curr_layer_df["config"].apply(
-                lambda x: json.loads(x)).to_list()
+            return curr_layer_df["config"].apply(lambda x: json.loads(x)).to_list()
 
 
-def get_paretto_csv(file_name_par,
-                    file_name,
-                    pareto_type="MinMin",
-                    xaxis="Latency(C)",
-                    yaxis="DSP(%)"):
+def get_paretto_csv(
+    file_name_par, file_name, pareto_type="MinMin", xaxis="Latency(C)", yaxis="DSP(%)"
+):
 
     with open(file_name_par, mode="a") as pareto_results:
-        csv_writer_par = csv.writer(pareto_results,
-                                    delimiter=",",
-                                    quotechar='"',
-                                    quoting=csv.QUOTE_MINIMAL)
+        csv_writer_par = csv.writer(
+            pareto_results, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
+        )
 
         layers_df = pd.read_csv(file_name)
 
@@ -413,8 +414,7 @@ def check_configuration_validation(config, layers):
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
             print("config for layer {} -> {}".format(name, comb[i]))
         elif isinstance(layer["layer"], ElementWiseLayer):
-            streams_in1, streams_in2, streams_out = layer[
-                "layer"].get_num_streams()
+            streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
             streams_in1 = math.ceil(streams_in1 * config[i][0])
             streams_in2 = math.ceil(streams_in2 * config[i][1])
             streams_out = math.ceil(streams_out * config[i][2])
@@ -581,28 +581,22 @@ def add_supportive_nodes_config(graph, config):
         if "Split_" in node and not node in config.keys():
             parent_node = node.split("Split_")[1]
             config[node] = {
-                "shape_in":
-                config[parent_node]["shape_out"],
-                "shape_out":
-                config[parent_node]["shape_out"],
-                "coarse_factor":
-                config[parent_node]["coarse_factor"]
-                if "coarse_factor" in config[parent_node].keys() else
-                config[parent_node]["coarse_out_factor"],
+                "shape_in": config[parent_node]["shape_out"],
+                "shape_out": config[parent_node]["shape_out"],
+                "coarse_factor": config[parent_node]["coarse_factor"]
+                if "coarse_factor" in config[parent_node].keys()
+                else config[parent_node]["coarse_out_factor"],
             }
         if "Squeeze_" in node and not node in config.keys():
             node_decomp = node.split("_")
             parent_node_1 = f"{node_decomp[1]}_{node_decomp[2]}"
             # parent_node_2 = f"{node_decomp[3]}_{node_decomp[4]}"
             config[node] = {
-                "shape_in":
-                config[parent_node_1]["shape_out"],
-                "shape_out":
-                config[parent_node_1]["shape_out"],
-                "coarse_factor":
-                config[parent_node_1]["coarse_factor"]
-                if "coarse_factor" in config[parent_node_1].keys() else
-                config[parent_node_1]["coarse_out_factor"],
+                "shape_in": config[parent_node_1]["shape_out"],
+                "shape_out": config[parent_node_1]["shape_out"],
+                "coarse_factor": config[parent_node_1]["coarse_factor"]
+                if "coarse_factor" in config[parent_node_1].keys()
+                else config[parent_node_1]["coarse_out_factor"],
             }
     return config
 
@@ -625,18 +619,18 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
         kmeanModel = KMeans(n_clusters=k).fit(X)
 
         distortions.append(
-            sum(
-                np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"),
-                       axis=1)) / X.shape[0])
+            sum(np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"), axis=1))
+            / X.shape[0]
+        )
         inertias.append(kmeanModel.inertia_)
 
-        mapping1[k] = (sum(
-            np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"), axis=1))
-                       / X.shape[0])
+        mapping1[k] = (
+            sum(np.min(cdist(X, kmeanModel.cluster_centers_, "euclidean"), axis=1))
+            / X.shape[0]
+        )
         mapping2[k] = kmeanModel.inertia_
 
-    distortions_res = normalizeData(
-        np.array(sorted(mapping1.values(), reverse=True)))
+    distortions_res = normalizeData(np.array(sorted(mapping1.values(), reverse=True)))
     k_dist = 0
     for i in range(len(distortions_res) - 1):
         dist = np.linalg.norm(distortions_res[i] - distortions_res[i + 1])
@@ -682,11 +676,12 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
 
 def get_conv_type(
     layer: dict(),
+    discriminate_kernel_size: bool = False,
     discriminate_stide: bool = False,
     discriminate_padding: bool = False,
     discriminate_channels_filters: bool = False,
 ) -> str:
-    conv_type = "Conv"
+    conv_type = "Conv3D"
     cin = layer["shape_in"][0][1]
     cout = layer["shape_out"][1]
     kernel_shape = layer["kernel"][2:]
@@ -697,7 +692,8 @@ def get_conv_type(
         conv_type += "Dw"
     if kernel_shape.count(1) == len(kernel_shape):
         conv_type += "Pw"
-    conv_type += "k{}".format("".join(map(str, kernel_shape)))
+    if discriminate_kernel_size:
+        conv_type += "k{}".format("".join(map(str, kernel_shape)))
     if discriminate_stide:
         conv_type += "s{}".format("".join(map(str, stride)))
     if discriminate_padding:
@@ -706,3 +702,83 @@ def get_conv_type(
         conv_type += "c{}".format(cin)
         conv_type += "f{}".format(cout)
     return conv_type
+
+
+def get_random_shape(graph: nx.DiGraph, bb_type: str) -> np.array:
+    shapes_list = []
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
+            shapes_list.append(
+                [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
+            )
+
+    final_shapes = random.choice(shapes_list)
+    shape_in = final_shapes[0]
+    shape_out = final_shapes[1]
+
+    return shape_in, shape_out
+
+
+def get_minmax_input_channels(graph: nx.DiGraph, bb_type: str) -> int:
+    max_input_channels = -1
+    min_input_channels = 10000
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type:
+            max_input_channels = max(
+                max_input_channels, graph.nodes[n]["hw"].input_shape[1]
+            )
+            min_input_channels = min(
+                min_input_channels, graph.nodes[n]["hw"].input_shape[1]
+            )
+    return min_input_channels, max_input_channels
+
+
+def get_minmax_output_channels(graph: nx.DiGraph, bb_type: str) -> int:
+    max_output_channels = -1
+    min_output_channels = 10000
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type:
+            max_output_channels = max(
+                max_output_channels, graph.nodes[n]["hw"].output_shape[1]
+            )
+            min_output_channels = min(
+                min_output_channels, graph.nodes[n]["hw"].output_shape[1]
+            )
+    return min_output_channels, max_output_channels
+
+
+def get_minmax_depth(graph: nx.DiGraph, bb_type: str) -> int:
+    max_depth = -1
+    min_depth = 10000
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type:
+            max_depth = max(max_depth, graph.nodes[n]["hw"].input_shape[2])
+            min_depth = min(min_depth, graph.nodes[n]["hw"].input_shape[2])
+    return min_depth, max_depth
+
+
+def get_minmax_height(graph: nx.DiGraph, bb_type: str) -> int:
+    max_height = -1
+    min_height = 10000
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type:
+            max_height = max(max_height, graph.nodes[n]["hw"].input_shape[3])
+            min_height = min(min_height, graph.nodes[n]["hw"].input_shape[3])
+    return min_height, max_height
+
+
+def get_minmax_width(graph: nx.DiGraph, bb_type: str) -> int:
+    max_width = -1
+    min_width = 10000
+    for n in graph.nodes():
+        bb = graph.nodes[n]["hw_type"]
+        if bb == bb_type:
+            max_width = max(max_width, graph.nodes[n]["hw"].input_shape[4])
+            min_width = min(min_width, graph.nodes[n]["hw"].input_shape[4])
+    return min_width, max_width
+
