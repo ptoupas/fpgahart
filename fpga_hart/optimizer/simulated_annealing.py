@@ -1300,7 +1300,7 @@ class SimulatedAnnealing(BaseLayer):
             dp_info = hw.get_design_point(
                 config[0],
                 hw.mem_words_per_cycle * mem_bw[0][0],
-                layhwer.mem_words_per_cycle * mem_bw[1][0],
+                hw.mem_words_per_cycle * mem_bw[1][0],
             )
         elif isinstance(hw, SqueezeExcitationLayer):
             assert False, "Not supported layer (SqueezeExcitationLayer)"
