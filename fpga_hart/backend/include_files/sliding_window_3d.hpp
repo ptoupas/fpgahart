@@ -135,45 +135,6 @@ in_loop_batch:
 							{
 								line_buffer_2d[row_index].write(pixel);
 							}
-							// if (col_index < kw_minus)
-							// {
-							// 	if (depth_index < kd_minus)
-							// 	{
-							// 		cout << "write to window_buffer_3d and cube_cache" << endl;
-							// 		window_buffer_3d[row_index][col_index][depth_index].write(pixel);
-							// 		cube_cache[row_index][col_index][depth_index] = pixel;
-							// 		if (col_index != 0)
-							// 		{
-							// 			cout << "write to line_buffer_3d" << endl;
-							// 			line_buffer_3d[row_index][col_index - 1].write(pixel);
-							// 		}
-							// 	}
-							// 	else
-							// 	{
-							// 		cout << "write to line_buffer_3d" << endl;
-							// 		line_buffer_3d[row_index][col_index].write(pixel);
-							// 	}
-							// }
-							// else if ((col_index == kw_minus || col_index == kw) && depth_index < kd_minus)
-							// {
-							// 	if (col_index == kw_minus)
-							// 	{
-							// 		cout << "write to window_buffer_3d and cube_cache and line_buffer_3d" << endl;
-							// 		window_buffer_3d[row_index][col_index][depth_index].write(pixel);
-							// 		cube_cache[row_index][col_index][depth_index] = pixel;
-							// 		line_buffer_3d[row_index][col_index - 1].write(pixel);
-							// 	}
-							// 	else if (col_index == kw)
-							// 	{
-							// 		cout << "write to line_buffer_2d (ifif)" << endl;
-							// 		line_buffer_2d[row_index].write(pixel);
-							// 	}
-							// }
-							// else
-							// {
-							// 	cout << "write to line_buffer_2d" << endl;
-							// 	line_buffer_2d[row_index].write(pixel);
-							// }
 						}
 						else if (row_index == kh_minus && col_index < kw_minus)
 						{
@@ -221,23 +182,6 @@ in_loop_batch:
 									}
 								}
 							}
-
-							// read out line buffer 3d to cube cache
-							// for (unsigned char k1 = 0; k1 < kh; k1++)
-							// {
-							// 	for (unsigned char k2 = 0; k2 < kw_minus; k2++)
-							// 	{
-							// 		T tmp_lb = line_buffer_3d[k1][k2].read();
-							// 		cube_cache[k1][k2][kd_minus] = tmp_lb;
-							// 	}
-							// }
-
-							// read out line buffer 2d to cube cache
-							// for (unsigned char k1 = 0; k1 < kh_minus; k1++)
-							// {
-							// 	T tmp_lb = line_buffer_2d[k1].read();
-							// 	cube_cache[k1][kw_minus][kd_minus] = tmp_lb;
-							// }
 
 							cube_cache[kh_minus][kw_minus][kd_minus] = pixel;
 
