@@ -1,5 +1,7 @@
+import configparser
 import csv
 import itertools
+import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -9,9 +11,11 @@ import mlflow
 import networkx as nx
 import numpy as np
 import pandas as pd
+import wandb
 from fpga_hart import _logger
 from matplotlib import pyplot as plt
 from nltk import ngrams
+from sqlalchemy import column
 
 from ..layers.activation import ActivationLayer
 from ..layers.batchnorm_3d import BatchNorm3DLayer
@@ -36,10 +40,31 @@ class PartitionParser(PartitionDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
+    wandb_config: wandb.sdk.wandb_config.Config
 
     def __post_init__(self) -> None:
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
+
+        if not self.wandb_config == None:
+            columns = [
+                "Partition Name",
+                "Latency(C)",
+                "Latency(S)",
+                "GOP/s",
+                "vols/s",
+                "GOPs",
+                "DSP %",
+                "DSPs",
+                "BRAM %",
+                "BRAMs",
+                "depth",
+                "workload size in (MB)",
+                "workload size out (MB)",
+            ]
+            self.tbl = wandb.Table(columns=columns)
+
+        self.model_avg_metrics = {}
 
         if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports")):
             os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports"))
@@ -58,6 +83,18 @@ class PartitionParser(PartitionDescriptor):
             self.layer_model_file_par = os.path.join(
                 os.getcwd(), "fpga_modeling_reports", self.model_name + "_pareto.csv"
             )
+
+        self.get_fpga_specs()
+
+    def get_fpga_specs(self):
+        specs = configparser.ConfigParser()
+        specs.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
+
+        self.clock_frequency = int(specs.get("FPGA Specifications", "clock_freq"))
+        self.total_dsp = int(specs.get("FPGA Specifications", "dsp"))
+        self.reconfiguration_time = float(
+            specs.get("FPGA Specifications", "reconfiguration_time")
+        )
 
     def is_partition_input(self, partition, node_ids):
         if len(node_ids) > 1:
@@ -80,12 +117,13 @@ class PartitionParser(PartitionDescriptor):
                 nodes.append(layer)
         return nodes
 
-    @staticmethod
-    def visualize_graph(graph, path, run_id=None):
+    def visualize_graph(self, graph, path, run_id=None):
         PG = nx.nx_pydot.to_pydot(graph)
         PG.write_png(path + ".png")
-        with mlflow.start_run(run_id=run_id):
-            mlflow.log_artifact(path + ".png")
+        if not self.wandb_config == None:
+            wandb.log({"graph": wandb.Image(path + ".png")})
+        # with mlflow.start_run(run_id=run_id):
+        #     mlflow.log_artifact(path + ".png")
 
     def update_shapes(
         self,
@@ -153,36 +191,92 @@ class PartitionParser(PartitionDescriptor):
             # if not 'Gemm_401' in partition:
             #     self.update_shapes(layer, channels_reduction_rate=4, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1)
             if self.layers[layer]["operation"] == "GlobalAveragePool":
-                hw_layer = GAPLayer(self.layers[layer])
+                hw_layer = GAPLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
-                hw_layer = Convolutional3DLayer(self.layers[layer])
+                hw_layer = Convolutional3DLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
                 layer_type = self.layers[layer]["operation"]
             elif (
                 self.layers[layer]["operation"] == "Relu"
                 or self.layers[layer]["operation"] == "Sigmoid"
                 or self.layers[layer]["operation"] == "Swish"
             ):
-                hw_layer = ActivationLayer(self.layers[layer])
+                hw_layer = ActivationLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
                 layer_type = "Activation"
             elif (
                 self.layers[layer]["operation"] == "Mul"
                 or self.layers[layer]["operation"] == "Add"
             ):
-                hw_layer = ElementWiseLayer(self.layers[layer])
+                hw_layer = ElementWiseLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
                 layer_type = "ElementWise"
             elif (
                 self.layers[layer]["operation"] == "Gemm"
                 or self.layers[layer]["operation"] == "MatMul"
             ):
                 layer_type = self.layers[layer]["operation"]
-                hw_layer = FCLayer(self.layers[layer])
+                hw_layer = FCLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
             elif self.layers[layer]["operation"] == "SqueezeExcitation":
                 layer_type = self.layers[layer]["operation"]
-                hw_layer = SqueezeExcitationLayer(self.layers[layer])
+                hw_layer = SqueezeExcitationLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
             elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
-                hw_layer = BatchNorm3DLayer(self.layers[layer])
+                hw_layer = BatchNorm3DLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
             else:
                 assert False, "{} operation in layer {} is not supported".format(
                     self.layers[layer]["operation"], layer
@@ -242,24 +336,80 @@ class PartitionParser(PartitionDescriptor):
                 )
             branch_buffer += max_shape
 
-        with mlflow.start_run(run_name=name) as run:
-            run_id = run.info.run_id
+        if self.wandb_config == None:
+            with mlflow.start_run(run_name=name) as run:
+                run_id = run.info.run_id
+        else:
+            run_id = None
+
         self.visualize_graph(
             graph,
             os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name,
-            run_id,
+            run_id=run_id,
         )
 
         _logger.info("Partition: {}: ".format(name))
         # optimizer = SimulatedAnnealing(graph, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx)
         optimizer = SimulatedAnnealing(
-            graph, partition_name=name, gap_approx=self.gap_approx, ml_flow_id=run_id
+            graph,
+            partition_name=name,
+            gap_approx=self.gap_approx,
+            ml_flow_id=run_id,
+            wandb_config=self.wandb_config,
         )
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
             raise Exception("Optimization failed")
         num_graphs = len(solution_mem)
+
+        partition_results = solution_dp[0]
+        log_metrics = {}
+        log_metrics["latency(C)"] = partition_results["latency(C)"]
+        log_metrics["latency(S)"] = partition_results["latency(S)"]
+        log_metrics["GOP/s"] = partition_results["GOP/s"]
+        log_metrics["vols/s"] = partition_results["vols/s"]
+        log_metrics["GOPs"] = partition_results["GOPs"]
+        log_metrics["DSP %"] = partition_results["DSP"]
+        log_metrics["BRAM %"] = partition_results["BRAM"]
+        log_metrics["depth"] = partition_results["depth"]
+        if not self.model_avg_metrics:
+            self.model_avg_metrics = log_metrics
+            self.model_avg_metrics["latency(C) Sum"] = partition_results["latency(C)"]
+            self.model_avg_metrics["latency(S) Sum"] = partition_results["latency(S)"]
+            self.model_avg_metrics["GOPs Sum"] = partition_results["GOPs"]
+            self.model_avg_metrics["depth Sum"] = partition_results["depth"]
+        else:
+            for key in log_metrics:
+                self.model_avg_metrics[key] = (
+                    self.model_avg_metrics[key] + log_metrics[key]
+                ) / 2
+            self.model_avg_metrics["latency(C) Sum"] += partition_results["latency(C)"]
+            self.model_avg_metrics["latency(S) Sum"] += partition_results["latency(S)"]
+            self.model_avg_metrics["GOPs Sum"] += partition_results["GOPs"]
+            self.model_avg_metrics["depth Sum"] += partition_results["depth"]
+
+        if not self.wandb_config == None:
+            self.tbl.add_data(
+                name,
+                partition_results["latency(C)"],
+                partition_results["latency(S)"],
+                partition_results["GOP/s"],
+                partition_results["vols/s"],
+                partition_results["GOPs"],
+                partition_results["DSP"],
+                partition_results["DSP_RAW"],
+                partition_results["BRAM"],
+                partition_results["BRAM_RAW"],
+                partition_results["depth"],
+                partition_results["dataSizeIn"],
+                partition_results["dataSizeOut"],
+            )
+
+            artifact = wandb.Artifact("partitions", type="json")
+            with artifact.new_file("partition_config.json") as f:
+                json.dump(partition_results["config"], f)
+            wandb.log_artifact(artifact)
 
         with open(self.partition_model_file, mode="a") as res_file:
             csv_writer = csv.writer(
@@ -429,6 +579,7 @@ class PartitionParser(PartitionDescriptor):
             os.getcwd(), "fpga_modeling_reports", self.model_name + "_partitions.csv"
         )
 
+        # TODO: Maybe store this as a pandas Dataframe and wandb Table
         with open(self.partition_model_file, mode="w") as partition_dp:
             csv_writer = csv.writer(
                 partition_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
@@ -463,9 +614,31 @@ class PartitionParser(PartitionDescriptor):
 
         start = time.time()
         for i, partition in enumerate(self.partitions):
-            if i == 1 or i == 2:
-                part_name = "part_{}".format(i)
-                self.model_partition(partition, name=part_name)
+            # if i == 19:  # i == 2 or i == 3:
+            part_name = "part_{}".format(i)
+            self.model_partition(partition, name=part_name)
+
+        self.model_avg_metrics["latency(S) + reconfiguration"] = self.model_avg_metrics[
+            "latency(C) Sum"
+        ] / (self.clock_frequency * 1e6) + (
+            self.reconfiguration_time * (len(self.partitions) - 1)
+        )
+        self.model_avg_metrics["Througput (GOPs/s)"] = (
+            self.model_avg_metrics["GOPs Sum"]
+            / self.model_avg_metrics["latency(S) + reconfiguration"]
+        )
+        self.model_avg_metrics["Througput (Volumes/s)"] = (
+            1 / self.model_avg_metrics["latency(S) + reconfiguration"]
+        )
+        self.model_avg_metrics["GOPs/s/DSP"] = (
+            self.model_avg_metrics["Througput (GOPs/s)"] / self.total_dsp
+        )
+        self.model_avg_metrics["GOPs/s/DSP/cycle"] = (
+            self.model_avg_metrics["GOPs/s/DSP"] / self.clock_frequency
+        ) * 1e3
+
+        wandb.log(self.model_avg_metrics)
+        wandb.log({"Partition Results": self.tbl})
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 

@@ -2,7 +2,10 @@ import argparse
 import logging
 
 import seaborn as sns
+import yaml
+from boto import config
 
+import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_parser import LayerParser
 from fpga_hart.partitions.partition_parser import PartitionParser
@@ -22,6 +25,12 @@ def parse_args():
         choices=["partition", "layer"],
         type=str,
         help="type of processing to be performed",
+    )
+    parser.add_argument(
+        "target",
+        choices=["throughput", "latency"],
+        type=str,
+        help="target of the optimization",
     )
     parser.add_argument(
         "--singlethreaded",
@@ -52,6 +61,15 @@ if __name__ == "__main__":
 
     _logger.setLevel(level=logging.INFO)
 
+    with open("fpga_hart/config/config_param.yaml", "r") as yaml_file:
+        config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+    project_name = f"fpga-hart-{args.model_name}-{args.type}-{args.target}"
+
+    wandb.init(config=config_dictionary, project=project_name)
+    config = wandb.config
+    # config = None
+
     if args.type == "partition":
         partition_parser = PartitionParser(
             model_name=args.model_name,
@@ -59,20 +77,24 @@ if __name__ == "__main__":
             gap_approx=args.gap_approx,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
+            wandb_config=config,
         )
 
-        # partition_parser.parse()
+        partition_parser.parse()
         # partition_parser.model_custom_partition()
         # partition_parser.find_common_layers(groupping=3)
-        partition_parser.latency_driven_design(
-            run_name="latency_driven_modeling", plot_summaries=False
-        )
+        # partition_parser.latency_driven_design(
+        #     run_name="latency_driven_modeling",
+        #     plot_summaries=False,
+        #     wandb_config=config,
+        # )
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,
             se_block=args.se_block,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
+            wandb_config=config,
         )
 
         # layer_parser.parse()

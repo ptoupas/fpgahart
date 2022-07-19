@@ -4,8 +4,8 @@ import os
 from dataclasses import dataclass, field
 from multiprocessing import Pool
 
-import mlflow
 import numpy as np
+import wandb
 from fpga_hart import _logger
 from matplotlib import pyplot as plt
 
@@ -21,6 +21,7 @@ def multithreaded_modeling(operation, input, pool):
 
 @dataclass
 class LayerParser(ModelLayerDescriptor):
+    wandb_config: wandb.sdk.wandb_config.Config
     singlethreaded: bool = False
     per_layer_plot: bool = False
 
@@ -45,7 +46,12 @@ class LayerParser(ModelLayerDescriptor):
     def model_layer(self, layer: str, layer_description: dict) -> None:
         _logger.info("Modeling {} layer...".format(layer))
         layer_design_points(
-            layer, layer_description, self.layer_model_file, self.singlethreaded
+            layer,
+            layer_description,
+            95.0 if self.wandb_config == None else self.wandb_config.max_dsp_util,
+            95.0 if self.wandb_config == None else self.wandb_config.max_bram_util,
+            self.layer_model_file,
+            self.singlethreaded,
         )
 
     def parse(self) -> None:
@@ -158,21 +164,21 @@ class LayerParser(ModelLayerDescriptor):
             )
 
         name = "custom_conv_layer_pw"
-        # conv_descriptor = {
-        #     "operation": "Conv",
-        #     "shape_in": [[1, 3, 8, 16, 16]],
-        #     # "shape_out": [1, 6, 8, 16, 16],
-        #     "shape_out": [1, 6, 8, 8, 8],
-        #     "node_in": ["575"],
-        #     "node_out": "576",
-        #     "branching": False,
-        #     "kernel": [6, 3, 3, 3, 3],
-        #     "bias": [6],
-        #     "padding": [1, 1, 1],
-        #     "stride": [1, 2, 2],
-        #     "groups": 1,
-        #     "dilation": [1, 1, 1],
-        # }
+        conv_descriptor = {
+            "operation": "Conv",
+            "shape_in": [[1, 3, 8, 16, 16]],
+            # "shape_out": [1, 6, 8, 16, 16],
+            "shape_out": [1, 6, 8, 8, 8],
+            "node_in": ["575"],
+            "node_out": "576",
+            "branching": False,
+            "kernel": [6, 3, 3, 3, 3],
+            "bias": [6],
+            "padding": [1, 1, 1],
+            "stride": [1, 2, 2],
+            "groups": 1,
+            "dilation": [1, 1, 1],
+        }
         # conv_descriptor = {
         #     "operation": "Conv",
         #     "shape_in": [[1, 4, 4, 6, 6]],
@@ -187,18 +193,18 @@ class LayerParser(ModelLayerDescriptor):
         #     "groups": 4,
         #     "dilation": [1, 1, 1],
         # }
-        conv_descriptor = {
-            "operation": "Conv",
-            "shape_in": [[1, 4, 8, 12, 12]],
-            "shape_out": [1, 6, 8, 12, 12],
-            "node_in": ["575"],
-            "node_out": "576",
-            "branching": False,
-            "kernel": [6, 4, 1, 1, 1],
-            "bias": [6],
-            "padding": [0, 0, 0],
-            "stride": [1, 1, 1],
-            "groups": 1,
-            "dilation": [1, 1, 1],
-        }
+        # conv_descriptor = {
+        #     "operation": "Conv",
+        #     "shape_in": [[1, 4, 8, 12, 12]],
+        #     "shape_out": [1, 6, 8, 12, 12],
+        #     "node_in": ["575"],
+        #     "node_out": "576",
+        #     "branching": False,
+        #     "kernel": [6, 4, 1, 1, 1],
+        #     "bias": [6],
+        #     "padding": [0, 0, 0],
+        #     "stride": [1, 1, 1],
+        #     "groups": 1,
+        #     "dilation": [1, 1, 1],
+        # }
         self.model_layer(name, conv_descriptor)

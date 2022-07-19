@@ -7,10 +7,10 @@ import mlflow
 import networkx as nx
 import numpy as np
 import seaborn as sns
+import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import \
-    ModelLayerDescriptor
+from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
@@ -61,6 +61,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
                     "Add",
                 ]
                 layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Swish", "Conv", "Add"]
+                # layer_type_4 = ["Conv", "Conv"]
                 layer_type_4 = [
                     "Conv",
                     "Conv",
@@ -254,16 +255,16 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.show()
 
     def latency_driven_design(
-        self, run_name: str, plot_summaries: bool = False
+        self, run_name: str, plot_summaries: bool = False, wandb_config=None
     ) -> None:
         """
         Try to find the best configurations to be used for a hardware
         processing element to support all the convolutional layers in the graph.
         """
 
-        with mlflow.start_run(run_name=run_name) as run:
-            mlflow.set_tag("stable-state", "16.06.22")
-            run_id = run.info.run_id
+        # with mlflow.start_run(run_name=run_name) as run:
+        #     mlflow.set_tag("stable-state", "16.06.22")
+        #     run_id = run.info.run_id
 
         # Here we get all the convolutional layers in the graph but the first two
         conv_layers = [
@@ -282,7 +283,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
         self.visualize_graph(
             graph,
             os.getcwd() + "/fpga_modeling_reports/graphs/x3d_m/sequential_conv",
-            run_id,
+            run_id=None,
         )
 
         optimizer = SimulatedAnnealing(
@@ -291,7 +292,8 @@ class PartitionDescriptor(ModelLayerDescriptor):
             t_max=5,
             iterationPerTemp=10,
             cooling_rate=0.98,
-            ml_flow_id=run_id,
+            ml_flow_id=None,
+            wandb_config=wandb_config,
         )
         # We somehow need to identify and search for the best unique blocks
         optimizer.run_optimizer_latency()
@@ -320,6 +322,11 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.show()
 
         cin_cout_list = []
+        cin_list = []
+        cout_list = []
+        din_list = []
+        win_list = []
+        wout_list = []
         for layer, config in self.layers.items():
             if config["operation"] == "Conv":
                 layer_type = utils.get_conv_type(
@@ -328,20 +335,56 @@ class PartitionDescriptor(ModelLayerDescriptor):
                     discriminate_stide=True,
                     discriminate_channels_filters=True,
                 )
-                if "Dw" in layer_type:
-                    _logger.warning(
-                        f"Searching design points for layer {layer} with type {layer_type}"
-                    )
-                    cin, cout = layer_design_points(
-                        name=layer,
-                        description=config,
-                        model_file="random_file.csv",
-                        singlethreaded=True,
-                    )
-                    cin_cout_list.append(f"{int(cin)}_{int(cout)}")
-                    # exit()
+                # if "Dw" in layer_type:
+                _logger.warning(
+                    f"Searching design points for layer {layer} with type {layer_type}"
+                )
+                cin, cout = layer_design_points(
+                    name=layer,
+                    description=config,
+                    max_DSP_util=wandb_config.max_dsp_util,
+                    max_BRAM_util=wandb_config.max_bram_util,
+                    model_file="random_file.csv",
+                    singlethreaded=True,
+                )
+                shape_in = config["shape_in"][0]
+                _, cin, din, hin, win = shape_in
+                shape_out = config["shape_out"]
+                _, cout, dout, hout, wout = shape_out
+                cin_cout_list.append(f"{int(cin)}_{int(cout)}")
+                cin_list.append(cin)
+                cout_list.append(cout)
+                din_list.append(din)
+                win_list.append(win)
+                wout_list.append(wout)
 
         if plot_summaries:
+            plt.cla()
+            fig, axes = plt.subplots(2, 2, sharex=False, sharey=False, figsize=(20, 10))
+            # fig.suptitle("Bigger 1 row x 2 columns axes with no data")
+            axes[0][0].set_title("Channes In-Spatial Dims correlation")
+            axes[0][0].scatter(cin_list, win_list)
+            axes[0][0].set_xlabel("Channels In")
+            axes[0][0].set_ylabel("Spatial Dims")
+
+            axes[0][1].set_title("Channes In-Temporal Dim correlation")
+            axes[0][1].scatter(cin_list, din_list)
+            axes[0][1].set_xlabel("Channels In")
+            axes[0][1].set_ylabel("Temporal Dim")
+
+            axes[1][0].set_title("Channes In-Channels Out correlation")
+            axes[1][0].scatter(cin_list, cout_list)
+            axes[1][0].set_xlabel("Channels In")
+            axes[1][0].set_ylabel("Channels Out")
+
+            axes[1][1].set_title("Channes Out-Spatial Dims(out) correlation")
+            axes[1][1].scatter(cout_list, wout_list)
+            axes[1][1].set_xlabel("Channels Out")
+            axes[1][1].set_ylabel("Spatial Dims(out)")
+
+            plt.tight_layout()
+            plt.show()
+
             comb_dict = dict(Counter(cin_cout_list))
             comb_dict = dict(sorted(comb_dict.items(), key=lambda item: item[0]))
             _logger.warning(comb_dict)

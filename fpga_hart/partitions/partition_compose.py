@@ -22,8 +22,8 @@ DEBUG = False
 
 
 class PartitionComposer(BaseLayer):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, max_DSP_util, max_BRAM_util):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 
     def update_layer(self):
         self.full_rate_in = []
@@ -384,7 +384,7 @@ class PartitionComposer(BaseLayer):
                         curr_bram_util = (mem_bram / self.bram) * 100
                         curr_dsps_util = (dp_info["muls"] / self.dsp) * 100
                         print(
-                            f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
+                            f"{node}: Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
                         )
                     return self.get_dp_info()
                 (
@@ -435,7 +435,7 @@ class PartitionComposer(BaseLayer):
                         curr_bram_util = (mem_bram / self.bram) * 100
                         curr_dsps_util = (dp_info["muls"] / self.dsp) * 100
                         print(
-                            f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
+                            f"{node}: Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
                         )
                     return self.get_dp_info()
                 (
@@ -483,13 +483,13 @@ class PartitionComposer(BaseLayer):
 
             if (
                 not dp_info["config"]
-                or curr_dsps_util >= 90.0
-                or curr_bram_util >= 95.0
+                or curr_dsps_util >= self.max_DSP_util
+                or curr_bram_util >= self.max_BRAM_util
             ):
                 self.update_layer()
                 if DEBUG:
                     print(
-                        f"Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
+                        f"{node}: Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
                     )
                 return self.get_dp_info()
 
@@ -593,7 +593,11 @@ class PartitionComposer(BaseLayer):
             thr_in, thr_out
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90.0 and bram_util < 95.0:
+        if (
+            dsps_util < self.max_DSP_util
+            and bram_util < self.max_BRAM_util
+            and dsps_util > 25.0
+        ):
             self.full_rate_in = rates_in
             self.full_rate_out = rates_out
             self.max_parallel_muls = total_muls

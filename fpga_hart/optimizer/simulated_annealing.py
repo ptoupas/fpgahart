@@ -1,16 +1,20 @@
 import copy
 import itertools
+import json
 import logging
 import math
 import os
 import random
+import time
 from collections import deque
 from copy import deepcopy
 
 import mlflow
 import networkx as nx
 import numpy as np
+import pandas as pd
 import scipy.constants as sc
+import wandb
 from fpga_hart import _logger
 
 from ..layers.activation import ActivationLayer
@@ -35,17 +39,36 @@ class SimulatedAnnealing(BaseLayer):
         t_max=7,
         iterationPerTemp=15,
         cooling_rate=0.99,
+        best_of_iter=1,
         partition_name="",
         gap_approx=False,
         ml_flow_id=None,
+        wandb_config=None,
     ):
-        super().__init__()
+        self.wandb_config = wandb_config
+        super().__init__(
+            max_DSP_util=95.0
+            if self.wandb_config == None
+            else self.wandb_config.max_dsp_util,
+            max_BRAM_util=95.0
+            if self.wandb_config == None
+            else self.wandb_config.max_bram_util,
+        )
         # _logger.setLevel(level=logging.DEBUG)
+        if self.wandb_config != None:
+            self.wandb_config.update(
+                {
+                    "Clock frequency": self.clock_freq,
+                    "DSPs": self.dsp,
+                    "BRAMs": self.bram,
+                    "Memory BW": self.mem_bw,
+                }
+            )
+
         self.gap_approx = gap_approx
         self.ml_flow_id = ml_flow_id
         self.part_name = partition_name
 
-        self.partition_composer = PartitionComposer()
         self.graph = graph
 
         mem_kb = (branch_mem * self.word_bytes) / 1e3
@@ -55,14 +78,37 @@ class SimulatedAnnealing(BaseLayer):
 
         # Simulate Annealing Variables
         self.k = sc.Boltzmann
-        self.t_min = t_min
-        self.t_max = t_max
-        self.cooling_rate = cooling_rate
-        self.iterationPerTemp = iterationPerTemp
+        self.t_min = (
+            t_min
+            if self.wandb_config == None
+            else self.wandb_config.simulatedAnnealing["t_min"]
+        )
+        self.t_max = (
+            t_max
+            if self.wandb_config == None
+            else self.wandb_config.simulatedAnnealing["t_max"]
+        )
+        self.cooling_rate = (
+            cooling_rate
+            if self.wandb_config == None
+            else self.wandb_config.simulatedAnnealing["cooling_rate"]
+        )
+        self.iterationPerTemp = (
+            iterationPerTemp
+            if self.wandb_config == None
+            else self.wandb_config.simulatedAnnealing["iterationPerTemp"]
+        )
+        self.best_of_iter = (
+            best_of_iter
+            if self.wandb_config == None
+            else self.wandb_config.simulatedAnnealing["best_of_iter"]
+        )
         self.param_changes = 0
         self.freeze_param = False
-        self.DSP_budget = 92.0
-        self.BRAM_budget = 92.0
+
+        self.partition_composer = PartitionComposer(
+            max_DSP_util=self.max_DSP_util, max_BRAM_util=self.max_BRAM_util
+        )
 
     def has_gap(self):
         result = False
@@ -208,7 +254,7 @@ class SimulatedAnnealing(BaseLayer):
         mem_kb = ((branch_buffer_1 + branch_buffer_2) * self.word_bytes) / 1e3
         mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
         branch_bram_util = (mem_bram / self.bram) * 100
-        if branch_bram_util > 80.0:
+        if branch_bram_util > self.max_BRAM_util:
             raise ValueError(
                 "BRAM utilization is {}%. Buffering cant be used in one of the splitted graphs.".format(
                     branch_bram_util
@@ -225,17 +271,16 @@ class SimulatedAnnealing(BaseLayer):
             mem_out_2,
         )
 
-    @staticmethod
-    def validate_configs(graph_1_dp, graph_2_dp):
+    def validate_configs(self, graph_1_dp, graph_2_dp):
         g_1_dsp_util = graph_1_dp["DSP"]
         g_2_dsp_util = graph_2_dp["DSP"]
 
         g_1_bram_util = graph_1_dp["BRAM"]
         g_2_bram_util = graph_2_dp["BRAM"]
 
-        if g_1_dsp_util + g_2_dsp_util >= 90.0:
+        if g_1_dsp_util + g_2_dsp_util >= self.max_DSP_util:
             return False
-        if g_1_bram_util + g_2_bram_util >= 90.0:
+        if g_1_bram_util + g_2_bram_util >= self.max_BRAM_util:
             return False
 
         return True
@@ -524,21 +569,23 @@ class SimulatedAnnealing(BaseLayer):
     def initialize_optimizer(self):
         self.freeze_param = True
 
-        config, mem_bw, _, _ = self.generate_random_config(param_perc=0.9)
+        config, mem_bw, _, _ = self.generate_random_config()
         cost, dp_info = self.get_cost(config, mem_bw)
         slowest_nodes = None
 
         if cost is None:
-            for _ in range(500):
+            start_time = time.time()
+            while time.time() - start_time < 90.0:
                 config, mem_bw, _, _ = self.generate_random_config(
-                    param_perc=0.9, prev_state=config, slowest_nodes=slowest_nodes
+                    seconds_passed=math.ceil(time.time() - start_time)
                 )
                 cost, dp_info = self.get_cost(config, mem_bw)
+
                 if cost is not None:
                     slowest_nodes = dp_info["slowestNodes"]
                     break
             if cost is None:
-                print("No configuration found in 100 iterations. Exiting...")
+                print("No configuration found after 90 seconds. Aborting...")
                 return None, None, None, None, None
 
         prev_state = config
@@ -547,7 +594,7 @@ class SimulatedAnnealing(BaseLayer):
         solution_mem = mem_bw
 
         # current_temp = 12.5
-        # for i in range(1000):
+        # for i in range(500):
         #     new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(param_perc=0.9, prev_state=prev_state, slowest_nodes=slowest_nodes)
         #     new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
         #     if new_cost is not None:
@@ -574,99 +621,108 @@ class SimulatedAnnealing(BaseLayer):
         return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
     def run_optimizer(self):
-        if self.has_gap() and self.branch_bram_util > 80:
+        if self.has_gap() and self.branch_bram_util > self.max_BRAM_util:
             return self.run_optimizer_double_graph()
 
         best_solution_mem = None
         best_solution_dp = None
         best_latency = 1000
-        with mlflow.start_run(run_id=self.ml_flow_id):
-            for i in range(1):
+        # with mlflow.start_run(run_id=self.ml_flow_id):
+        for _ in range(self.best_of_iter):
 
-                (
-                    config,
-                    cost,
-                    dp_info,
-                    mem_bw,
-                    slowest_nodes,
-                ) = self.initialize_optimizer()
+            (
+                config,
+                cost,
+                dp_info,
+                mem_bw,
+                slowest_nodes,
+            ) = self.initialize_optimizer()
 
-                prev_state = config
-                prev_cost = cost
-                solution_dp = dp_info
-                solution_mem = mem_bw
+            prev_state = config
+            prev_cost = cost
+            solution_dp = dp_info
+            solution_mem = mem_bw
 
-                current_temp = self.t_max
-                count = 0
-                print(
-                    f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
-                )
-                while current_temp > self.t_min:
-                    mlflow.log_metric("running_temp", current_temp)
-                    mlflow.log_metric("running_latency", prev_cost)
-                    for i in range(self.iterationPerTemp):
-                        count += 1
-                        (
-                            new_state,
-                            new_mem_bw,
-                            param_count,
-                            param_perc,
-                        ) = self.generate_random_config(
-                            neighbours=True,
-                            prev_state=prev_state,
-                            slowest_nodes=slowest_nodes,
+            current_temp = self.t_max
+            first_restart, second_restart, third_restart = True, True, True
+            count = 0
+            print(
+                f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
+            )
+            while current_temp > self.t_min:
+                # mlflow.log_metric("running_temp", current_temp)
+                # mlflow.log_metric("running_latency", prev_cost)
+                # wandb.log({"running_temp": current_temp, "running_latency": prev_cost})
+                for _ in range(self.iterationPerTemp):
+                    count += 1
+                    (
+                        new_state,
+                        new_mem_bw,
+                        param_count,
+                        param_perc,
+                    ) = self.generate_random_config(
+                        neighbours=True,
+                        prev_state=prev_state,
+                        slowest_nodes=slowest_nodes,
+                    )
+                    new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
+                    if new_cost is not None:
+                        slowest_nodes = new_dp_info["slowestNodes"]
+
+                    if new_cost is None:
+                        continue
+
+                    cost_diff = prev_cost - new_cost
+                    if cost_diff >= 0:
+                        prev_state = copy.deepcopy(new_state)
+                        prev_cost = copy.deepcopy(new_cost)
+                        solution_mem, solution_dp = (
+                            copy.deepcopy(new_mem_bw),
+                            copy.deepcopy(new_dp_info),
                         )
-                        new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
-                        if new_cost is not None:
-                            slowest_nodes = new_dp_info["slowestNodes"]
-
-                        if new_cost is None:
-                            continue
-
-                        cost_diff = prev_cost - new_cost
-                        if cost_diff >= 0:
+                    else:
+                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
                             solution_mem, solution_dp = (
                                 copy.deepcopy(new_mem_bw),
                                 copy.deepcopy(new_dp_info),
                             )
-                        else:
-                            if random.uniform(0, 1) < math.exp(
-                                cost_diff / current_temp
-                            ):
-                                prev_state = copy.deepcopy(new_state)
-                                prev_cost = copy.deepcopy(new_cost)
-                                solution_mem, solution_dp = (
-                                    copy.deepcopy(new_mem_bw),
-                                    copy.deepcopy(new_dp_info),
-                                )
 
-                    current_temp *= self.cooling_rate
-                    print(
-                        f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
-                        end="\r",
-                    )
-
+                current_temp *= self.cooling_rate
+                if current_temp <= 0.01 and first_restart:
+                    current_temp *= 100
+                    first_restart = False
+                elif current_temp <= 0.001 and second_restart:
+                    current_temp *= 1000
+                    second_restart = False
+                elif current_temp <= 0.0001 and third_restart:
+                    current_temp *= 1000
+                    third_restart = False
                 print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}"
+                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
+                    end="\r",
                 )
 
-                if prev_cost < best_latency:
-                    best_latency = prev_cost
-                    best_solution_mem = solution_mem
-                    best_solution_dp = solution_dp
+            print(
+                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}"
+            )
 
-        with mlflow.start_run(run_id=self.ml_flow_id):
-            mlflow.log_metric("Latency-C", best_solution_dp["latency(C)"])
-            mlflow.log_metric("Latency-S", best_solution_dp["latency(S)"])
-            mlflow.log_metric("GOP/s", best_solution_dp["GOP/s"])
-            mlflow.log_metric("vols/s", best_solution_dp["vols/s"])
-            mlflow.log_metric("DSP", best_solution_dp["DSP"])
-            mlflow.log_metric("BRAM", best_solution_dp["BRAM"])
+            if prev_cost < best_latency:
+                best_latency = prev_cost
+                best_solution_mem = solution_mem
+                best_solution_dp = solution_dp
 
-            # with mlflow.start_run(nested=True):
-            mlflow.log_dict(best_solution_dp["config"], "config.json")
+        # with mlflow.start_run(run_id=self.ml_flow_id):
+        #     mlflow.log_metric("Latency-C", best_solution_dp["latency(C)"])
+        #     mlflow.log_metric("Latency-S", best_solution_dp["latency(S)"])
+        #     mlflow.log_metric("GOP/s", best_solution_dp["GOP/s"])
+        #     mlflow.log_metric("vols/s", best_solution_dp["vols/s"])
+        #     mlflow.log_metric("DSP", best_solution_dp["DSP"])
+        #     mlflow.log_metric("BRAM", best_solution_dp["BRAM"])
+
+        #     # with mlflow.start_run(nested=True):
+        #     mlflow.log_dict(best_solution_dp["config"], "config.json")
 
         print(
             f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
@@ -1020,6 +1076,7 @@ class SimulatedAnnealing(BaseLayer):
         neighbours=False,
         prev_state=None,
         slowest_nodes=None,
+        seconds_passed=None,
         param_perc=0.3,
         n_in=1,
         n_out=1,
@@ -1062,14 +1119,16 @@ class SimulatedAnnealing(BaseLayer):
             config = {}
 
         for node in config_nodes:
-            if slowest_nodes is not None and node not in slowest_nodes[:1]:
+            if slowest_nodes is not None and node not in slowest_nodes:
                 continue
 
             op_type = graph.nodes[node]["type"]
             hw = graph.nodes[node]["hw"]
             if isinstance(hw, GAPLayer):
                 channels = hw.channels
-                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
@@ -1086,8 +1145,12 @@ class SimulatedAnnealing(BaseLayer):
                 channels = hw.channels
                 filters = hw.filters
                 kernel_size = hw.kernel_shape
-                coarse_in_feasible = utils.get_factors(channels)
-                coarse_out_feasible = utils.get_factors(filters)
+                coarse_in_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
+                coarse_out_feasible = utils.get_factors(
+                    filters, sec_passed=seconds_passed
+                )
                 fine_feasible = utils.get_fine_feasible(kernel_size)
                 coarse_in_factor = random.choice(coarse_in_feasible) / channels
                 coarse_out_factor = random.choice(coarse_out_feasible) / filters
@@ -1113,7 +1176,9 @@ class SimulatedAnnealing(BaseLayer):
                     }
             elif isinstance(hw, ActivationLayer):
                 channels = hw.channels
-                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
@@ -1128,7 +1193,9 @@ class SimulatedAnnealing(BaseLayer):
                     }
             elif isinstance(hw, ElementWiseLayer):
                 channels = hw.channels_1
-                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
@@ -1143,7 +1210,9 @@ class SimulatedAnnealing(BaseLayer):
                     }
             elif isinstance(hw, BatchNorm3DLayer):
                 channels = hw.channels
-                coarse_inout_feasible = utils.get_factors(channels)
+                coarse_inout_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 if neighbours and node in config.keys():
                     transformations = list(config[node].keys())
@@ -1161,8 +1230,12 @@ class SimulatedAnnealing(BaseLayer):
             elif isinstance(hw, FCLayer):
                 dim_in = hw.dim_in
                 dim_out = hw.dim_out
-                coarse_in_feasible = utils.get_factors(dim_in)
-                coarse_out_feasible = utils.get_factors(dim_out)
+                coarse_in_feasible = utils.get_factors(
+                    dim_in, sec_passed=seconds_passed
+                )
+                coarse_out_feasible = utils.get_factors(
+                    dim_out, sec_passed=seconds_passed
+                )
                 coarse_in_factor = random.choice(coarse_in_feasible) / dim_in
                 coarse_out_factor = random.choice(coarse_out_feasible) / dim_out
                 if neighbours and node in config.keys():
@@ -1482,9 +1555,13 @@ class SimulatedAnnealing(BaseLayer):
                     "branching": False,
                 }
 
-            bb_setup[bb]["hw"] = Convolutional3DLayer(bb_descriptor)
+            bb_setup[bb]["hw"] = Convolutional3DLayer(
+                self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+            )
             dsp_util, bram_util = 100, 100
-            while dsp_util > (90 - total_dsp) or bram_util > (90 - total_bram):
+            while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
+                self.max_BRAM_util - total_bram
+            ):
                 coarse_in = (
                     np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
                     / channels_in_dim
@@ -1534,6 +1611,7 @@ class SimulatedAnnealing(BaseLayer):
 
     def get_cost_e2e(self, bblocks_config: dict) -> float:
         cost = 0.0
+        avg_BW = 0.0
         scheduling = {}
         for node in self.graph.nodes:
             bb_type = self.graph.nodes[node]["hw_type"]
@@ -1562,89 +1640,137 @@ class SimulatedAnnealing(BaseLayer):
                 / bblocks_config[bb_type]["HINT_shape_in"][4]
             )
 
+            # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
             r = bblocks_config[bb_type]["hw"].get_design_point(
                 f_fine=1,
                 f_coarseIn=bblocks_config[bb_type]["coarse_in"],
                 f_coarseOut=bblocks_config[bb_type]["coarse_out"],
-                mem_bw_in=100000,
-                mem_bw_out=100000,
+                mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
             )
+            # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
+            bblocks_config[bb_type]["MemBw_util"] = r["memBwUtil"]
+
             latency = r["latency(S)"] * math.ceil(in_calls * out_calls * shape_calls)
+            avg_BW += r["memBwUtil"]
             assert (
                 math.ceil(in_calls * out_calls * shape_calls) > 0
             ), "Zero calls aborting..."
             scheduling[node] = {
                 "Block Type": bb_type,
-                "Times Called": math.ceil(in_calls * out_calls * shape_calls),
+                "Times Called (channels)": in_calls,
+                "Times Called (filters)": out_calls,
+                "Times Called (tiles)": math.ceil(shape_calls),
                 "Latency": latency,
                 "Base Latency": r["latency(S)"],
             }
             cost += latency
 
+        avg_BW = avg_BW / len(self.graph.nodes)
         final_DSP = 0
         final_BRAM = 0
         for bb in bblocks_config:
             final_DSP += bblocks_config[bb]["DSP_util"]
             final_BRAM += bblocks_config[bb]["BRAM_util"]
-        return cost, scheduling, final_DSP, final_BRAM
+        return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
     def run_optimizer_latency(self):
 
         bblocks = self.generate_building_blocks()
 
-        with mlflow.start_run(run_id=self.ml_flow_id):
-            mlflow.log_param("config_generation", "mape_c70_w100")
+        # with mlflow.start_run(run_id=self.ml_flow_id):
+        # mlflow.log_param("config_generation", "mape_c70_w100")
+        # wandb.config.update({"config_generation": "mape_c70_w100"})
 
-            bblocks_config = self.generate_building_blocks_config(bblocks)
-            cost, scheduling, dsp_util, bram_util = self.get_cost_e2e(bblocks_config)
+        bblocks_config = self.generate_building_blocks_config(bblocks)
+        cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
+            bblocks_config
+        )
 
+        if cost is None:
+            for _ in range(100):
+                bblocks_config = self.generate_building_blocks_config(bblocks)
+                cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
+                    bblocks_config
+                )
+                if cost is not None:
+                    break
             if cost is None:
-                for _ in range(100):
-                    bblocks_config = self.generate_building_blocks_config(bblocks)
-                    cost, scheduling, dsp_util, bram_util = self.get_cost_e2e(
-                        bblocks_config
-                    )
-                    if cost is not None:
-                        break
-                if cost is None:
-                    print("No configuration found in 100 iterations. Exiting...")
-                    return None
+                print("No configuration found in 100 iterations. Exiting...")
+                return None
 
-            prev_state = bblocks_config
-            prev_scheduling = scheduling
-            prev_cost = cost
+        prev_state = bblocks_config
+        prev_scheduling = scheduling
+        prev_cost = cost
+        prev_dsp = dsp_util
+        prev_bram = bram_util
+        prev_bw = bw_util
 
-            current_temp = self.t_max
-            print(f"Temperature  |  Latency    ")
-            while current_temp > self.t_min:
-                mlflow.log_metric("running_temp", current_temp)
-                mlflow.log_metric("running_latency", prev_cost)
-                for i in range(self.iterationPerTemp):
-                    new_state = self.generate_building_blocks_config(
-                        bblocks, previous_config=prev_state
-                    )
-                    new_cost, new_scheduling, _, _ = self.get_cost_e2e(new_state)
+        current_temp = self.t_max
+        print(f"Temperature  |  Latency    ")
+        while current_temp > self.t_min:
+            log_dict = {}
+            for bb in prev_state:
+                log_dict[bb + "_fm"] = prev_state[bb]["HINT_shape_in"][-1]
+                log_dict[bb + "_interleav"] = prev_state[bb]["interleaving_in"]
+            log_dict["temperature"] = current_temp
+            log_dict["latency"] = prev_cost
+            log_dict["dsp_util"] = prev_dsp
+            log_dict["bram_util"] = prev_bram
+            log_dict["mem_bw_util"] = prev_bw
+            if not self.wandb_config == None:
+                wandb.log(log_dict)
+            # mlflow.log_metric("running_temp", current_temp)
+            # mlflow.log_metric("running_latency", prev_cost)
+            for i in range(self.iterationPerTemp):
+                new_state = self.generate_building_blocks_config(
+                    bblocks, previous_config=prev_state
+                )
+                (
+                    new_cost,
+                    new_scheduling,
+                    dsp_util,
+                    bram_util,
+                    bw_util,
+                ) = self.get_cost_e2e(new_state)
 
-                    if new_cost is None:
-                        continue
+                if new_cost is None:
+                    continue
 
-                    cost_diff = prev_cost - new_cost
-                    if cost_diff >= 0:
+                # mlflow.log_metric("latency", new_cost)
+                # mlflow.log_metric("dsp_util", dsp_util)
+                # mlflow.log_metric("bram_util", bram_util)
+                # mlflow.log_metric("mem_bw_util", bw_util)
+
+                cost_diff = prev_cost - new_cost
+                if cost_diff >= 0:
+                    prev_state = copy.deepcopy(new_state)
+                    prev_cost = copy.deepcopy(new_cost)
+                    prev_dsp = copy.deepcopy(dsp_util)
+                    prev_bram = copy.deepcopy(bram_util)
+                    prev_bw = copy.deepcopy(bw_util)
+                    prev_scheduling = copy.deepcopy(new_scheduling)
+                else:
+                    if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
                         prev_state = copy.deepcopy(new_state)
                         prev_cost = copy.deepcopy(new_cost)
+                        prev_dsp = copy.deepcopy(dsp_util)
+                        prev_bram = copy.deepcopy(bram_util)
+                        prev_bw = copy.deepcopy(bw_util)
                         prev_scheduling = copy.deepcopy(new_scheduling)
-                    else:
-                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
-                            prev_state = copy.deepcopy(new_state)
-                            prev_cost = copy.deepcopy(new_cost)
-                            prev_scheduling = copy.deepcopy(new_scheduling)
 
-                current_temp *= self.cooling_rate
-                print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r",
-                )
+            current_temp *= self.cooling_rate
+            print(
+                f"{current_temp:.5e}\t{prev_cost:.5e}",
+                end="\r",
+            )
 
-            print(f"{current_temp:.5e}\t{prev_cost:.5e}")
-            print(f"Optimization finished. Block setup: {prev_state}")
-            print(f"Final per layer configuration: {prev_scheduling}")
-            mlflow.log_dict(prev_scheduling, "scheduling.json")
+        print(f"{current_temp:.5e}\t{prev_cost:.5e}")
+        print(f"Optimization finished. Block setup: {prev_state}")
+        print(f"Final per layer configuration: {prev_scheduling}")
+        if not self.wandb_config == None:
+            artifact = wandb.Artifact("scheduling", type="json")
+            with artifact.new_file("scheduling.json") as f:
+                json.dump(prev_scheduling, f)
+            wandb.log_artifact(artifact)
+        # mlflow.log_dict(prev_scheduling, "scheduling.json")

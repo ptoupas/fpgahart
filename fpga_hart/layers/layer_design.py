@@ -6,6 +6,7 @@ from typing import Tuple
 
 import networkx as nx
 import numpy as np
+import wandb
 from fpga_hart import _logger
 
 from ..layers.activation import ActivationLayer
@@ -25,26 +26,45 @@ def multithreaded_modeling(operation, input, pool):
 
 
 def layer_design_points(
-    name: str, description: dict, model_file: str, singlethreaded: bool
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    singlethreaded: bool,
 ) -> None:
     if description["operation"] == "Conv":
-        conv_design_points(name, description, model_file, singlethreaded)
+        conv_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif description["operation"] == "BatchNormalization":
-        batchnorm_design_points(name, description, model_file, singlethreaded)
+        batchnorm_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif description["operation"] == "GlobalAveragePool":
-        gap_design_points(name, description, model_file, singlethreaded)
+        gap_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif (
         description["operation"] == "Relu"
         or description["operation"] == "Sigmoid"
         or description["operation"] == "Swish"
     ):
-        activation_design_points(name, description, model_file, singlethreaded)
+        activation_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif description["operation"] == "SqueezeExcitation":
-        se_design_points(name, description, model_file, singlethreaded)
+        se_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif description["operation"] == "Add" or description["operation"] == "Mul":
-        elemwise_design_points(name, description, model_file, singlethreaded)
+        elemwise_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
-        fc_design_points(name, description, model_file, singlethreaded)
+        fc_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
     else:
         assert False, "{} operation in layer {} is not supported".format(
             description["operation"], name
@@ -64,8 +84,10 @@ def contains_list(part, whole):
         return False
 
 
-def conv_design_points(name, description, model_file, singlethreaded):
-    conv = Convolutional3DLayer(description)
+def conv_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    conv = Convolutional3DLayer(max_DSP_util, max_BRAM_util, description)
 
     if conv.depthwise:
         convtype = "DepthWise"
@@ -85,7 +107,7 @@ def conv_design_points(name, description, model_file, singlethreaded):
 
     # coarsein = [2 / np.int64(conv.channels)]
     # coarseout = [2 / np.int64(conv.filters)]
-    fine = [fine[-1]]
+    # fine = [fine[-1]]
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000, 10000)]
@@ -134,6 +156,13 @@ def conv_design_points(name, description, model_file, singlethreaded):
             processes_pool.close()
             for r in results:
                 if r["config"]:
+                    # wandb.log(
+                    #     {
+                    #         "latency": r["latency(S)"],
+                    #         "dsp_util": r["DSP"],
+                    #         "bram_util": r["BRAM"],
+                    #     }
+                    # )
                     throughput_gops.append(r["GOP/s"])
                     throughput_vols.append(r["vols/s"])
                     latency.append(r["latency(C)"])
@@ -169,12 +198,12 @@ def conv_design_points(name, description, model_file, singlethreaded):
                     # )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 92.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 92.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -225,12 +254,12 @@ def conv_design_points(name, description, model_file, singlethreaded):
                     # )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 92.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 92.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -310,8 +339,10 @@ def conv_design_points(name, description, model_file, singlethreaded):
     print("*" * 60)
 
 
-def batchnorm_design_points(name, description, model_file, singlethreaded):
-    bn = BatchNorm3DLayer(description)
+def batchnorm_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    bn = BatchNorm3DLayer(max_DSP_util, max_BRAM_util, description)
 
     coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
 
@@ -387,12 +418,12 @@ def batchnorm_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -435,12 +466,12 @@ def batchnorm_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -483,8 +514,10 @@ def batchnorm_design_points(name, description, model_file, singlethreaded):
     print("*" * 40)
 
 
-def gap_design_points(name, description, model_file, singlethreaded):
-    gap = GAPLayer(description)
+def gap_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    gap = GAPLayer(max_DSP_util, max_BRAM_util, description)
 
     coarse_inout = utils.get_factors(gap.channels) / np.int64(gap.channels)
 
@@ -560,12 +593,12 @@ def gap_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -608,12 +641,12 @@ def gap_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -656,8 +689,10 @@ def gap_design_points(name, description, model_file, singlethreaded):
     print("*" * 40)
 
 
-def activation_design_points(name, description, model_file, singlethreaded):
-    activ = ActivationLayer(description)
+def activation_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    activ = ActivationLayer(max_DSP_util, max_BRAM_util, description)
 
     coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
 
@@ -733,12 +768,12 @@ def activation_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -781,12 +816,12 @@ def activation_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -829,8 +864,10 @@ def activation_design_points(name, description, model_file, singlethreaded):
     print("*" * 40)
 
 
-def se_design_points(name, description, model_file, singlethreaded):
-    se = SqueezeExcitationLayer(description)
+def se_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    se = SqueezeExcitationLayer(max_DSP_util, max_BRAM_util, description)
 
     # layers_in_shape = []
     # layers_out_shape = []
@@ -950,12 +987,12 @@ def se_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -1012,12 +1049,12 @@ def se_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -1061,8 +1098,10 @@ def se_design_points(name, description, model_file, singlethreaded):
     print("*" * 40)
 
 
-def elemwise_design_points(name, description, model_file, singlethreaded):
-    elem = ElementWiseLayer(description)
+def elemwise_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    elem = ElementWiseLayer(max_DSP_util, max_BRAM_util, description)
 
     coarse_inout = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
 
@@ -1139,12 +1178,12 @@ def elemwise_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -1188,12 +1227,12 @@ def elemwise_design_points(name, description, model_file, singlethreaded):
                     )
 
                     if r["latency(C)"] < min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         min_latency = r["latency(C)"]
                         best = r
                     elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < 90.0 and r["BRAM"] < 90.0
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
                     ):
                         if r["DSP"] < best["DSP"]:
                             min_latency = r["latency(C)"]
@@ -1239,8 +1278,10 @@ def elemwise_design_points(name, description, model_file, singlethreaded):
     print("*" * 40)
 
 
-def fc_design_points(name, description, model_file, singlethreaded):
-    fc = FCLayer(description)
+def fc_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    fc = FCLayer(max_DSP_util, max_BRAM_util, description)
 
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=fc)
