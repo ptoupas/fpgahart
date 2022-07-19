@@ -12,6 +12,7 @@ import pandas as pd
 import seaborn as sns
 from fpga_hart import _logger
 from matplotlib import pyplot as plt
+from regex import F
 from scipy.spatial.distance import cdist
 from sklearn import metrics
 from sklearn.cluster import KMeans
@@ -28,7 +29,7 @@ sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
 
-def get_factors(n, max_parallel=None) -> list:
+def get_factors(n, max_parallel=None, sec_passed=None) -> list:
     """
     Parameters
     ----------
@@ -40,14 +41,23 @@ def get_factors(n, max_parallel=None) -> list:
         list of integers that are factors of `n`
     """
     if max_parallel is None:
-        return list(
+        result = list(
             set(
                 reduce(
                     list.__add__,
-                    ([i, n // i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0),
+                    ([i, n // i] for i in range(1, int(n**0.5) + 1) if n % i == 0),
                 )
             )
         )
+        if not sec_passed == None:
+            # Apply cosine annealing to keep a percentage of the original number of results based on the time passed (we assume the max waiting time is 90 seconds)
+            keep_perc = 0.01 + 1 / 2 * (1.0 - 0.01) * (
+                1 + math.cos((sec_passed / 90.0) * math.pi)
+            )
+            threshold = max(int(max(result) * keep_perc), min(result))
+            return [x for x in result if x <= threshold]
+        else:
+            return result
     else:
         factors = np.arange(n) + 1
         return (factors[factors <= max_parallel]).tolist()
@@ -796,4 +806,3 @@ def get_minmax_width(graph: nx.DiGraph, bb_type: str) -> int:
             max_width = max(max_width, graph.nodes[n]["hw"].input_shape[4])
             min_width = min(min_width, graph.nodes[n]["hw"].input_shape[4])
     return min_width, max_width
-
