@@ -17,8 +17,8 @@ DEBUG = False
 
 
 class SqueezeExcitationLayer(BaseLayer):
-    def __init__(self, description):
-        super().__init__()
+    def __init__(self, max_DSP_util, max_BRAM_util, description):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 
         self.branching = description["branching"]
         if self.branching:
@@ -29,13 +29,19 @@ class SqueezeExcitationLayer(BaseLayer):
         self.sequencial = {}
         for n_se, l_se in description["primitive_ops"].items():
             if l_se["operation"] == "GlobalAveragePool":
-                self.sequencial[n_se] = GAPLayer(l_se)
+                self.sequencial[n_se] = GAPLayer(max_DSP_util, max_BRAM_util, l_se)
             elif l_se["operation"] == "Conv":
-                self.sequencial[n_se] = Convolutional3DLayer(l_se)
+                self.sequencial[n_se] = Convolutional3DLayer(
+                    max_DSP_util, max_BRAM_util, l_se
+                )
             elif l_se["operation"] == "Relu" or l_se["operation"] == "Sigmoid":
-                self.sequencial[n_se] = ActivationLayer(l_se)
+                self.sequencial[n_se] = ActivationLayer(
+                    max_DSP_util, max_BRAM_util, l_se
+                )
             elif l_se["operation"] == "Mul":
-                self.sequencial[n_se] = ElementWiseLayer(l_se)
+                self.sequencial[n_se] = ElementWiseLayer(
+                    max_DSP_util, max_BRAM_util, l_se
+                )
         self.num_layers = len(self.sequencial) + 2
 
     def update_layer(self):
@@ -295,7 +301,7 @@ class SqueezeExcitationLayer(BaseLayer):
             thr_in, thr_out
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90.0 and bram_util < 95.0:
+        if dsps_util < self.max_DSP_util and bram_util < self.max_BRAM_util:
             # TODO: Add 2nd input
             self.full_rate_in_1 = gamma_matrix_balanced[0, 0]
             self.full_rate_in_2 = gamma_matrix_balanced[1, 1]

@@ -13,8 +13,8 @@ DEBUG = False
 
 
 class BatchNorm3DLayer(BaseLayer):
-    def __init__(self, description):
-        super().__init__()
+    def __init__(self, max_DSP_util, max_BRAM_util, description):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 
         self.input_shape = description["shape_in"][0]
         self.depth_in = self.input_shape[2]
@@ -132,7 +132,7 @@ class BatchNorm3DLayer(BaseLayer):
             thr_in, thr_out
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < 90.0 and bram_util < 95.0:
+        if dsps_util < self.max_DSP_util and bram_util < self.max_BRAM_util:
             self.full_rate_in = [gamma_matrix_balanced[0, 0]]
             self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls

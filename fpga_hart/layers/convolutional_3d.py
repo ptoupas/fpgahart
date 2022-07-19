@@ -14,8 +14,8 @@ np.seterr(divide="ignore", invalid="ignore")
 
 
 class Convolutional3DLayer(BaseLayer):
-    def __init__(self, description):
-        super().__init__()
+    def __init__(self, max_DSP_util, max_BRAM_util, description):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
         # _logger.setLevel(level=logging.DEBUG)
 
         self.input_shape = description["shape_in"][0]
@@ -87,8 +87,9 @@ class Convolutional3DLayer(BaseLayer):
         self.memory = 0
         self.memoryKB = 0
         self.depth = 0
-        self.mem_bd_in = []
-        self.mem_bd_out = []
+        self.mem_bw_in = []
+        self.mem_bw_out = []
+        self.total_bw_util = 0
         self.config = []
         self.dsps_util = 0
         self.dsp_raw = 0
@@ -144,8 +145,9 @@ class Convolutional3DLayer(BaseLayer):
         dp_info["memKBs"] = self.memoryKB
         dp_info["dataSizeIn"] = (self.data_size_in * self.word_bytes) / 1e6
         dp_info["dataSizeOut"] = (self.data_size_out * self.word_bytes) / 1e6
-        dp_info["memBoundedIn"] = self.mem_bd_in
-        dp_info["memBoundedOut"] = self.mem_bd_out
+        dp_info["memBoundedIn"] = self.mem_bw_in
+        dp_info["memBoundedOut"] = self.mem_bw_out
+        dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
 
         return dp_info
@@ -156,7 +158,10 @@ class Convolutional3DLayer(BaseLayer):
         return self.max_streams_in, self.max_streams_out
 
     def get_resource_util(
-        self, f_fine: np.float64, f_coarseIn: np.float64, f_coarseOut: np.float64,
+        self,
+        f_fine: np.float64,
+        f_coarseIn: np.float64,
+        f_coarseOut: np.float64,
     ) -> Tuple[float, float]:
 
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
@@ -422,13 +427,22 @@ class Convolutional3DLayer(BaseLayer):
 
         gamma_matrix = rate_matrix_balanced * stream_matrix * data_matrix
         _logger.debug("Γ:\n{}".format(gamma_matrix))
-        mem_bounded_in = mem_bounded_out = False
-        # gamma_matrix_balanced, mem_bounded_in, mem_bounded_out = self.balance_matrix(
-        #     gamma_matrix.copy()
-        # )
-        # _logger.debug(
-        #     "Γ Balanced:\n{}".format(gamma_matrix_balanced)
-        # )
+        (
+            gamma_matrix,
+            mem_bounded_in,
+            mem_bounded_out,
+        ) = self.balance_matrix(gamma_matrix.copy())
+        _logger.debug("Γ Balanced:\n{}".format(gamma_matrix))
+
+        layer_mem_bw_in = (
+            abs(gamma_matrix[0, 0]) * self.cycles_per_sec * self.word_length
+        )
+        layer_mem_bw_out = (
+            abs(gamma_matrix[-1, -1]) * self.cycles_per_sec * self.word_length
+        )
+        total_bw_util = (
+            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+        ) * 100
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix)
@@ -502,15 +516,16 @@ class Convolutional3DLayer(BaseLayer):
         _logger.debug(
             f"Fine: {f_fine:.3f} ({f_fine*np.prod(np.array(self.kernel_shape))}), CoarseIn: {f_coarseIn:.3f} ({int(f_coarseIn*self.channels)}), CoarseOut: {f_coarseOut if not self.depthwise else f_coarseIn:.3f} ({int(f_coarseOut*self.filters) if not self.depthwise else int(f_coarseIn*self.channels)}), Shape in: {self.input_shape}, Shape out: {self.output_shape}, Kernel: {self.kernel_shape}"
         )
-        if dsps_util < 90.0 and bram_util < 95.0:
+        if dsps_util < self.max_DSP_util and bram_util < self.max_BRAM_util:
 
             self.full_rate_in = [gamma_matrix[0, 0]]
             self.full_rate_out = [abs(gamma_matrix[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
             self.max_parallel_adds = max_parallel_adds
             self.depth = depth
-            self.mem_bd_in = [mem_bounded_in]
-            self.mem_bd_out = [mem_bounded_out]
+            self.mem_bw_in = [mem_bounded_in]
+            self.mem_bw_out = [mem_bounded_out]
+            self.total_bw_util = total_bw_util
 
             config = [
                 f_fine,
@@ -663,6 +678,8 @@ class Convolutional3DLayer(BaseLayer):
             and np.min(rate_matrix[np.nonzero(rate_matrix)]) > 0
         ), f"Rate matrix issue {rate_matrix}"
         rate_matrix_balanced, _, _ = self.balance_matrix(rate_matrix.copy())
+        rate_matrix_balanced[0, 0] = 1
+        rate_matrix_balanced[-1, -1] = 1
         _logger.debug("R:\n{}".format(rate_matrix))
         _logger.debug("R (balanced):\n{}".format(rate_matrix_balanced))
         return rate_matrix_balanced, rate_matrix
