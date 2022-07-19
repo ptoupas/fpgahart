@@ -4,6 +4,7 @@ generated_files/
 generated_data/
 fpga_hart.egg-info
 mlruns/
+wandb/
 *.py[cod]
 *$py.class
 **/*.pyc
