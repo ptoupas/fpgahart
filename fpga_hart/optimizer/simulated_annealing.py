@@ -637,6 +637,8 @@ class SimulatedAnnealing(BaseLayer):
                 mem_bw,
                 slowest_nodes,
             ) = self.initialize_optimizer()
+            if config == None:
+                return None, None, None
 
             prev_state = config
             prev_cost = cost

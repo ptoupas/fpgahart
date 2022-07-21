@@ -46,23 +46,22 @@ class PartitionParser(PartitionDescriptor):
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
 
-        if not self.wandb_config == None:
-            columns = [
-                "Partition Name",
-                "Latency(C)",
-                "Latency(S)",
-                "GOP/s",
-                "vols/s",
-                "GOPs",
-                "DSP %",
-                "DSPs",
-                "BRAM %",
-                "BRAMs",
-                "depth",
-                "workload size in (MB)",
-                "workload size out (MB)",
-            ]
-            self.tbl = wandb.Table(columns=columns)
+        columns = [
+            "Partition Name",
+            "latency(C)",
+            "latency(S)",
+            "GOP/s",
+            "vols/s",
+            "GOPs",
+            "DSP %",
+            "DSPs",
+            "BRAM %",
+            "BRAMs",
+            "depth",
+            "workload size in (MB)",
+            "workload size out (MB)",
+        ]
+        self.df = pd.DataFrame(columns=columns)
 
         self.model_avg_metrics = {}
 
@@ -360,7 +359,10 @@ class PartitionParser(PartitionDescriptor):
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
-            raise Exception("Optimization failed")
+            print(f"Optimization failed for layer {name}")
+            return
+            # raise Exception("Optimization failed")
+
         num_graphs = len(solution_mem)
 
         partition_results = solution_dp[0]
@@ -373,39 +375,26 @@ class PartitionParser(PartitionDescriptor):
         log_metrics["DSP %"] = partition_results["DSP"]
         log_metrics["BRAM %"] = partition_results["BRAM"]
         log_metrics["depth"] = partition_results["depth"]
-        if not self.model_avg_metrics:
-            self.model_avg_metrics = log_metrics
-            self.model_avg_metrics["latency(C) Sum"] = partition_results["latency(C)"]
-            self.model_avg_metrics["latency(S) Sum"] = partition_results["latency(S)"]
-            self.model_avg_metrics["GOPs Sum"] = partition_results["GOPs"]
-            self.model_avg_metrics["depth Sum"] = partition_results["depth"]
-        else:
-            for key in log_metrics:
-                self.model_avg_metrics[key] = (
-                    self.model_avg_metrics[key] + log_metrics[key]
-                ) / 2
-            self.model_avg_metrics["latency(C) Sum"] += partition_results["latency(C)"]
-            self.model_avg_metrics["latency(S) Sum"] += partition_results["latency(S)"]
-            self.model_avg_metrics["GOPs Sum"] += partition_results["GOPs"]
-            self.model_avg_metrics["depth Sum"] += partition_results["depth"]
+
+        self.model_avg_metrics = log_metrics
+
+        self.df.loc[len(self.df.index)] = [
+            name,
+            partition_results["latency(C)"],
+            partition_results["latency(S)"],
+            partition_results["GOP/s"],
+            partition_results["vols/s"],
+            partition_results["GOPs"],
+            partition_results["DSP"],
+            partition_results["DSP_RAW"],
+            partition_results["BRAM"],
+            partition_results["BRAM_RAW"],
+            partition_results["depth"],
+            partition_results["dataSizeIn"],
+            partition_results["dataSizeOut"],
+        ]
 
         if not self.wandb_config == None:
-            self.tbl.add_data(
-                name,
-                partition_results["latency(C)"],
-                partition_results["latency(S)"],
-                partition_results["GOP/s"],
-                partition_results["vols/s"],
-                partition_results["GOPs"],
-                partition_results["DSP"],
-                partition_results["DSP_RAW"],
-                partition_results["BRAM"],
-                partition_results["BRAM_RAW"],
-                partition_results["depth"],
-                partition_results["dataSizeIn"],
-                partition_results["dataSizeOut"],
-            )
-
             artifact = wandb.Artifact("partitions", type="json")
             with artifact.new_file("partition_config.json") as f:
                 json.dump(partition_results["config"], f)
@@ -614,31 +603,80 @@ class PartitionParser(PartitionDescriptor):
 
         start = time.time()
         for i, partition in enumerate(self.partitions):
-            # if i == 19:  # i == 2 or i == 3:
             part_name = "part_{}".format(i)
             self.model_partition(partition, name=part_name)
 
-        self.model_avg_metrics["latency(S) + reconfiguration"] = self.model_avg_metrics[
-            "latency(C) Sum"
-        ] / (self.clock_frequency * 1e6) + (
-            self.reconfiguration_time * (len(self.partitions) - 1)
-        )
-        self.model_avg_metrics["Througput (GOPs/s)"] = (
-            self.model_avg_metrics["GOPs Sum"]
-            / self.model_avg_metrics["latency(S) + reconfiguration"]
-        )
-        self.model_avg_metrics["Througput (Volumes/s)"] = (
-            1 / self.model_avg_metrics["latency(S) + reconfiguration"]
-        )
-        self.model_avg_metrics["GOPs/s/DSP"] = (
-            self.model_avg_metrics["Througput (GOPs/s)"] / self.total_dsp
-        )
-        self.model_avg_metrics["GOPs/s/DSP/cycle"] = (
-            self.model_avg_metrics["GOPs/s/DSP"] / self.clock_frequency
-        ) * 1e3
+        for key in self.model_avg_metrics:
+            self.model_avg_metrics[key] = self.df.mean()[key].item()
+        self.model_avg_metrics["latency(C) Sum"] = self.df.sum()["latency(C)"]
+        self.model_avg_metrics["latency(S) Sum"] = self.df.sum()["latency(S)"]
+        self.model_avg_metrics["GOPs Sum"] = self.df.sum()["GOPs"]
+        self.model_avg_metrics["depth Sum"] = self.df.sum()["depth"]
+
+        self.model_avg_metrics["latency(S) + reconfiguration"] = {
+            "Batch 1": (
+                (
+                    self.model_avg_metrics["latency(C) Sum"]
+                    - self.model_avg_metrics["depth Sum"]
+                )
+                * 1
+                + self.model_avg_metrics["depth Sum"]
+            )
+            / (self.clock_frequency * 1e6)
+            + (self.reconfiguration_time * (len(self.partitions) - 1)),
+            "Batch 100": (
+                (
+                    self.model_avg_metrics["latency(C) Sum"]
+                    - self.model_avg_metrics["depth Sum"]
+                )
+                * 100
+                + self.model_avg_metrics["depth Sum"]
+            )
+            / (self.clock_frequency * 1e6)
+            + (self.reconfiguration_time * (len(self.partitions) - 1)),
+        }
+
+        self.model_avg_metrics["Througput (GOPs/s)"] = {
+            "Batch 1": (
+                (self.model_avg_metrics["GOPs Sum"] * 1)
+                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 1"]
+            ),
+            "Batch 100": (
+                (self.model_avg_metrics["GOPs Sum"] * 100)
+                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 100"]
+            ),
+        }
+        self.model_avg_metrics["Througput (Volumes/s)"] = {
+            "Batch 1": (
+                1 / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 1"]
+            ),
+            "Batch 100": (
+                100
+                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 100"]
+            ),
+        }
+        self.model_avg_metrics["GOPs/s/DSP"] = {
+            "Batch 1": (
+                self.model_avg_metrics["Througput (GOPs/s)"]["Batch 1"] / self.total_dsp
+            ),
+            "Batch 100": (
+                self.model_avg_metrics["Througput (GOPs/s)"]["Batch 100"]
+                / self.total_dsp
+            ),
+        }
+        self.model_avg_metrics["GOPs/s/DSP/cycle"] = {
+            "Batch 1": (
+                self.model_avg_metrics["GOPs/s/DSP"]["Batch 1"] / self.clock_frequency
+            )
+            * 1e3,
+            "Batch 100": (
+                self.model_avg_metrics["GOPs/s/DSP"]["Batch 100"] / self.clock_frequency
+            )
+            * 1e3,
+        }
 
         wandb.log(self.model_avg_metrics)
-        wandb.log({"Partition Results": self.tbl})
+        wandb.log({"Partition Results": wandb.Table(dataframe=self.df)})
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 
