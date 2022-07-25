@@ -86,14 +86,16 @@ if __name__ == "__main__":
             wandb_config=config,
         )
 
-        partition_parser.parse()
-        # partition_parser.model_custom_partition()
-        # partition_parser.find_common_layers(groupping=3)
-        # partition_parser.latency_driven_design(
-        #     run_name="latency_driven_modeling",
-        #     plot_summaries=False,
-        #     wandb_config=config,
-        # )
+        if args.target == "throughput":
+            partition_parser.parse()
+            # partition_parser.model_custom_partition()
+        elif args.target == "latency":
+            # partition_parser.find_common_layers(groupping=3)
+            partition_parser.latency_driven_design(
+                run_name="latency_driven_modeling",
+                plot_summaries=False,
+                wandb_config=config,
+            )
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,
@@ -103,8 +105,11 @@ if __name__ == "__main__":
             wandb_config=config,
         )
 
-        # layer_parser.parse()
-        layer_parser.model_custom_layer()
+        if args.target == "throughput":
+            # layer_parser.parse()
+            layer_parser.model_custom_layer()
+        elif args.target == "latency":
+            pass
 
     else:
         raise ValueError("Invalid type of processing")
