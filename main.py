@@ -52,6 +52,11 @@ def parse_args():
         action="store_true",
         help="whether to use historical data as approximation for GAP layers or not",
     )
+    parser.add_argument(
+        "--disable_wandb",
+        action="store_false",
+        help="whether to disable wandb or not",
+    )
 
     return parser.parse_args()
 
@@ -66,9 +71,10 @@ if __name__ == "__main__":
 
     project_name = f"fpga-hart-{args.model_name}-{args.type}-{args.target}"
 
-    wandb.init(config=config_dictionary, project=project_name)
-    config = wandb.config
-    # config = None
+    config = None
+    if args.disable_wandb:
+        wandb.init(config=config_dictionary, project=project_name)
+        config = wandb.config
 
     if args.type == "partition":
         partition_parser = PartitionParser(

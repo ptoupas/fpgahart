@@ -39,6 +39,7 @@ class BaseLayer:
         self.bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
         self.dsp = int(config.get("FPGA Specifications", "dsp"))
         self.mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
+        self.fpga_device = config.get("FPGA Specifications", "fpga_device")
 
     def bram_stream_resource_model(self, depth, width):
         assert width > 0, "width must be greater than zero"

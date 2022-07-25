@@ -359,9 +359,7 @@ class PartitionParser(PartitionDescriptor):
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
         if mwpc is None or solution_mem is None or solution_dp is None:
-            print(f"Optimization failed for layer {name}")
-            return
-            # raise Exception("Optimization failed")
+            raise Exception(f"Optimization failed for layer {name}")
 
         num_graphs = len(solution_mem)
 
