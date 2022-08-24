@@ -1544,6 +1544,7 @@ class SimulatedAnnealing(BaseLayer):
                 )
 
             dsp_util, bram_util = 100, 100
+            stop_counter = 0
             while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
                 self.max_BRAM_util - total_bram
             ):
@@ -1571,6 +1572,9 @@ class SimulatedAnnealing(BaseLayer):
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarse_inout=coarse_inout
                     )
+                stop_counter += 1
+                if stop_counter > 50:
+                    return None
 
             if bb in ["Conv3DDw", "Conv3DPw"]:
                 bb_setup[bb]["HINT_shape_in"] = [
@@ -1623,6 +1627,8 @@ class SimulatedAnnealing(BaseLayer):
         return bb_setup
 
     def get_cost_e2e(self, bblocks_config: dict) -> float:
+        if bblocks_config is None:
+            return None, None, None, None, None
         cost = 0.0
         avg_BW = 0.0
         scheduling = {}
@@ -1762,7 +1768,7 @@ class SimulatedAnnealing(BaseLayer):
 
             for i in range(self.iterationPerTemp):
                 new_state = self.generate_building_blocks_config(
-                    bblocks, previous_config=prev_state
+                    bblocks, previous_config=None
                 )
                 (
                     new_cost,
