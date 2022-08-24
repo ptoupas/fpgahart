@@ -1439,7 +1439,7 @@ class SimulatedAnnealing(BaseLayer):
         """
 
         # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
-        bblocks = ["Conv3DDw", "Conv3DPw", "Activation"]
+        bblocks = ["Conv3DDw", "Conv3DPw", "Activation", "GlobalAveragePool"]
         assert self.validate_building_blocks_setup(
             bblocks
         ), "Invalid building blocks setup. Cannot find a valid scheduling."
@@ -1533,6 +1533,20 @@ class SimulatedAnnealing(BaseLayer):
                         width_in_dim,
                     ],
                 }
+            elif bb == "GlobalAveragePool":
+                bb_descriptor = {
+                    "operation": "GlobalAveragePool",
+                    "shape_in": [
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+                    ],
+                    "shape_out": [
+                        1,
+                        channels_in_dim,
+                        1,
+                        1,
+                        1,
+                    ],
+                }
 
             if bb in ["Conv3DDw", "Conv3DPw"]:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
@@ -1540,6 +1554,10 @@ class SimulatedAnnealing(BaseLayer):
                 )
             elif bb == "Activation":
                 bb_setup[bb]["hw"] = ActivationLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+            elif bb == "GlobalAveragePool":
+                bb_setup[bb]["hw"] = GAPLayer(
                     self.max_DSP_util, self.max_BRAM_util, bb_descriptor
                 )
 
@@ -1564,7 +1582,7 @@ class SimulatedAnnealing(BaseLayer):
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
-                elif bb == "Activation":
+                elif bb in ["Activation", "GlobalAveragePool"]:
                     coarse_inout = (
                         np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
                         / channels_in_dim
@@ -1603,7 +1621,7 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
                     channels_out_dim * coarse_out
                 )
-            elif bb == "Activation":
+            elif bb in ["Activation", "GlobalAveragePool"]:
                 bb_setup[bb]["HINT_shape_in"] = [
                     1,
                     channels_in_dim,
@@ -1639,6 +1657,7 @@ class SimulatedAnnealing(BaseLayer):
             if len(hw.input_shape) < 5:
                 shape_calls = 1
             else:
+                # TODO: Search how to deal with cases where the output dimensions are also altered? Like in convolutional layers with stride > 1.
                 shape_calls = math.ceil(
                     hw.input_shape[2]
                     / bblocks_config[bb_type]["HINT_shape_in"][2]
@@ -1663,7 +1682,7 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 )
                 total_block_calls = in_calls * out_calls * shape_calls
-            elif bb_type == "Activation":
+            elif bb_type in ["Activation", "GlobalAveragePool"]:
                 inout_calls = math.ceil(
                     hw.input_shape[1]
                     / (
@@ -1673,8 +1692,8 @@ class SimulatedAnnealing(BaseLayer):
                 )
                 total_block_calls = inout_calls * shape_calls
 
+            # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
             if bb_type in ["Conv3DDw", "Conv3DPw"]:
-                # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     f_fine=1,
                     f_coarseIn=bblocks_config[bb_type]["coarse_in"],
@@ -1682,9 +1701,7 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
-                # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
             elif bb_type == "Activation":
-                # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
                 bblocks_config[bb_type]["hw"].activation_type = hw.activation_type
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
@@ -1692,7 +1709,14 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
                 bblocks_config[bb_type]["hw"].activation_type = "Activation"
-                # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
+            elif bb_type == "GlobalAveragePool":
+                r = bblocks_config[bb_type]["hw"].get_design_point(
+                    coarse_inout=bblocks_config[bb_type]["coarse_inout"],
+                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                )
+            # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
+
             bblocks_config[bb_type]["MemBw_util"] = r["memBwUtil"]
 
             latency = r["latency(S)"] * math.ceil(total_block_calls)
@@ -1707,7 +1731,7 @@ class SimulatedAnnealing(BaseLayer):
                     "Latency": latency,
                     "Base Latency": r["latency(S)"],
                 }
-            elif bb_type == "Activation":
+            elif bb_type in ["Activation", "GlobalAveragePool"]:
                 scheduling[node] = {
                     "Block Type": bb_type,
                     "Times Called (channels)": inout_calls,
@@ -1729,8 +1753,8 @@ class SimulatedAnnealing(BaseLayer):
         # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks = self.generate_building_blocks()
-
         bblocks_config = self.generate_building_blocks_config(bblocks)
+
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
             bblocks_config
         )
@@ -1766,7 +1790,7 @@ class SimulatedAnnealing(BaseLayer):
                 log_dict["mem_bw_util"] = prev_bw
                 wandb.log(log_dict)
 
-            for i in range(self.iterationPerTemp):
+            for _ in range(self.iterationPerTemp):
                 new_state = self.generate_building_blocks_config(
                     bblocks, previous_config=None
                 )

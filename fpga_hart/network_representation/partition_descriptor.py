@@ -3,14 +3,14 @@ import os
 from collections import Counter, deque
 from dataclasses import dataclass, field
 
-import mlflow
 import networkx as nx
 import numpy as np
 import seaborn as sns
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
+from fpga_hart.network_representation.model_descriptor import \
+    ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
@@ -262,15 +262,11 @@ class PartitionDescriptor(ModelLayerDescriptor):
         processing element to support all the convolutional layers in the graph.
         """
 
-        # with mlflow.start_run(run_name=run_name) as run:
-        #     mlflow.set_tag("stable-state", "16.06.22")
-        #     run_id = run.info.run_id
-
         # Here we get all the convolutional layers in the graph but the first two
         sub_layers = [
             layer
             for layer, config in self.layers.items()
-            if config["operation"] in ["Conv", "Relu", "Sigmoid", "Swish"]
+            if config["operation"] in ["Conv", "Relu", "Sigmoid", "Swish", "GlobalAveragePool"]
         ][2:]
 
         # Create a graph with the convolutional layers in sequential order
