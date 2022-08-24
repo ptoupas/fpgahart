@@ -267,19 +267,20 @@ class PartitionDescriptor(ModelLayerDescriptor):
         #     run_id = run.info.run_id
 
         # Here we get all the convolutional layers in the graph but the first two
-        conv_layers = [
+        sub_layers = [
             layer
             for layer, config in self.layers.items()
-            if config["operation"] == "Conv"
+            if config["operation"] in ["Conv", "Relu", "Sigmoid", "Swish"]
         ][2:]
 
         # Create a graph with the convolutional layers in sequential order
         count = 0
-        for layer in conv_layers:
+        for layer in sub_layers:
             self.layers[layer]["node_in"] = [str(count)]
             self.layers[layer]["node_out"] = str(count + 1)
             count += 1
-        graph = self.create_graph(conv_layers)
+
+        graph = self.create_graph(sub_layers)
         self.visualize_graph(
             graph,
             os.getcwd() + "/fpga_modeling_reports/graphs/x3d_m/sequential_conv",
@@ -300,7 +301,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
         return
 
         conv_types = []
-        for layer in conv_layers:
+        for layer in sub_layers:
             conv_types.append(
                 utils.get_conv_type(
                     self.layers[layer],

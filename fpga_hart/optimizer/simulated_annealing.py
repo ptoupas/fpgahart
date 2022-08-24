@@ -9,7 +9,6 @@ import time
 from collections import deque
 from copy import deepcopy
 
-import mlflow
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -58,6 +57,7 @@ class SimulatedAnnealing(BaseLayer):
         if self.wandb_config != None:
             self.wandb_config.update(
                 {
+                    "Device": self.fpga_device,
                     "Clock frequency": self.clock_freq,
                     "DSPs": self.dsp,
                     "BRAMs": self.bram,
@@ -576,9 +576,10 @@ class SimulatedAnnealing(BaseLayer):
         if cost is None:
             start_time = time.time()
             while time.time() - start_time < 90.0:
-                config, mem_bw, _, _ = self.generate_random_config(
-                    seconds_passed=math.ceil(time.time() - start_time)
-                )
+                # config, mem_bw, _, _ = self.generate_random_config(
+                #     seconds_passed=math.ceil(time.time() - start_time)
+                # )
+                config, mem_bw, _, _ = self.generate_random_config()
                 cost, dp_info = self.get_cost(config, mem_bw)
 
                 if cost is not None:
@@ -593,31 +594,6 @@ class SimulatedAnnealing(BaseLayer):
         solution_dp = dp_info
         solution_mem = mem_bw
 
-        # current_temp = 12.5
-        # for i in range(500):
-        #     new_state, new_mem_bw, param_count, param_perc = self.generate_random_config(param_perc=0.9, prev_state=prev_state, slowest_nodes=slowest_nodes)
-        #     new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
-        #     if new_cost is not None:
-        #         slowest_nodes = dp_info['slowestNodes']
-
-        #     if new_cost is None:
-        #         continue
-
-        #     cost_diff = prev_cost - new_cost
-        #     if cost_diff >= 0:
-        #         prev_state = copy.deepcopy(new_state)
-        #         prev_cost = copy.deepcopy(new_cost)
-        #         solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
-        #     else:
-        #         if random.uniform(0, 1) < math.exp((cost_diff/(self.k*current_temp))):
-        #             prev_state = copy.deepcopy(new_state)
-        #             prev_cost = copy.deepcopy(new_cost)
-        #             solution_mem, solution_dp = copy.deepcopy(new_mem_bw), copy.deepcopy(new_dp_info)
-
-        #     current_temp *= self.cooling_rate
-        #     print(f"{current_temp:.5e}\t{prev_cost:.5e}\t{param_count:5d}\t{param_perc:.3f}", end='\r')
-        # self.freeze_param = False
-
         return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
     def run_optimizer(self):
@@ -627,7 +603,6 @@ class SimulatedAnnealing(BaseLayer):
         best_solution_mem = None
         best_solution_dp = None
         best_latency = 1000
-        # with mlflow.start_run(run_id=self.ml_flow_id):
         for _ in range(self.best_of_iter):
 
             (
@@ -646,14 +621,12 @@ class SimulatedAnnealing(BaseLayer):
             solution_mem = mem_bw
 
             current_temp = self.t_max
-            first_restart, second_restart, third_restart = True, True, True
+            # first_restart, second_restart, third_restart = True, True, True
             count = 0
             print(
                 f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
             )
             while current_temp > self.t_min:
-                # mlflow.log_metric("running_temp", current_temp)
-                # mlflow.log_metric("running_latency", prev_cost)
                 # wandb.log({"running_temp": current_temp, "running_latency": prev_cost})
                 for _ in range(self.iterationPerTemp):
                     count += 1
@@ -692,15 +665,15 @@ class SimulatedAnnealing(BaseLayer):
                             )
 
                 current_temp *= self.cooling_rate
-                if current_temp <= 0.01 and first_restart:
-                    current_temp *= 100
-                    first_restart = False
-                elif current_temp <= 0.001 and second_restart:
-                    current_temp *= 1000
-                    second_restart = False
-                elif current_temp <= 0.0001 and third_restart:
-                    current_temp *= 1000
-                    third_restart = False
+                # if current_temp <= 0.01 and first_restart:
+                #     current_temp *= 100
+                #     first_restart = False
+                # elif current_temp <= 0.001 and second_restart:
+                #     current_temp *= 1000
+                #     second_restart = False
+                # elif current_temp <= 0.0001 and third_restart:
+                #     current_temp *= 1000
+                #     third_restart = False
                 print(
                     f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
                     end="\r",
@@ -714,17 +687,6 @@ class SimulatedAnnealing(BaseLayer):
                 best_latency = prev_cost
                 best_solution_mem = solution_mem
                 best_solution_dp = solution_dp
-
-        # with mlflow.start_run(run_id=self.ml_flow_id):
-        #     mlflow.log_metric("Latency-C", best_solution_dp["latency(C)"])
-        #     mlflow.log_metric("Latency-S", best_solution_dp["latency(S)"])
-        #     mlflow.log_metric("GOP/s", best_solution_dp["GOP/s"])
-        #     mlflow.log_metric("vols/s", best_solution_dp["vols/s"])
-        #     mlflow.log_metric("DSP", best_solution_dp["DSP"])
-        #     mlflow.log_metric("BRAM", best_solution_dp["BRAM"])
-
-        #     # with mlflow.start_run(nested=True):
-        #     mlflow.log_dict(best_solution_dp["config"], "config.json")
 
         print(
             f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
@@ -1477,7 +1439,7 @@ class SimulatedAnnealing(BaseLayer):
         """
 
         # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
-        bblocks = ["Conv3DDw", "Conv3DPw"]
+        bblocks = ["Conv3DDw", "Conv3DPw", "Activation"]
         assert self.validate_building_blocks_setup(
             bblocks
         ), "Invalid building blocks setup. Cannot find a valid scheduling."
@@ -1502,6 +1464,7 @@ class SimulatedAnnealing(BaseLayer):
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
 
+            # print(f"Generating configuration for {bb}")
             shape_in, shape_out = utils.get_random_shape(
                 self.graph, bb, previous_config=previous_config
             )
@@ -1556,54 +1519,102 @@ class SimulatedAnnealing(BaseLayer):
                     "dilation": [1, 1, 1],
                     "branching": False,
                 }
+            elif bb == "Activation":
+                bb_descriptor = {
+                    "operation": "Activation",
+                    "shape_in": [
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+                    ],
+                    "shape_out": [
+                        1,
+                        channels_in_dim,
+                        depth_in_dim,
+                        height_in_dim,
+                        width_in_dim,
+                    ],
+                }
 
-            bb_setup[bb]["hw"] = Convolutional3DLayer(
-                self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-            )
+            if bb in ["Conv3DDw", "Conv3DPw"]:
+                bb_setup[bb]["hw"] = Convolutional3DLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+            elif bb == "Activation":
+                bb_setup[bb]["hw"] = ActivationLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+
             dsp_util, bram_util = 100, 100
             while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
                 self.max_BRAM_util - total_bram
             ):
-                coarse_in = (
-                    np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
-                    / channels_in_dim
-                )
-                coarse_out = (
-                    np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
-                    / channels_out_dim
-                )
-                if bb == "Conv3DDw":
-                    coarse_out = coarse_in
-                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
-                    f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
-                )
 
-            bb_setup[bb]["HINT_shape_in"] = [
-                1,
-                channels_in_dim,
-                depth_in_dim,
-                height_in_dim,
-                width_in_dim,
-            ]
-            bb_setup[bb]["coarse_in"] = coarse_in
-            bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
-            bb_setup[bb]["interleaving_in"] = 1 // coarse_in
-            bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
-                channels_in_dim * coarse_in
-            )
-            bb_setup[bb]["HINT_shape_out"] = [
-                1,
-                channels_out_dim,
-                depth_out_dim,
-                height_out_dim,
-                width_out_dim,
-            ]
-            bb_setup[bb]["coarse_out"] = coarse_out
-            bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
-            bb_setup[bb]["interleaving_out"] = 1 // coarse_out
-            bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
-                channels_out_dim * coarse_out
-            )
+                if bb in ["Conv3DDw", "Conv3DPw"]:
+                    coarse_in = (
+                        np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
+                        / channels_in_dim
+                    )
+                    coarse_out = (
+                        np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
+                        / channels_out_dim
+                    )
+                    if bb == "Conv3DDw":
+                        coarse_out = coarse_in
+
+                    dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                        f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
+                    )
+                elif bb == "Activation":
+                    coarse_inout = (
+                        np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
+                        / channels_in_dim
+                    )
+                    dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                        f_coarse_inout=coarse_inout
+                    )
+
+            if bb in ["Conv3DDw", "Conv3DPw"]:
+                bb_setup[bb]["HINT_shape_in"] = [
+                    1,
+                    channels_in_dim,
+                    depth_in_dim,
+                    height_in_dim,
+                    width_in_dim,
+                ]
+                bb_setup[bb]["coarse_in"] = coarse_in
+                bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
+                bb_setup[bb]["interleaving_in"] = 1 // coarse_in
+                bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
+                    channels_in_dim * coarse_in
+                )
+                bb_setup[bb]["HINT_shape_out"] = [
+                    1,
+                    channels_out_dim,
+                    depth_out_dim,
+                    height_out_dim,
+                    width_out_dim,
+                ]
+                bb_setup[bb]["coarse_out"] = coarse_out
+                bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
+                bb_setup[bb]["interleaving_out"] = 1 // coarse_out
+                bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
+                    channels_out_dim * coarse_out
+                )
+            elif bb == "Activation":
+                bb_setup[bb]["HINT_shape_in"] = [
+                    1,
+                    channels_in_dim,
+                    depth_in_dim,
+                    height_in_dim,
+                    width_in_dim,
+                ]
+                bb_setup[bb]["coarse_inout"] = coarse_inout
+                bb_setup[bb]["streams_inout"] = math.ceil(
+                    coarse_inout * channels_in_dim
+                )
+                bb_setup[bb]["interleaving_inout"] = 1 // coarse_inout
+                bb_setup[bb]["interleaving_pad_inout"] = channels_in_dim % math.ceil(
+                    channels_in_dim * coarse_inout
+                )
             bb_setup[bb]["DSP_util"] = dsp_util
             bb_setup[bb]["BRAM_util"] = bram_util
             total_dsp += dsp_util
@@ -1619,53 +1630,85 @@ class SimulatedAnnealing(BaseLayer):
             bb_type = self.graph.nodes[node]["hw_type"]
             hw = self.graph.nodes[node]["hw"]
 
-            in_calls = math.ceil(
-                hw.input_shape[1]
-                / (
-                    bblocks_config[bb_type]["streams_in"]
-                    * bblocks_config[bb_type]["interleaving_in"]
+            if len(hw.input_shape) < 5:
+                shape_calls = 1
+            else:
+                shape_calls = math.ceil(
+                    hw.input_shape[2]
+                    / bblocks_config[bb_type]["HINT_shape_in"][2]
+                    * hw.input_shape[3]
+                    / bblocks_config[bb_type]["HINT_shape_in"][3]
+                    * hw.input_shape[4]
+                    / bblocks_config[bb_type]["HINT_shape_in"][4]
                 )
-            )
-            out_calls = math.ceil(
-                hw.output_shape[1]
-                / (
-                    bblocks_config[bb_type]["streams_out"]
-                    * bblocks_config[bb_type]["interleaving_out"]
+            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+                in_calls = math.ceil(
+                    hw.input_shape[1]
+                    / (
+                        bblocks_config[bb_type]["streams_in"]
+                        * bblocks_config[bb_type]["interleaving_in"]
+                    )
                 )
-            )
-            shape_calls = (
-                hw.input_shape[2]
-                / bblocks_config[bb_type]["HINT_shape_in"][2]
-                * hw.input_shape[3]
-                / bblocks_config[bb_type]["HINT_shape_in"][3]
-                * hw.input_shape[4]
-                / bblocks_config[bb_type]["HINT_shape_in"][4]
-            )
+                out_calls = math.ceil(
+                    hw.output_shape[1]
+                    / (
+                        bblocks_config[bb_type]["streams_out"]
+                        * bblocks_config[bb_type]["interleaving_out"]
+                    )
+                )
+                total_block_calls = in_calls * out_calls * shape_calls
+            elif bb_type == "Activation":
+                inout_calls = math.ceil(
+                    hw.input_shape[1]
+                    / (
+                        bblocks_config[bb_type]["streams_inout"]
+                        * bblocks_config[bb_type]["interleaving_inout"]
+                    )
+                )
+                total_block_calls = inout_calls * shape_calls
 
-            # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
-            r = bblocks_config[bb_type]["hw"].get_design_point(
-                f_fine=1,
-                f_coarseIn=bblocks_config[bb_type]["coarse_in"],
-                f_coarseOut=bblocks_config[bb_type]["coarse_out"],
-                mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-            )
-            # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
+            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+                # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
+                r = bblocks_config[bb_type]["hw"].get_design_point(
+                    f_fine=1,
+                    f_coarseIn=bblocks_config[bb_type]["coarse_in"],
+                    f_coarseOut=bblocks_config[bb_type]["coarse_out"],
+                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                )
+                # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
+            elif bb_type == "Activation":
+                # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
+                bblocks_config[bb_type]["hw"].activation_type = hw.activation_type
+                r = bblocks_config[bb_type]["hw"].get_design_point(
+                    coarse_inout=bblocks_config[bb_type]["coarse_inout"],
+                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                )
+                bblocks_config[bb_type]["hw"].activation_type = "Activation"
+                # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
             bblocks_config[bb_type]["MemBw_util"] = r["memBwUtil"]
 
-            latency = r["latency(S)"] * math.ceil(in_calls * out_calls * shape_calls)
+            latency = r["latency(S)"] * math.ceil(total_block_calls)
             avg_BW += r["memBwUtil"]
-            assert (
-                math.ceil(in_calls * out_calls * shape_calls) > 0
-            ), "Zero calls aborting..."
-            scheduling[node] = {
-                "Block Type": bb_type,
-                "Times Called (channels)": in_calls,
-                "Times Called (filters)": out_calls,
-                "Times Called (tiles)": math.ceil(shape_calls),
-                "Latency": latency,
-                "Base Latency": r["latency(S)"],
-            }
+            assert math.ceil(total_block_calls) > 0, "Zero calls aborting..."
+            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+                scheduling[node] = {
+                    "Block Type": bb_type,
+                    "Times Called (channels)": in_calls,
+                    "Times Called (filters)": out_calls,
+                    "Times Called (tiles)": math.ceil(shape_calls),
+                    "Latency": latency,
+                    "Base Latency": r["latency(S)"],
+                }
+            elif bb_type == "Activation":
+                scheduling[node] = {
+                    "Block Type": bb_type,
+                    "Times Called (channels)": inout_calls,
+                    "Times Called (tiles)": math.ceil(shape_calls),
+                    "Latency": latency,
+                    "Base Latency": r["latency(S)"],
+                }
             cost += latency
 
         avg_BW = avg_BW / len(self.graph.nodes)
@@ -1677,12 +1720,9 @@ class SimulatedAnnealing(BaseLayer):
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
     def run_optimizer_latency(self):
+        # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks = self.generate_building_blocks()
-
-        # with mlflow.start_run(run_id=self.ml_flow_id):
-        # mlflow.log_param("config_generation", "mape_c70_w100")
-        # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks_config = self.generate_building_blocks_config(bblocks)
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
@@ -1711,19 +1751,15 @@ class SimulatedAnnealing(BaseLayer):
         current_temp = self.t_max
         print(f"Temperature  |  Latency    ")
         while current_temp > self.t_min:
-            log_dict = {}
-            for bb in prev_state:
-                log_dict[bb + "_fm"] = prev_state[bb]["HINT_shape_in"][-1]
-                log_dict[bb + "_interleav"] = prev_state[bb]["interleaving_in"]
-            log_dict["temperature"] = current_temp
-            log_dict["latency"] = prev_cost
-            log_dict["dsp_util"] = prev_dsp
-            log_dict["bram_util"] = prev_bram
-            log_dict["mem_bw_util"] = prev_bw
             if not self.wandb_config == None:
+                log_dict = {}
+                log_dict["temperature"] = current_temp
+                log_dict["latency"] = prev_cost
+                log_dict["dsp_util"] = prev_dsp
+                log_dict["bram_util"] = prev_bram
+                log_dict["mem_bw_util"] = prev_bw
                 wandb.log(log_dict)
-            # mlflow.log_metric("running_temp", current_temp)
-            # mlflow.log_metric("running_latency", prev_cost)
+
             for i in range(self.iterationPerTemp):
                 new_state = self.generate_building_blocks_config(
                     bblocks, previous_config=prev_state
@@ -1738,11 +1774,6 @@ class SimulatedAnnealing(BaseLayer):
 
                 if new_cost is None:
                     continue
-
-                # mlflow.log_metric("latency", new_cost)
-                # mlflow.log_metric("dsp_util", dsp_util)
-                # mlflow.log_metric("bram_util", bram_util)
-                # mlflow.log_metric("mem_bw_util", bw_util)
 
                 cost_diff = prev_cost - new_cost
                 if cost_diff >= 0:
@@ -1775,4 +1806,3 @@ class SimulatedAnnealing(BaseLayer):
             with artifact.new_file("scheduling.json") as f:
                 json.dump(prev_scheduling, f)
             wandb.log_artifact(artifact)
-        # mlflow.log_dict(prev_scheduling, "scheduling.json")

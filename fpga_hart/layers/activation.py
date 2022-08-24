@@ -1,4 +1,5 @@
 import math
+from typing import Tuple
 
 import numpy as np
 import scipy.optimize as optimize
@@ -49,6 +50,7 @@ class ActivationLayer(BaseLayer):
         self.depth = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
+        self.total_bw_util = 0
         self.config = []
         self.dsps_util = 0
         self.dsp_raw = 0
@@ -66,6 +68,28 @@ class ActivationLayer(BaseLayer):
             return int(np.prod(np.array(self.output_shape[1:]))) * 5
         elif self.activation_type == "Swish":
             return int(np.prod(np.array(self.output_shape[1:]))) * 6
+
+    def get_resource_util(
+        self,
+        f_coarse_inout: np.float64,
+    ) -> Tuple[float, float]:
+
+        muls_relu = 0
+        adds_relu = 0
+        muls_sigmoid = math.ceil(self.channels * f_coarse_inout * 3)
+        adds_sigmoid = math.ceil(self.channels * f_coarse_inout * 2)
+        muls_swish = math.ceil(self.channels * f_coarse_inout * 4)
+        adds_swish = math.ceil(self.channels * f_coarse_inout * 2)
+
+        # muls = muls_relu + muls_sigmoid + muls_swish
+        # adds = adds_relu + adds_sigmoid + adds_swish
+        muls = max(muls_relu, muls_sigmoid, muls_swish)
+        adds = max(adds_relu, adds_sigmoid, adds_swish)
+
+        bram_util = 0
+        dsps_util = (muls / self.dsp) * 100
+
+        return dsps_util, bram_util
 
     def get_dp_info(self):
         dp_info = {}
@@ -87,6 +111,7 @@ class ActivationLayer(BaseLayer):
         dp_info["memKBs"] = self.memoryKB
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
+        dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
 
         return dp_info
@@ -111,6 +136,17 @@ class ActivationLayer(BaseLayer):
         )
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+        
+        layer_mem_bw_in = (
+            abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+        )
+        layer_mem_bw_out = (
+            abs(gamma_matrix_balanced[-1, -1]) * self.cycles_per_sec * self.word_length
+        )
+        total_bw_util = (
+            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+        ) * 100
+
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
         if DEBUG:
@@ -165,6 +201,7 @@ class ActivationLayer(BaseLayer):
             self.depth = depth
             self.mem_bd_in = [mem_bounded_in]
             self.mem_bd_out = [mem_bounded_out]
+            self.total_bw_util = total_bw_util
 
             config = [coarse_inout, mem_bw_in, mem_bw_out]
             self.config = config
