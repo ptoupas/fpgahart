@@ -1,8 +1,7 @@
 import math
+from typing import Tuple
 
 import numpy as np
-import scipy.optimize as optimize
-from scipy.optimize import Bounds, NonlinearConstraint
 
 from ..layers.base_layer import BaseLayer
 
@@ -42,26 +41,26 @@ class ElementWiseLayer(BaseLayer):
             """
             Works only in case where the broadcasting is done in the channels dimension i.e. multiplication between 2 tensors of shape c X h X w X d * c X 1 X 1 X 1 resulting in a tensor of shape c X h X w X d
             """
-            self.full_shape = (
+            self.input_shape = (
                 self.input_shape_1
                 if int(np.prod(np.array(self.input_shape_1[1:])))
                 > int(np.prod(np.array(self.input_shape_2[1:])))
                 else self.input_shape_2
             )
-            self.reduced_shape = (
+            self.input_shape_red = (
                 self.input_shape_1
                 if int(np.prod(np.array(self.input_shape_1[1:])))
                 < int(np.prod(np.array(self.input_shape_2[1:])))
                 else self.input_shape_2
             )
             assert (
-                self.output_shape == self.full_shape
+                self.output_shape == self.input_shape
             ), "Elementwise layer ({}) input {} and output {} shapes does not match.".format(
-                self.type, self.full_shape, self.output_shape
+                self.type, self.input_shape, self.output_shape
             )
         else:
-            self.full_shape = self.input_shape_1
-            self.reduced_shape = self.input_shape_2
+            self.input_shape = self.input_shape_1
+            self.input_shape_red = self.input_shape_2
             assert (
                 self.output_shape == self.input_shape_1
                 and self.output_shape == self.input_shape_2
@@ -79,6 +78,7 @@ class ElementWiseLayer(BaseLayer):
         self.depth = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
+        self.total_bw_util = 0
         self.config = []
         self.dsps_util = 0
         self.dsp_raw = 0
@@ -96,6 +96,50 @@ class ElementWiseLayer(BaseLayer):
             return int(np.prod(np.array(self.output_shape[1:])))
         elif self.type == "Div":
             return int(np.prod(np.array(self.output_shape[1:]))) * 2
+
+    def get_resource_util(
+        self,
+        f_coarse_inout: np.float64,
+    ) -> Tuple[float, float]:
+
+        final_channel = self.input_shape[1]
+        final_depth = self.input_shape[2]
+
+        # Addition operation resources
+        if self.parrallel_dims == "C":
+            adds_addition = math.ceil(final_channel * f_coarse_inout)
+            muls_addition = 0
+        elif self.parrallel_dims == "DC":
+            adds_addition = math.ceil(final_channel * final_depth * f_coarse_inout)
+            muls_addition = 0
+
+        # Multiplication operation resources
+        if self.parrallel_dims == "C":
+            adds_multiplication = 0
+            muls_multiplication = math.ceil(final_channel * f_coarse_inout)
+        elif self.parrallel_dims == "DC":
+            adds_multiplication = 0
+            muls_multiplication = math.ceil(
+                final_channel * final_depth * f_coarse_inout
+            )
+
+        muls = muls_addition + muls_multiplication
+        adds = adds_addition + adds_multiplication
+
+        layer_fifos_arrays = {}
+        layer_fifos_arrays["elemwise_bc"] = math.ceil(1 / f_coarse_inout)
+
+        (_, _, _, _, dsps_util, _, bram_util, _, _,) = self.get_dp_performance(
+            np.zeros(shape=(2, 3), dtype=float),
+            np.zeros(shape=(2, 3), dtype=float),
+            muls,
+            adds,
+            layer_fifos_arrays,
+            0,
+            coarse_inout=math.ceil(final_channel * f_coarse_inout),
+        )
+
+        return dsps_util, bram_util
 
     def get_dp_info(self):
         dp_info = {}
@@ -117,19 +161,20 @@ class ElementWiseLayer(BaseLayer):
         dp_info["memKBs"] = self.memoryKB
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
+        dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
 
         return dp_info
 
     def get_num_streams(self):
         if self.broadcasting:
-            full_shape = self.full_shape
-            reduced_shape = self.reduced_shape
+            full_shape = self.input_shape
+            reduced_shape = self.input_shape_red
         else:
             full_shape = self.input_shape_1
             reduced_shape = self.input_shape_1
-        _, channels_1, depth_1, rows_1, cols_1 = full_shape
-        _, channels_2, depth_2, rows_2, cols_2 = reduced_shape
+        _, channels_1, depth_1, _, _ = full_shape
+        _, channels_2, depth_2, _, _ = reduced_shape
 
         if self.parrallel_dims == "C":
             self.max_streams_in_1 = channels_1
@@ -152,7 +197,7 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ:\n{}".format(gamma_matrix))
         if self.broadcasting:
-            # branch_ratio = 1/(int(np.prod(np.array(self.full_shape[2:]))))
+            # branch_ratio = 1/(int(np.prod(np.array(self.input_shape[2:]))))
             # gamma_matrix_balanced, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out = self.balance_matrix_elemwise_broadcasting(gamma_matrix.copy(), 2, branch_ratio)
             (
                 gamma_matrix_balanced,
@@ -174,25 +219,28 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
 
+        layer_mem_bw_in = (
+            abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+            + abs(gamma_matrix_balanced[1, 1]) * self.cycles_per_sec * self.word_length
+        )
+        layer_mem_bw_out = (
+            abs(gamma_matrix_balanced[-1, -1]) * self.cycles_per_sec * self.word_length
+        )
+        total_bw_util = (
+            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+        ) * 100
+
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
         layer_fifos_arrays = {"elemwise_bc": 0}
-        if self.broadcasting:
-            depth = 2
-            # layer_fifos_arrays['elemwise_bc'] = math.ceil(1/coarse_inout) + 1
-            final_channel = self.full_shape[1]
-            final_depth = self.full_shape[2]
-            final_columns = self.full_shape[3]
-            final_rows = self.full_shape[4]
-        else:
-            depth = 2
-            final_channel = self.channels_1
-            final_depth = self.depth_in_1
-            final_columns = self.cols_in_1
-            final_rows = self.rows_in_1
+        layer_fifos_arrays["elemwise_bc"] = math.ceil(1 / coarse_inout)
+
+        depth = 2
+        final_channel = self.input_shape[1]
+        final_depth = self.input_shape[2]
 
         if self.type == "Add":
             if self.parrallel_dims == "C":
@@ -263,6 +311,7 @@ class ElementWiseLayer(BaseLayer):
             self.mem_bd_in.append(mem_bounded_in_1)
             self.mem_bd_in.append(mem_bounded_in_2)
             self.mem_bd_out = [mem_bounded_out]
+            self.total_bw_util = total_bw_util
 
             config = [coarse_inout, mem_bw_in_1, mem_bw_in_2, mem_bw_out]
             self.config = config
@@ -341,11 +390,11 @@ class ElementWiseLayer(BaseLayer):
             stream_matrix[0, 0] = 1
 
             if self.parrallel_dims == "C":
-                stream_matrix[0, 1] = math.ceil(self.full_shape[1] * coarse_inout)
+                stream_matrix[0, 1] = math.ceil(self.input_shape[1] * coarse_inout)
                 stream_matrix[1, 1] = math.ceil(self.filters * coarse_inout)
             elif self.parrallel_dims == "DC":
                 stream_matrix[0, 1] = math.ceil(
-                    self.full_shape[1] * self.full_shape[2] * coarse_inout
+                    self.input_shape[1] * self.input_shape[2] * coarse_inout
                 )
                 stream_matrix[1, 1] = math.ceil(
                     self.filters * self.depth_out * coarse_inout
@@ -421,17 +470,17 @@ class ElementWiseLayer(BaseLayer):
             workload_matrix = np.zeros(shape=(2, 3), dtype=float)
 
             workload_matrix[0, 0] = (
-                self.full_shape[1]
-                * self.full_shape[2]
-                * self.full_shape[3]
-                * self.full_shape[4]
+                self.input_shape[1]
+                * self.input_shape[2]
+                * self.input_shape[3]
+                * self.input_shape[4]
             )
 
             workload_matrix[0, 1] = (
-                self.full_shape[1]
-                * self.full_shape[2]
-                * self.full_shape[3]
-                * self.full_shape[4]
+                self.input_shape[1]
+                * self.input_shape[2]
+                * self.input_shape[3]
+                * self.input_shape[4]
             )
             workload_matrix[1, 1] = out_volume
 
@@ -457,8 +506,8 @@ class ElementWiseLayer(BaseLayer):
 
         gamma_matrix[0, 0] = mem_bw_in_2
 
-        gamma_matrix[0, 1] = -math.ceil(self.reduced_shape[1] * coarse_inout)
-        gamma_matrix[1, 1] = math.ceil(self.reduced_shape[1] * coarse_inout)
+        gamma_matrix[0, 1] = -math.ceil(self.input_shape_red[1] * coarse_inout)
+        gamma_matrix[1, 1] = math.ceil(self.input_shape_red[1] * coarse_inout)
 
         gamma_matrix[1, 2] = -1000000
 
@@ -468,12 +517,12 @@ class ElementWiseLayer(BaseLayer):
 
         workload_matrix = np.zeros(shape=(2, 3), dtype=float)
 
-        workload_matrix[0, 0] = self.reduced_shape[1]
+        workload_matrix[0, 0] = self.input_shape_red[1]
 
-        workload_matrix[0, 1] = self.reduced_shape[1]
-        workload_matrix[1, 1] = self.reduced_shape[1]
+        workload_matrix[0, 1] = self.input_shape_red[1]
+        workload_matrix[1, 1] = self.input_shape_red[1]
 
-        workload_matrix[1, 2] = self.reduced_shape[1]
+        workload_matrix[1, 2] = self.input_shape_red[1]
 
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
 

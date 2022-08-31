@@ -15,9 +15,12 @@ import pandas as pd
 import scipy.constants as sc
 import wandb
 from fpga_hart import _logger
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                has_gap, split_graph,
-                                                visualize_graph)
+from fpga_hart.utils.graph_manipulation import (
+    add_off_chip_connections,
+    has_gap,
+    split_graph,
+    visualize_graph,
+)
 
 from ..layers.activation import ActivationLayer
 from ..layers.base_layer import BaseLayer
@@ -1150,7 +1153,13 @@ class SimulatedAnnealing(BaseLayer):
         """
 
         # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
-        bblocks = ["Conv3DDw", "Conv3DPw", "Activation", "GlobalAveragePool"]
+        bblocks = [
+            "Conv3DDw",
+            "Conv3DPw",
+            "Activation",
+            "GlobalAveragePool",
+            "ElementWise",
+        ]
         assert self.validate_building_blocks_setup(
             bblocks
         ), "Invalid building blocks setup. Cannot find a valid scheduling."
@@ -1258,6 +1267,22 @@ class SimulatedAnnealing(BaseLayer):
                         1,
                     ],
                 }
+            elif bb == "ElementWise":
+                # TODO: We assume here that we always have two inputs of the same shape. (i.e. no broadcasting)
+                bb_descriptor = {
+                    "operation": "ElementWise",
+                    "shape_in": [
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
+                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
+                    ],
+                    "shape_out": [
+                        1,
+                        channels_in_dim,
+                        depth_in_dim,
+                        height_in_dim,
+                        width_in_dim,
+                    ],
+                }
 
             if bb in ["Conv3DDw", "Conv3DPw"]:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
@@ -1269,6 +1294,10 @@ class SimulatedAnnealing(BaseLayer):
                 )
             elif bb == "GlobalAveragePool":
                 bb_setup[bb]["hw"] = GAPLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+            elif bb == "ElementWise":
+                bb_setup[bb]["hw"] = ElementWiseLayer(
                     self.max_DSP_util, self.max_BRAM_util, bb_descriptor
                 )
 
@@ -1293,7 +1322,7 @@ class SimulatedAnnealing(BaseLayer):
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
-                elif bb in ["Activation", "GlobalAveragePool"]:
+                elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
                     coarse_inout = (
                         np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
                         / channels_in_dim
@@ -1332,7 +1361,7 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
                     channels_out_dim * coarse_out
                 )
-            elif bb in ["Activation", "GlobalAveragePool"]:
+            elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 bb_setup[bb]["HINT_shape_in"] = [
                     1,
                     channels_in_dim,
@@ -1393,7 +1422,7 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 )
                 total_block_calls = in_calls * out_calls * shape_calls
-            elif bb_type in ["Activation", "GlobalAveragePool"]:
+            elif bb_type in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 inout_calls = math.ceil(
                     hw.input_shape[1]
                     / (
@@ -1426,6 +1455,16 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
+            elif bb_type == "ElementWise":
+                bblocks_config[bb_type]["hw"].type = hw.type
+                r = bblocks_config[bb_type]["hw"].get_design_point(
+                    coarse_inout=bblocks_config[bb_type]["coarse_inout"],
+                    mem_bw_in_1=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
+                    mem_bw_in_2=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
+                )
+                bblocks_config[bb_type]["hw"].type = "ElementWise"
+
             # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
 
             bblocks_config[bb_type]["MemBw_util"] = r["memBwUtil"]
@@ -1460,7 +1499,7 @@ class SimulatedAnnealing(BaseLayer):
             final_BRAM += bblocks_config[bb]["BRAM_util"]
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
-    def run_optimizer_latency(self):
+    def run_optimizer_latency(self) -> None:
         # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks = self.generate_building_blocks()

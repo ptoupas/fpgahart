@@ -9,8 +9,7 @@ import seaborn as sns
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import \
-    ModelLayerDescriptor
+from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
@@ -255,7 +254,10 @@ class PartitionDescriptor(ModelLayerDescriptor):
             plt.show()
 
     def latency_driven_design(
-        self, run_name: str, plot_summaries: bool = False, wandb_config=None
+        self,
+        run_name: str,
+        plot_summaries: bool = False,
+        wandb_config: wandb.Config = None,
     ) -> None:
         """
         Try to find the best configurations to be used for a hardware
@@ -266,15 +268,16 @@ class PartitionDescriptor(ModelLayerDescriptor):
         sub_layers = [
             layer
             for layer, config in self.layers.items()
-            if config["operation"] in ["Conv", "Relu", "Sigmoid", "Swish", "GlobalAveragePool"]
+            if config["operation"]
+            in ["Conv", "Relu", "Sigmoid", "Swish", "GlobalAveragePool", "Add", "Mul"]
         ][2:]
 
         # Create a graph with the convolutional layers in sequential order
-        count = 0
-        for layer in sub_layers:
-            self.layers[layer]["node_in"] = [str(count)]
-            self.layers[layer]["node_out"] = str(count + 1)
-            count += 1
+        # count = 0
+        # for layer in sub_layers:
+        #     self.layers[layer]["node_in"] = [str(count)]
+        #     self.layers[layer]["node_out"] = str(count + 1)
+        #     count += 1
 
         graph = self.create_graph(sub_layers)
         self.visualize_graph(
