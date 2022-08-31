@@ -2,8 +2,6 @@ import math
 from typing import Tuple
 
 import numpy as np
-import scipy.optimize as optimize
-from scipy.optimize import Bounds, NonlinearConstraint
 
 from .base_layer import BaseLayer
 
@@ -81,10 +79,10 @@ class ActivationLayer(BaseLayer):
         muls_swish = math.ceil(self.channels * f_coarse_inout * 4)
         adds_swish = math.ceil(self.channels * f_coarse_inout * 2)
 
-        # muls = muls_relu + muls_sigmoid + muls_swish
-        # adds = adds_relu + adds_sigmoid + adds_swish
-        muls = max(muls_relu, muls_sigmoid, muls_swish)
-        adds = max(adds_relu, adds_sigmoid, adds_swish)
+        muls = muls_relu + muls_sigmoid + muls_swish
+        adds = adds_relu + adds_sigmoid + adds_swish
+        # muls = max(muls_relu, muls_sigmoid, muls_swish)
+        # adds = max(adds_relu, adds_sigmoid, adds_swish)
 
         bram_util = 0
         dsps_util = (muls / self.dsp) * 100
@@ -136,7 +134,7 @@ class ActivationLayer(BaseLayer):
         )
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
-        
+
         layer_mem_bw_in = (
             abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
         )

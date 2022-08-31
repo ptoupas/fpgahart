@@ -1,8 +1,6 @@
 import math
 
 import numpy as np
-import scipy.optimize as optimize
-from scipy.optimize import Bounds, NonlinearConstraint
 
 from .base_layer import BaseLayer
 
