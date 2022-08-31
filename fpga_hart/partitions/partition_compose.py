@@ -117,7 +117,7 @@ class PartitionComposer(BaseLayer):
                 final_depth = (
                     min(
                         abs(depths[longest_idx] - depths[-1]),
-                        np.product(graph.nodes[end_point]["hw"].full_shape),
+                        np.product(graph.nodes[end_point]["hw"].input_shape),
                     )
                     + 2
                 )
@@ -126,7 +126,7 @@ class PartitionComposer(BaseLayer):
                 final_depth = (
                     min(
                         abs(depths[0] - depths[-1]),
-                        np.product(graph.nodes[end_point]["hw"].full_shape),
+                        np.product(graph.nodes[end_point]["hw"].input_shape),
                     )
                     + 2
                 )

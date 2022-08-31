@@ -176,7 +176,7 @@ def add_node_to_position(
     connect_pos: str,
     is_input: bool = False,
     is_output: bool = False,
-):
+) -> None:
     if connect_pos == "pre":
         edge = (new_node, connect_node)
     elif connect_pos == "post":
@@ -318,6 +318,6 @@ def add_off_chip_connections(
     return read_points, write_points
 
 
-def visualize_graph(graph, path):
+def visualize_graph(graph: nx.DiGraph, path: str) -> None:
     PG = nx.nx_pydot.to_pydot(graph)
     PG.write_png(path + ".png")

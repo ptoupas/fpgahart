@@ -21,7 +21,7 @@ def multithreaded_modeling(operation, input, pool):
 
 @dataclass
 class LayerParser(ModelLayerDescriptor):
-    wandb_config: wandb.sdk.wandb_config.Config
+    wandb_config: wandb.Config
     singlethreaded: bool = False
     per_layer_plot: bool = False
 

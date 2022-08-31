@@ -61,8 +61,18 @@ class GAPLayer(BaseLayer):
         muls = math.ceil(self.channels * f_coarse_inout * 2)
         adds = math.ceil(self.channels * f_coarse_inout)
 
-        bram_util = 0
-        dsps_util = (muls / self.dsp) * 100
+        layer_fifos_arrays = {}
+        layer_fifos_arrays["gap_array"] = math.ceil(1 / f_coarse_inout)
+
+        (_, _, _, _, dsps_util, _, bram_util, _, _,) = self.get_dp_performance(
+            np.zeros(shape=(2, 3), dtype=float),
+            np.zeros(shape=(2, 3), dtype=float),
+            muls,
+            adds,
+            layer_fifos_arrays,
+            0,
+            coarse_inout=math.ceil(self.channels * f_coarse_inout),
+        )
 
         return dsps_util, bram_util
 
@@ -151,7 +161,7 @@ class GAPLayer(BaseLayer):
         else:
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 2)
             max_parallel_adds = math.ceil(self.channels * coarse_inout)
-            # layer_fifos_arrays['gap_array'] = math.ceil(1/coarse_inout)
+            layer_fifos_arrays["gap_array"] = math.ceil(1 / coarse_inout)
             # TODO: !SOS! Revise that
             if self.gap_approx:
                 depth = 2

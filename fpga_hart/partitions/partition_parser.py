@@ -40,7 +40,7 @@ class PartitionParser(PartitionDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
-    wandb_config: wandb.sdk.wandb_config.Config
+    wandb_config: wandb.Config
 
     def __post_init__(self) -> None:
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class

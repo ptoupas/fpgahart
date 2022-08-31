@@ -194,18 +194,24 @@ class BaseLayer:
             array_elemwise_brams = self.bram_memory_resource_model(
                 layer_fifos_arrays["elemwise_bc"], 30
             )
+            if layer_fifos_arrays["elemwise_bc"] < 100:
+                array_elemwise_brams = 0
             bram_raw += array_elemwise_brams * coarse_inout
 
         if "fc_array" in layer_fifos_arrays.keys():
             array_fc_brams = self.bram_memory_resource_model(
                 layer_fifos_arrays["fc_array"], 30
             )
+            if layer_fifos_arrays["fc_array"] < 100:
+                array_fc_brams = 0
             bram_raw += array_fc_brams * coarse_in * coarse_out
 
         if "gap_array" in layer_fifos_arrays.keys():
             array_gap_brams = self.bram_memory_resource_model(
                 layer_fifos_arrays["gap_array"], 30
             )
+            if layer_fifos_arrays["gap_array"] < 100:
+                array_gap_brams = 0
             bram_raw += array_gap_brams * coarse_inout
 
         bram_util = (bram_raw / self.bram) * 100

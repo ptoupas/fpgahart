@@ -302,11 +302,11 @@ def generate_layer_config(layer, config):
         layer_config["shape_out"] = output_shape
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, ElementWiseLayer):
-        input_shape = layer.full_shape
-        output_shape = layer.full_shape
+        input_shape = layer.input_shape
+        output_shape = layer.input_shape
         broadcasting = 1 if layer.broadcasting else 0
         op_type = layer.type
-        coarse_factor = int(config[0] * layer.full_shape[1])
+        coarse_factor = int(config[0] * layer.input_shape[1])
         layer_config["shape_in"] = input_shape
         layer_config["shape_out"] = output_shape
         layer_config["broadcasting"] = broadcasting
