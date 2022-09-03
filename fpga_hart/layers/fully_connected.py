@@ -93,20 +93,17 @@ class FCLayer(BaseLayer):
         if DEBUG:
             print("II:\n{}".format(ii_matrix))
 
-        max_parallel_muls = math.ceil(self.dim_in * coarse_in) * math.ceil(
+        max_parallel_muls = math.ceil(
             self.dim_out * coarse_out
-        )
-        max_parallel_adds = math.ceil(self.dim_in * coarse_in) * math.ceil(
+        )  # math.ceil(self.dim_in * coarse_in)
+        max_parallel_adds = math.ceil(
             self.dim_out * coarse_out
-        )
+        )  # math.ceil(self.dim_in * coarse_in)
 
         layer_fifos_arrays = {"fc_array": 0}
-        # TODO: Refine this layer_fifos_arrays
-        layer_fifos_arrays["fc_array"] = (
-            math.ceil(1 / coarse_in) + math.ceil(1 / coarse_out) + 1
-        )
-        # memory = self.dim_in * math.ceil(self.dim_out * coarse_out)
-        depth = math.ceil(self.dim_in * coarse_in)
+        layer_fifos_arrays["fc_array"] = math.ceil(1 / coarse_out)
+
+        depth = 2  # math.ceil(self.dim_in * coarse_in)
 
         (
             latency_sec,
@@ -137,7 +134,7 @@ class FCLayer(BaseLayer):
             thr_in, thr_out
         ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
 
-        if dsps_util < self.max_DSP_util:  # and bram_util < self.max_BRAM_util:
+        if dsps_util < self.max_DSP_util and bram_util < self.max_BRAM_util:
             self.full_rate_in = [gamma_matrix_balanced[0, 0]]
             self.full_rate_out = [abs(gamma_matrix_balanced[-1, -1])]
             self.max_parallel_muls = max_parallel_muls
@@ -161,14 +158,25 @@ class FCLayer(BaseLayer):
             if DEBUG:
                 print(
                     "*" * 40,
-                    "\nin factor={} out factor={} latency={} depth={}, max_parallel_muls={}".format(
-                        coarse_in, coarse_out, int(latency_cycles), depth, dsps_util
+                    "\nin factor={} out factor={} latency={} depth={}, dsps_util={}({}), bram_util={}({})".format(
+                        coarse_in,
+                        coarse_out,
+                        int(latency_cycles),
+                        depth,
+                        dsps_util,
+                        dsps_raw,
+                        bram_util,
+                        bram_raw,
                     ),
                 )
         else:
             self.update_layer()
             if DEBUG:
-                print("Discarding design point.")
+                print(
+                    "Discarding design point. DSP = {:.2f} - BRAM = {:.2f}".format(
+                        dsps_util, bram_util
+                    )
+                )
 
         return self.get_dp_info()
 
@@ -196,9 +204,7 @@ class FCLayer(BaseLayer):
 
         stream_matrix[0, 0] = 1
 
-        stream_matrix[0, 1] = math.ceil(self.dim_in * coarse_in) * math.ceil(
-            self.dim_out * coarse_out
-        )
+        stream_matrix[0, 1] = math.ceil(self.dim_out * coarse_out)
         stream_matrix[1, 1] = math.ceil(self.dim_out * coarse_out)
         stream_matrix[1, 2] = 1
 

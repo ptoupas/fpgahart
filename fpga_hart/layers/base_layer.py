@@ -204,7 +204,7 @@ class BaseLayer:
             )
             if layer_fifos_arrays["fc_array"] < 100:
                 array_fc_brams = 0
-            bram_raw += array_fc_brams * coarse_in * coarse_out
+            bram_raw += array_fc_brams * coarse_out # coarse_in
 
         if "gap_array" in layer_fifos_arrays.keys():
             array_gap_brams = self.bram_memory_resource_model(
