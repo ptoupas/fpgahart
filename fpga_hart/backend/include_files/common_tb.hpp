@@ -1,5 +1,4 @@
-#ifndef COMMON_TB_HPP_
-#define COMMON_TB_HPP_
+#pragma once
 
 #define MALLOC_USAGE
 #define ERROR_TOLERANCE 1e-1
@@ -188,5 +187,3 @@ void to_stream(T array[SIZE][STREAMS][K_H][K_W][K_D], hls::stream<T> out[STREAMS
 	}
 	return;
 }
-
-#endif // COMMON_TB_HPP_
