@@ -3,12 +3,15 @@ import json
 import os
 
 import pandas as pd
-from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
-                                                                elemwise_3d,
-                                                                gap_3d,
-                                                                relu_3d,
-                                                                shish_3d,
-                                                                sigmoid_3d)
+from fpga_hart.backend.python_prototyping.generate_data import (
+    conv_3d,
+    elemwise_3d,
+    gap_3d,
+    gemm,
+    relu_3d,
+    shish_3d,
+    sigmoid_3d,
+)
 from fpga_hart.layers.layer_parser import LayerParser
 from fpga_hart.utils import utils
 
@@ -17,6 +20,7 @@ from generate_top_level import generate_top_level_files
 from layers.generate_conv import generate_conv_files
 from layers.generate_elemwise import generate_elemwise_files
 from layers.generate_gap import generate_gap_files
+from layers.generate_gemm import generate_gemm_files
 from layers.generate_relu import generate_relu_files
 from layers.generate_sigmoid import generate_sigmoid_files
 from layers.generate_split import generate_split_files
@@ -85,6 +89,8 @@ def generate_layer_code(
         )
     elif "GlobalAveragePool" in layers_type:
         generate_gap_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+    elif "Gemm" in layers_type:
+        generate_gemm_files(layer_name, layers_config, f"{prefix}/{layer_name}")
     else:
         raise Exception(f"Layer {l} not supported")
 
@@ -135,6 +141,14 @@ def generate_layer_code(
     elif "GlobalAveragePool" in layers_type:
         # to be implemented
         gap_3d()
+    elif "Gemm" in layers_type:
+        gemm(
+            in_features=10,  # to be implemented
+            out_features=20,  # to be implemented
+            bias=False,
+            prefix="generated_data",
+            file_format="bin",
+        )
     else:
         raise Exception(f"Layer {l} not supported")
 

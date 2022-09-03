@@ -370,6 +370,51 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_da
         raise Exception("Format not supported")
 
 
+def gemm(
+    in_features: int,
+    out_features: int,
+    bias: bool = False,
+    prefix: str = "generated_data",
+    file_format: str = "bin",
+) -> None:
+    if not os.path.exists(prefix + "/gemm"):
+        os.makedirs(prefix + "/gemm")
+
+    x = torch.randn([1, in_features])
+    write_input_binary = x.numpy()
+    if file_format == "bin":
+        write_input_binary.tofile(prefix + "/gemm/input.dat")
+    elif file_format == "txt":
+        np.savetxt(prefix + "/gemm/input.dat", write_input_binary.flatten(), fmt="%.8f")
+    else:
+        raise Exception("Format not supported")
+
+    gemm = torch.nn.Linear(in_features, out_features, bias=bias)
+    weights = gemm.weight.detach().numpy()
+    print(
+        f"weights shape: {weights.shape}. Size in KB: {(weights.size * 2) / 1024:.4f}"
+    )
+    if file_format == "bin":
+        weights.transpose(1, 0).tofile(prefix + "/gemm/weights.dat")
+    elif file_format == "txt":
+        np.savetxt(
+            prefix + "/gemm/weights.dat", weights.transpose(1, 0).flatten(), fmt="%.8f"
+        )
+    else:
+        raise Exception("Format not supported")
+    if bias:
+        bias = gemm.bias.detach().numpy()
+    out = gemm(x)
+
+    write_out_binary = out.detach().numpy()
+    if file_format == "bin":
+        write_out_binary.tofile(prefix + "/gemm/output.dat")
+    elif file_format == "txt":
+        np.savetxt(prefix + "/gemm/output.dat", write_out_binary.flatten(), fmt="%.8f")
+    else:
+        raise Exception("Format not supported")
+
+
 def elemwise_3d(
     input_shape,
     input_shape_2,
@@ -1174,16 +1219,23 @@ def conv_3d(
     for i in range(kh):
         for j in range(kw):
             for k in range(kd - 1):
-                assert len(window_buffer[i][j][k]) == 0, (
-                    "There are still %d values in window_buffer [%d][%d][%d]"
-                    % (len(window_buffer[i][j][k]), i, j, k,)
+                assert (
+                    len(window_buffer[i][j][k]) == 0
+                ), "There are still %d values in window_buffer [%d][%d][%d]" % (
+                    len(window_buffer[i][j][k]),
+                    i,
+                    j,
+                    k,
                 )
 
     for i in range(kh):
         for j in range(kw - 1):
-            assert len(line_buffer[i][j]) == 0, (
-                "There are still %d values in line_buffer [%d][%d]"
-                % (len(line_buffer[i][j]), i, j,)
+            assert (
+                len(line_buffer[i][j]) == 0
+            ), "There are still %d values in line_buffer [%d][%d]" % (
+                len(line_buffer[i][j]),
+                i,
+                j,
             )
 
     for i in range(kh - 1):
@@ -1223,6 +1275,9 @@ def parse_args():
     parser.add_argument("--padding", nargs="+", default=[1, 1, 1], type=int)
     parser.add_argument("--stride", nargs="+", default=[1, 1, 1], type=int)
     parser.add_argument("--depthwise", default=False, action="store_true")
+    parser.add_argument("--bias", default=False, action="store_true")
+    parser.add_argument("--in_features", default=200, type=int)
+    parser.add_argument("--out_features", default=400, type=int)
     parser.add_argument("--coarse_in", default=1, type=int)
     parser.add_argument("--coarse_out", default=1, type=int)
     parser.add_argument(
@@ -1279,5 +1334,7 @@ if __name__ == "__main__":
         gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
     elif op_type == "3d_part":
         part_3d(args.format, args.config_file, "generated_data/" + args.prefix)
+    elif op_type == "fully_connected":
+        gemm(args.in_features, args.out_features, args.bias)
     else:
         print("Invalid op_type: %s" % op_type)
