@@ -1357,7 +1357,7 @@ class SimulatedAnnealing(BaseLayer):
                     return None
 
             if bb in ["Conv3DDw", "Conv3DPw"]:
-                bb_setup[bb]["HINT_shape_in"] = [
+                bb_setup[bb]["shape_in_max"] = [
                     1,
                     channels_in_dim,
                     depth_in_dim,
@@ -1367,10 +1367,7 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["coarse_in"] = coarse_in
                 bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
-                bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
-                    channels_in_dim * coarse_in
-                )
-                bb_setup[bb]["HINT_shape_out"] = [
+                bb_setup[bb]["shape_out_max"] = [
                     1,
                     channels_out_dim,
                     depth_out_dim,
@@ -1380,11 +1377,8 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["coarse_out"] = coarse_out
                 bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
-                bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
-                    channels_out_dim * coarse_out
-                )
             elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
-                bb_setup[bb]["HINT_shape_in"] = [
+                bb_setup[bb]["shape_in_max"] = [
                     1,
                     channels_in_dim,
                     depth_in_dim,
@@ -1396,24 +1390,16 @@ class SimulatedAnnealing(BaseLayer):
                     coarse_inout * channels_in_dim
                 )
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
-                bb_setup[bb]["interleaving_pad_inout"] = channels_in_dim % math.ceil(
-                    channels_in_dim * coarse_inout
-                )
             elif bb == "Gemm":
-                bb_setup[bb]["HINT_shape_in"] = [1, channels_in_dim]
+                bb_setup[bb]["shape_in_max"] = [1, channels_in_dim]
                 bb_setup[bb]["coarse_in"] = coarse_in
                 bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
-                bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
-                    channels_in_dim * coarse_in
-                )
-                bb_setup[bb]["HINT_shape_out"] = [1, channels_out_dim]
+                bb_setup[bb]["shape_out_max"] = [1, channels_out_dim]
                 bb_setup[bb]["coarse_out"] = coarse_out
                 bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
-                bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
-                    channels_out_dim * coarse_out
-                )
+
             bb_setup[bb]["DSP_util"] = dsp_util
             bb_setup[bb]["BRAM_util"] = bram_util
             total_dsp += dsp_util
@@ -1437,11 +1423,11 @@ class SimulatedAnnealing(BaseLayer):
                 # TODO: Search how to deal with cases where the output dimensions are also altered? Like in convolutional layers with stride > 1.
                 shape_calls = math.ceil(
                     hw.input_shape[2]
-                    / bblocks_config[bb_type]["HINT_shape_in"][2]
+                    / bblocks_config[bb_type]["shape_in_max"][2]
                     * hw.input_shape[3]
-                    / bblocks_config[bb_type]["HINT_shape_in"][3]
+                    / bblocks_config[bb_type]["shape_in_max"][3]
                     * hw.input_shape[4]
-                    / bblocks_config[bb_type]["HINT_shape_in"][4]
+                    / bblocks_config[bb_type]["shape_in_max"][4]
                 )
             if bb_type in ["Conv3DDw", "Conv3DPw"]:
                 in_calls = math.ceil(
@@ -1637,11 +1623,31 @@ class SimulatedAnnealing(BaseLayer):
                 end="\r",
             )
 
-        print(f"{current_temp:.5e}\t{prev_cost:.5e}")
-        print(f"Optimization finished. Block setup: {prev_state}")
-        print(f"Final per layer configuration: {prev_scheduling}")
+        print(f"{current_temp:.5e}\t{prev_cost:.5e}\n")
+        final_config = deepcopy(prev_state)
+        final_DSP_util = 0
+        final_BRAM_util = 0
+        final_avg_MemBw_util = 0
+        for key in final_config:
+            final_config[key].pop("hw")
+            final_DSP_util += final_config[key]["DSP_util"]
+            final_BRAM_util += final_config[key]["BRAM_util"]
+            final_avg_MemBw_util += final_config[key]["MemBw_util"]
+
+        final_avg_MemBw_util = final_avg_MemBw_util / len(final_config)
+        print(
+            f"DSP Utilization: {final_DSP_util:.3f} - BRAM Utilization: {final_BRAM_util:.3f} - MemBw Utilization: {final_avg_MemBw_util:.3f}"
+        )
+        print(
+            f"Optimization finished. Block setup: {json.dumps(final_config, indent=2)}"
+        )
+        print(f"Final per layer configuration: {json.dumps(prev_scheduling, indent=2)}")
         if not self.wandb_config == None:
+            artifact = wandb.Artifact("config", type="json")
+            with artifact.new_file("config.json") as f:
+                json.dump(final_config, f, indent=2)
+            wandb.log_artifact(artifact)
             artifact = wandb.Artifact("scheduling", type="json")
             with artifact.new_file("scheduling.json") as f:
-                json.dump(prev_scheduling, f)
+                json.dump(prev_scheduling, f, indent=2)
             wandb.log_artifact(artifact)
