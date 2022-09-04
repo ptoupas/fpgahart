@@ -273,6 +273,7 @@ def generate_layer_config(layer, config):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
         kerner_shape = layer.kernel_shape
+        bias_shape = layer.bias_shape
         padding = layer.padding
         stride = layer.stride
         groups = layer.groups
@@ -284,6 +285,7 @@ def generate_layer_config(layer, config):
         layer_config["shape_in"] = input_shape
         layer_config["shape_out"] = output_shape
         layer_config["shape_kernel"] = kerner_shape
+        layer_config["shape_bias"] = bias_shape
         layer_config["padding"] = padding
         layer_config["stride"] = stride
         layer_config["groups"] = groups
@@ -322,14 +324,16 @@ def generate_layer_config(layer, config):
     elif isinstance(layer, SqueezeExcitationLayer):
         pass
     elif isinstance(layer, FCLayer):
-        input_shape = layer.dim_in
-        output_shape = layer.dim_out
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
         weights_shape = layer.weights_shape
+        bias_shape = layer.bias_shape
         coarse_in_factor = int(config[0] * layer.dim_in)
         coarse_out_factor = int(config[1] * layer.dim_out)
         layer_config["shape_in"] = input_shape
         layer_config["shape_out"] = output_shape
         layer_config["shape_weights"] = weights_shape
+        layer_config["shape_bias"] = bias_shape
         layer_config["coarse_in_factor"] = coarse_in_factor
         layer_config["coarse_out_factor"] = coarse_out_factor
     else:
@@ -734,7 +738,7 @@ def get_random_shape(
         shape_in = final_shapes[0]
         shape_out = final_shapes[1]
         if previous_config is not None:
-            prev_shape_in = previous_config[bb_type]["HINT_shape_in"]
+            prev_shape_in = previous_config[bb_type]["shape_in_max"]
             mape_channels = (
                 abs(prev_shape_in[1] - shape_in[1]) / abs(prev_shape_in[1])
             ) * 100
