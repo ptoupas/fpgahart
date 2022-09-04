@@ -15,12 +15,9 @@ import pandas as pd
 import scipy.constants as sc
 import wandb
 from fpga_hart import _logger
-from fpga_hart.utils.graph_manipulation import (
-    add_off_chip_connections,
-    has_gap,
-    split_graph,
-    visualize_graph,
-)
+from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
+                                                has_gap, split_graph,
+                                                visualize_graph)
 
 from ..layers.activation import ActivationLayer
 from ..layers.base_layer import BaseLayer
@@ -1159,6 +1156,7 @@ class SimulatedAnnealing(BaseLayer):
             "Activation",
             "GlobalAveragePool",
             "ElementWise",
+            "Gemm",
         ]
         assert self.validate_building_blocks_setup(
             bblocks
@@ -1184,18 +1182,21 @@ class SimulatedAnnealing(BaseLayer):
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
 
-            # print(f"Generating configuration for {bb}")
             shape_in, shape_out = utils.get_random_shape(
                 self.graph, bb, previous_config=previous_config
             )
-            _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
-            (
-                _,
-                channels_out_dim,
-                depth_out_dim,
-                height_out_dim,
-                width_out_dim,
-            ) = shape_out
+
+            if bb != "Gemm":
+                _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
+                (
+                    _,
+                    channels_out_dim,
+                    depth_out_dim,
+                    height_out_dim,
+                    width_out_dim,
+                ) = shape_out
+            else:
+                channels_in_dim, channels_out_dim = shape_in[1], shape_out[1]
 
             if bb == "Conv3DDw":
                 bb_descriptor = {
@@ -1283,6 +1284,14 @@ class SimulatedAnnealing(BaseLayer):
                         width_in_dim,
                     ],
                 }
+            elif bb == "Gemm":
+                bb_descriptor = {
+                    "operation": "Gemm",
+                    "shape_in": [[1, channels_in_dim]],
+                    "shape_out": [1, channels_out_dim],
+                    "kernel": [channels_in_dim, channels_out_dim],
+                    "bias": [channels_out_dim],
+                }
 
             if bb in ["Conv3DDw", "Conv3DPw"]:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
@@ -1298,6 +1307,10 @@ class SimulatedAnnealing(BaseLayer):
                 )
             elif bb == "ElementWise":
                 bb_setup[bb]["hw"] = ElementWiseLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+            elif bb == "Gemm":
+                bb_setup[bb]["hw"] = FCLayer(
                     self.max_DSP_util, self.max_BRAM_util, bb_descriptor
                 )
 
@@ -1330,6 +1343,15 @@ class SimulatedAnnealing(BaseLayer):
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarse_inout=coarse_inout
                     )
+                elif bb == "Gemm":
+                    coarse_in = 1  # (np.random.choice(np.arange(channels_in_dim) + 1, replace=False) / channels_in_dim )
+                    coarse_out = (
+                        np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
+                        / channels_out_dim
+                    )
+                    dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                        f_coarseIn=coarse_in, f_coarseOut=coarse_out
+                    )
                 stop_counter += 1
                 if stop_counter > 50:
                     return None
@@ -1344,7 +1366,7 @@ class SimulatedAnnealing(BaseLayer):
                 ]
                 bb_setup[bb]["coarse_in"] = coarse_in
                 bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
-                bb_setup[bb]["interleaving_in"] = 1 // coarse_in
+                bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
                 bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
                     channels_in_dim * coarse_in
                 )
@@ -1357,7 +1379,7 @@ class SimulatedAnnealing(BaseLayer):
                 ]
                 bb_setup[bb]["coarse_out"] = coarse_out
                 bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
-                bb_setup[bb]["interleaving_out"] = 1 // coarse_out
+                bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
                 bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
                     channels_out_dim * coarse_out
                 )
@@ -1373,9 +1395,24 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["streams_inout"] = math.ceil(
                     coarse_inout * channels_in_dim
                 )
-                bb_setup[bb]["interleaving_inout"] = 1 // coarse_inout
+                bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
                 bb_setup[bb]["interleaving_pad_inout"] = channels_in_dim % math.ceil(
                     channels_in_dim * coarse_inout
+                )
+            elif bb == "Gemm":
+                bb_setup[bb]["HINT_shape_in"] = [1, channels_in_dim]
+                bb_setup[bb]["coarse_in"] = coarse_in
+                bb_setup[bb]["streams_in"] = math.ceil(coarse_in * channels_in_dim)
+                bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
+                bb_setup[bb]["interleaving_pad_in"] = channels_in_dim % math.ceil(
+                    channels_in_dim * coarse_in
+                )
+                bb_setup[bb]["HINT_shape_out"] = [1, channels_out_dim]
+                bb_setup[bb]["coarse_out"] = coarse_out
+                bb_setup[bb]["streams_out"] = math.ceil(coarse_out * channels_out_dim)
+                bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
+                bb_setup[bb]["interleaving_pad_out"] = channels_out_dim % math.ceil(
+                    channels_out_dim * coarse_out
                 )
             bb_setup[bb]["DSP_util"] = dsp_util
             bb_setup[bb]["BRAM_util"] = bram_util
@@ -1431,6 +1468,22 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 )
                 total_block_calls = inout_calls * shape_calls
+            elif bb_type == "Gemm":
+                in_calls = math.ceil(
+                    hw.input_shape[1]
+                    / (
+                        bblocks_config[bb_type]["streams_in"]
+                        * bblocks_config[bb_type]["interleaving_in"]
+                    )
+                )
+                out_calls = math.ceil(
+                    hw.output_shape[1]
+                    / (
+                        bblocks_config[bb_type]["streams_out"]
+                        * bblocks_config[bb_type]["interleaving_out"]
+                    )
+                )
+                total_block_calls = out_calls * shape_calls  # in_calls
 
             # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
             if bb_type in ["Conv3DDw", "Conv3DPw"]:
@@ -1464,6 +1517,13 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                 )
                 bblocks_config[bb_type]["hw"].type = "ElementWise"
+            elif bb_type == "Gemm":
+                r = bblocks_config[bb_type]["hw"].get_design_point(
+                    coarse_in=bblocks_config[bb_type]["coarse_in"],
+                    coarse_out=bblocks_config[bb_type]["coarse_out"],
+                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                )
 
             # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
 
@@ -1472,7 +1532,7 @@ class SimulatedAnnealing(BaseLayer):
             latency = r["latency(S)"] * math.ceil(total_block_calls)
             avg_BW += r["memBwUtil"]
             assert math.ceil(total_block_calls) > 0, "Zero calls aborting..."
-            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+            if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]:
                 scheduling[node] = {
                     "Block Type": bb_type,
                     "Times Called (channels)": in_calls,
@@ -1481,7 +1541,7 @@ class SimulatedAnnealing(BaseLayer):
                     "Latency": latency,
                     "Base Latency": r["latency(S)"],
                 }
-            elif bb_type in ["Activation", "GlobalAveragePool"]:
+            elif bb_type in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 scheduling[node] = {
                     "Block Type": bb_type,
                     "Times Called (channels)": inout_calls,
@@ -1504,7 +1564,6 @@ class SimulatedAnnealing(BaseLayer):
 
         bblocks = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(bblocks)
-
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
             bblocks_config
         )

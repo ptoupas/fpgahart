@@ -720,7 +720,11 @@ def get_random_shape(
     shapes_list = []
     for n in graph.nodes():
         bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
+        if bb == bb_type and bb == "Gemm":
+            shapes_list.append(
+                [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
+            )
+        elif bb == bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
             shapes_list.append(
                 [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
             )

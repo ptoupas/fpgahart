@@ -281,6 +281,7 @@ class PartitionParser(PartitionDescriptor):
                     self.layers[layer]["operation"], layer
                 )
             if self.layers[layer]["operation"] == "Conv":
+                # TODO: check the two first convolutional layers and how to support them
                 hw_type = utils.get_conv_type(
                     layer=self.layers[layer],
                     discriminate_kernel_size=False,

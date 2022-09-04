@@ -264,20 +264,22 @@ class PartitionDescriptor(ModelLayerDescriptor):
         processing element to support all the convolutional layers in the graph.
         """
 
-        # Here we get all the convolutional layers in the graph but the first two
+        # Here we get all the layers in the graph but the first two convolutional layers
         sub_layers = [
             layer
             for layer, config in self.layers.items()
             if config["operation"]
-            in ["Conv", "Relu", "Sigmoid", "Swish", "GlobalAveragePool", "Add", "Mul"]
+            in [
+                "Conv",
+                "Relu",
+                "Sigmoid",
+                "Swish",
+                "GlobalAveragePool",
+                "Add",
+                "Mul",
+                "Gemm",
+            ]
         ][2:]
-
-        # Create a graph with the convolutional layers in sequential order
-        # count = 0
-        # for layer in sub_layers:
-        #     self.layers[layer]["node_in"] = [str(count)]
-        #     self.layers[layer]["node_out"] = str(count + 1)
-        #     count += 1
 
         graph = self.create_graph(sub_layers)
         self.visualize_graph(
@@ -285,7 +287,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
             os.getcwd() + "/fpga_modeling_reports/graphs/x3d_m/sequential_conv",
             run_id=None,
         )
-
         optimizer = SimulatedAnnealing(
             graph,
             t_min=1e-5,
@@ -295,7 +296,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
             ml_flow_id=None,
             wandb_config=wandb_config,
         )
-        # We somehow need to identify and search for the best unique blocks
         optimizer.run_optimizer_latency()
         return
 

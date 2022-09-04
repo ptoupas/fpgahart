@@ -1,8 +1,9 @@
 import math
+from typing import Tuple
 
 import numpy as np
 
-from .base_layer import BaseLayer
+from ..layers.base_layer import BaseLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -31,6 +32,7 @@ class FCLayer(BaseLayer):
         self.depth = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
+        self.total_bw_util = 0
         self.config = []
         self.dsps_util = 0
         self.dsps_raw = 0
@@ -64,9 +66,39 @@ class FCLayer(BaseLayer):
         dp_info["memKBs"] = self.memoryKB
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
+        dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
 
         return dp_info
+
+    def get_resource_util(
+        self,
+        f_coarseIn: np.float64,
+        f_coarseOut: np.float64,
+    ) -> Tuple[float, float]:
+
+        muls = math.ceil(
+            self.dim_out * f_coarseOut
+        )  # math.ceil(self.dim_in * f_coarseIn)
+        adds = math.ceil(
+            self.dim_out * f_coarseOut
+        )  # math.ceil(self.dim_in * f_coarseIn)
+
+        layer_fifos_arrays = {"fc_array": 0}
+        layer_fifos_arrays["fc_array"] = math.ceil(1 / f_coarseOut)
+
+        (_, _, _, _, dsps_util, _, bram_util, _, _,) = self.get_dp_performance(
+            np.zeros(shape=(2, 3), dtype=float),
+            np.zeros(shape=(2, 3), dtype=float),
+            muls,
+            adds,
+            layer_fifos_arrays,
+            0,
+            coarse_in=math.ceil(self.dim_in * f_coarseIn),
+            coarse_out=math.ceil(self.dim_out * f_coarseOut),
+        )
+
+        return dsps_util, bram_util
 
     def get_num_streams(self):
         self.max_streams_in = self.dim_in
@@ -88,6 +120,17 @@ class FCLayer(BaseLayer):
         )
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+
+        layer_mem_bw_in = (
+            abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+        )
+        layer_mem_bw_out = (
+            abs(gamma_matrix_balanced[-1, -1]) * self.cycles_per_sec * self.word_length
+        )
+        total_bw_util = (
+            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+        ) * 100
+
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
         if DEBUG:
@@ -142,6 +185,7 @@ class FCLayer(BaseLayer):
             self.depth = depth
             self.mem_bd_in = [mem_bounded_in]
             self.mem_bd_out = [mem_bounded_out]
+            self.total_bw_util = total_bw_util
 
             config = [coarse_in, coarse_out, mem_bw_in, mem_bw_out]
             self.config = config
