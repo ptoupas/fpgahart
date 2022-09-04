@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -937,12 +938,87 @@ def conv_3d(
     prefix="generated_data",
     layer_name="conv_3d",
 ):
+    def get_sliding_window_output(data, kernel, padding, stride):
+        batch_size, height, width, depth, channels = data.shape
+        kernel_depth, kernel_height, kernel_width = kernel
+        pad_depth, pad_height, pad_width = padding
+        stride_depth, stride_height, stride_width = stride
+
+        data_padded = np.ndarray(
+            (
+                batch_size,
+                height + 2 * pad_height,
+                width + 2 * pad_width,
+                depth + 2 * pad_depth,
+                channels,
+            ),
+            dtype=float,
+        )
+
+        for index, _ in np.ndenumerate(data_padded):
+            if index[1] < pad_height:
+                data_padded[index] = 0
+            elif index[2] < pad_width:
+                data_padded[index] = 0
+            elif index[3] < pad_depth:
+                data_padded[index] = 0
+            elif index[1] > height - 1 + pad_height:
+                data_padded[index] = 0
+            elif index[2] > width - 1 + pad_width:
+                data_padded[index] = 0
+            elif index[3] > depth - 1 + pad_depth:
+                data_padded[index] = 0
+            else:
+                data_padded[index] = data[
+                    index[0],
+                    index[1] - pad_height,
+                    index[2] - pad_width,
+                    index[3] - pad_depth,
+                    index[4],
+                ]
+
+        height_out = math.floor(
+            (height + 2 * pad_height - kernel_height) / stride_height + 1
+        )
+        width_out = math.floor(
+            (width + 2 * pad_width - kernel_width) / stride_width + 1
+        )
+        depth_out = math.floor(
+            (depth + 2 * pad_depth - kernel_depth) / stride_depth + 1
+        )
+        out = np.ndarray(
+            (
+                batch_size,
+                height_out,
+                width_out,
+                depth_out,
+                channels,
+                kernel_height,
+                kernel_width,
+                kernel_depth,
+            ),
+            dtype=float,
+        )
+
+        for index, _ in np.ndenumerate(out):
+            out[index] = data_padded[
+                index[0],
+                index[1] * stride_height + index[5],
+                index[2] * stride_width + index[6],
+                index[3] * stride_depth + index[7],
+                index[4],
+            ]
+
+        return out
+
     if not os.path.exists(prefix + "/" + layer_name):
         os.makedirs(prefix + "/" + layer_name)
 
     x = torch.randn(input_shape)
     print(f"input shape: {x.numpy().shape}")
-    # print(x.numpy())
+    # sliding_window_out = get_sliding_window_output(
+    #     x.numpy().transpose(0, 3, 4, 2, 1), kernel_shape, padding, stride
+    # )
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
