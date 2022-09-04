@@ -927,6 +927,7 @@ def generate_onnx(model, input_data, file_name):
 def conv_3d(
     input_shape,
     kernel_shape,
+    bias,
     filters,
     padding,
     stride,
@@ -1039,7 +1040,7 @@ def conv_3d(
         stride=stride,
         padding=padding,
         groups=groups,
-        bias=False,
+        bias=bias,
     )
     weights = conv.weight
     print(f"weights shape: {weights.detach().numpy().shape}")
@@ -1337,8 +1338,21 @@ def conv_3d(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="3D sliding window prototying script")
-    parser.add_argument("--op_type", type=str, required=True)
-    parser.add_argument("--prefix", type=str, required=True)
+    parser.add_argument(
+        "op_type",
+        type=str,
+        choices=[
+            "3d_conv",
+            "3d_relu",
+            "3d_swish",
+            "3d_sigmoid",
+            "3d_elemwise",
+            "3d_gap",
+            "3d_part",
+            "gemm",
+        ],
+    )
+    parser.add_argument("--prefix", default="", type=str)
     parser.add_argument(
         "--input_shape", nargs="+", default=[1, 24, 16, 32, 32], type=int
     )
@@ -1375,6 +1389,7 @@ if __name__ == "__main__":
         conv_3d(
             args.input_shape,
             args.kernel_shape,
+            args.bias,
             args.filters,
             args.padding,
             args.stride,
@@ -1398,19 +1413,11 @@ if __name__ == "__main__":
             args.elemwise_op_type,
             args.format,
         )
-    elif op_type == "3d_elemwise_bc_relu":
-        elemwise_broadcast_3d(
-            args.input_shape,
-            args.input_shape_2,
-            args.coarse_in,
-            args.elemwise_op_type,
-            args.format,
-        )
     elif op_type == "3d_gap":
         gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
     elif op_type == "3d_part":
         part_3d(args.format, args.config_file, "generated_data/" + args.prefix)
-    elif op_type == "fully_connected":
+    elif op_type == "gemm":
         gemm(args.in_features, args.out_features, args.bias)
     else:
         print("Invalid op_type: %s" % op_type)
