@@ -92,7 +92,7 @@ def generate_layer_code(
     elif "Gemm" in layers_type:
         generate_gemm_files(layer_name, layers_config, f"{prefix}/{layer_name}")
     else:
-        raise Exception(f"Layer {l} not supported")
+        raise Exception(f"Layer {layers_type} not supported")
 
     # Generate top level partition file
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
@@ -142,15 +142,18 @@ def generate_layer_code(
         # to be implemented
         gap_3d()
     elif "Gemm" in layers_type:
+        shape_in = layers_config["shape_in"]
+        shape_out = layers_config["shape_out"]
+        shape_bias = layers_config["shape_bias"]
         gemm(
-            in_features=10,  # to be implemented
-            out_features=20,  # to be implemented
-            bias=False,
+            in_features=shape_in[1],
+            out_features=shape_out[1],
+            bias=True if shape_bias else False,
             prefix="generated_data",
             file_format="bin",
         )
     else:
-        raise Exception(f"Layer {l} not supported")
+        raise Exception(f"Layer {layers_type} not supported")
 
 
 if __name__ == "__main__":
@@ -161,6 +164,7 @@ if __name__ == "__main__":
         se_block=False,
         singlethreaded=False,
         per_layer_plot=False,
+        wandb_config=None,
     )
 
     layer_configuration = get_layers_configurations(args.config_file)
