@@ -1415,7 +1415,7 @@ class SimulatedAnnealing(BaseLayer):
                     height_in_dim,
                     width_in_dim,
                 ]
-                bb_setup[bb]["shape_out"] = bb_setup[bb]["shape_in"]
+                bb_setup[bb]["shape_out"] = bb_descriptor["shape_out"]
                 bb_setup[bb]["coarse_inout"] = coarse_inout
                 bb_setup[bb]["coarse_factor"] = int(coarse_inout * channels_in_dim)
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
