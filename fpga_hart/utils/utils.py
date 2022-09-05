@@ -11,19 +11,18 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from fpga_hart import _logger
+from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
+from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
+from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.fully_connected import FCLayer
+from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from matplotlib import pyplot as plt
 from regex import F
 from scipy.spatial.distance import cdist
 from sklearn import metrics
 from sklearn.cluster import KMeans
-
-from ..layers.activation import ActivationLayer
-from ..layers.batchnorm_3d import BatchNorm3DLayer
-from ..layers.convolutional_3d import Convolutional3DLayer
-from ..layers.elemwise import ElementWiseLayer
-from ..layers.fully_connected import FCLayer
-from ..layers.gap import GAPLayer
-from ..layers.squeeze_excitation import SqueezeExcitationLayer
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")

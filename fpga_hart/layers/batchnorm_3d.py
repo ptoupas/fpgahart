@@ -1,8 +1,7 @@
 import math
 
 import numpy as np
-
-from .base_layer import BaseLayer
+from fpga_hart.layers.base_layer import BaseLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")

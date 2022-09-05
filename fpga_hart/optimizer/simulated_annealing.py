@@ -15,21 +15,23 @@ import pandas as pd
 import scipy.constants as sc
 import wandb
 from fpga_hart import _logger
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                has_gap, split_graph,
-                                                visualize_graph)
-
-from ..layers.activation import ActivationLayer
-from ..layers.base_layer import BaseLayer
-from ..layers.batchnorm_3d import BatchNorm3DLayer
-from ..layers.convolutional_3d import Convolutional3DLayer
-from ..layers.elemwise import ElementWiseLayer
-from ..layers.fully_connected import FCLayer
-from ..layers.gap import GAPLayer
-from ..layers.memory_interface import MemoryNode
-from ..layers.squeeze_excitation import SqueezeExcitationLayer
-from ..partitions.partition_compose import PartitionComposer
-from ..utils import utils
+from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
+from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
+from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.fully_connected import FCLayer
+from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.memory_interface import MemoryNode
+from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
+from fpga_hart.partitions.partition_compose import PartitionComposer
+from fpga_hart.utils import utils
+from fpga_hart.utils.graph_manipulation import (
+    add_off_chip_connections,
+    has_gap,
+    split_graph,
+    visualize_graph,
+)
 
 
 class SimulatedAnnealing(BaseLayer):

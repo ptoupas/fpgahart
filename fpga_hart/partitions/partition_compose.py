@@ -3,17 +3,17 @@ from collections import deque
 
 import networkx as nx
 import numpy as np
-
-from ..layers.activation import ActivationLayer
-from ..layers.base_layer import BaseLayer
-from ..layers.batchnorm_3d import BatchNorm3DLayer
-from ..layers.convolutional_3d import Convolutional3DLayer
-from ..layers.elemwise import ElementWiseLayer
-from ..layers.fully_connected import FCLayer
-from ..layers.gap import GAPLayer
-from ..layers.squeeze_excitation import SqueezeExcitationLayer
-from ..utils import utils
-from ..utils.matrix_balancing import balance_matrix, balance_memory_rates
+from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
+from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
+from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.fully_connected import FCLayer
+from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
+from fpga_hart.utils import utils
+from fpga_hart.utils.matrix_balancing import (balance_matrix,
+                                              balance_memory_rates)
 
 np.set_printoptions(precision=5, suppress=True, linewidth=250)
 np.seterr(divide="ignore", invalid="ignore")

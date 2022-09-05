@@ -2,13 +2,12 @@ import math
 
 import numpy as np
 import scipy.optimize as optimize
+from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
+from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.gap import GAPLayer
 from scipy.optimize import Bounds, NonlinearConstraint
-
-from .activation import ActivationLayer
-from .base_layer import BaseLayer
-from .convolutional_3d import Convolutional3DLayer
-from .elemwise import ElementWiseLayer
-from .gap import GAPLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")

@@ -7,11 +7,10 @@ from multiprocessing import Pool
 import numpy as np
 import wandb
 from fpga_hart import _logger
+from fpga_hart.layers.layer_design import layer_design_points
+from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
+from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
-
-from ..network_representation.model_descriptor import ModelLayerDescriptor
-from ..utils import utils
-from .layer_design import layer_design_points
 
 
 def multithreaded_modeling(operation, input, pool):

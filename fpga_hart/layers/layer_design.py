@@ -8,16 +8,15 @@ import networkx as nx
 import numpy as np
 import wandb
 from fpga_hart import _logger
-
-from ..layers.activation import ActivationLayer
-from ..layers.batchnorm_3d import BatchNorm3DLayer
-from ..layers.convolutional_3d import Convolutional3DLayer
-from ..layers.elemwise import ElementWiseLayer
-from ..layers.fully_connected import FCLayer
-from ..layers.gap import GAPLayer
-from ..layers.squeeze_excitation import SqueezeExcitationLayer
-from ..optimizer.simulated_annealing import SimulatedAnnealing
-from ..utils import utils
+from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
+from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
+from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.fully_connected import FCLayer
+from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
+from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.utils import utils
 
 
 def multithreaded_modeling(operation, input, pool):

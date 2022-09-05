@@ -5,10 +5,9 @@ from typing import Tuple
 
 import networkx as nx
 import numpy as np
-
-from ..layers.gap import GAPLayer
-from ..layers.memory_interface import MemoryNode
-from ..utils import utils
+from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.memory_interface import MemoryNode
+from fpga_hart.utils import utils
 
 
 def has_gap(graph: nx.DiGraph) -> bool:
