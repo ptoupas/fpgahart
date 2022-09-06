@@ -1460,7 +1460,7 @@ class SimulatedAnnealing(BaseLayer):
                     * hw.input_shape[4]
                     / bblocks_config[bb_type]["shape_in"][4]
                 )
-            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+            if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]:
                 in_calls = math.ceil(
                     hw.input_shape[1]
                     / (
@@ -1475,7 +1475,10 @@ class SimulatedAnnealing(BaseLayer):
                         * bblocks_config[bb_type]["interleaving_out"]
                     )
                 )
-                total_block_calls = in_calls * out_calls * shape_calls
+                if bb_type == "Gemm":
+                    total_block_calls = out_calls * shape_calls  # in_calls
+                else:
+                    total_block_calls = in_calls * out_calls * shape_calls
             elif bb_type in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 inout_calls = math.ceil(
                     hw.input_shape[1]
@@ -1485,22 +1488,6 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 )
                 total_block_calls = inout_calls * shape_calls
-            elif bb_type == "Gemm":
-                in_calls = math.ceil(
-                    hw.input_shape[1]
-                    / (
-                        bblocks_config[bb_type]["coarse_in_factor"]
-                        * bblocks_config[bb_type]["interleaving_in"]
-                    )
-                )
-                out_calls = math.ceil(
-                    hw.output_shape[1]
-                    / (
-                        bblocks_config[bb_type]["coarse_out_factor"]
-                        * bblocks_config[bb_type]["interleaving_out"]
-                    )
-                )
-                total_block_calls = out_calls * shape_calls  # in_calls
 
             # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
             if bb_type in ["Conv3DDw", "Conv3DPw"]:
@@ -1512,13 +1499,13 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
             elif bb_type == "Activation":
-                bblocks_config[bb_type]["hw"].activation_type = hw.activation_type
+                bblocks_config[bb_type]["hw"].op_type = hw.op_type
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
-                bblocks_config[bb_type]["hw"].activation_type = "Activation"
+                bblocks_config[bb_type]["hw"].op_type = "Activation"
             elif bb_type == "GlobalAveragePool":
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
@@ -1526,14 +1513,14 @@ class SimulatedAnnealing(BaseLayer):
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
             elif bb_type == "ElementWise":
-                bblocks_config[bb_type]["hw"].type = hw.type
+                bblocks_config[bb_type]["hw"].op_type = hw.op_type
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
                     mem_bw_in_1=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                     mem_bw_in_2=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                 )
-                bblocks_config[bb_type]["hw"].type = "ElementWise"
+                bblocks_config[bb_type]["hw"].op_type = "ElementWise"
             elif bb_type == "Gemm":
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_in=bblocks_config[bb_type]["coarse_in"],
@@ -1549,23 +1536,34 @@ class SimulatedAnnealing(BaseLayer):
             latency = r["latency(S)"] * math.ceil(total_block_calls)
             avg_BW += r["memBwUtil"]
             assert math.ceil(total_block_calls) > 0, "Zero calls aborting..."
-            if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]:
-                scheduling[node] = {
-                    "Block Type": bb_type,
-                    "Times Called (channels)": in_calls,
-                    "Times Called (filters)": out_calls,
-                    "Times Called (tiles)": math.ceil(shape_calls),
-                    "Latency": latency,
-                    "Base Latency": r["latency(S)"],
-                }
-            elif bb_type in ["Activation", "GlobalAveragePool", "ElementWise"]:
-                scheduling[node] = {
-                    "Block Type": bb_type,
-                    "Times Called (channels)": inout_calls,
-                    "Times Called (tiles)": math.ceil(shape_calls),
-                    "Latency": latency,
-                    "Base Latency": r["latency(S)"],
-                }
+            scheduling[node] = {
+                "Block Type": bb_type,
+                "Shape In": hw.input_shape,
+                "Shape In 2": hw.input_shape_red if bb_type == "ElementWise" else [],
+                "Shape Out": hw.output_shape,
+                "Times Called (channels)": in_calls
+                if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]
+                else inout_calls,
+                "Times Called (filters)": out_calls
+                if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]
+                else 1,
+                "Times Called (tiles)": math.ceil(shape_calls),
+                "Latency": latency,
+                "Base Latency": r["latency(S)"],
+                "Read From": list(self.graph.predecessors(node)),
+                "Write To": list(self.graph.successors(node)),
+                "Store To Mem": (True if self.graph.out_degree(node) > 1 else False),
+                "Load From Mem": (True if self.graph.in_degree(node) > 1 else False),
+                "Kernel Shape": hw.kernel_shape
+                if bb_type in ["Conv3DDw", "Conv3DPw"]
+                else [],
+                "Stride": hw.stride if bb_type in ["Conv3DDw", "Conv3DPw"] else [],
+                "Padding": hw.padding if bb_type in ["Conv3DDw", "Conv3DPw"] else [],
+                "Broadcast": hw.broadcasting if bb_type == "ElementWise" else False,
+                "Op Type": hw.op_type
+                if bb_type in ["Activation", "ElementWise"]
+                else "",
+            }
             cost += latency
 
         avg_BW = avg_BW / len(self.graph.nodes)
