@@ -1594,7 +1594,6 @@ class SimulatedAnnealing(BaseLayer):
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
     def run_optimizer_latency(self, alignedfactors: bool) -> None:
-        # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(bblocks, alignedfactors)

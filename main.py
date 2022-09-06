@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument(
         "--nonalignedfactors",
         action="store_true",
-        help="whether to allow the use of coarse factors not perfectly divisible by channels/filters or not",
+        help="whether to allow the use of folding factors not perfectly divisible by channels/filters or not",
     )
     parser.add_argument(
         "--disable_wandb",

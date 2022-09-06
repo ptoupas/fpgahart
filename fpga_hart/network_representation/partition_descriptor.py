@@ -297,6 +297,8 @@ class PartitionDescriptor(ModelLayerDescriptor):
             ml_flow_id=None,
             wandb_config=wandb_config,
         )
+        if wandb_config is not None:
+            wandb_config.update({"aligned_folding_factors": alignedfactors})
         optimizer.run_optimizer_latency(alignedfactors=alignedfactors)
         return
 
