@@ -53,6 +53,11 @@ def parse_args():
         help="whether to use historical data as approximation for GAP layers or not",
     )
     parser.add_argument(
+        "--nonalignedfactors",
+        action="store_true",
+        help="whether to allow the use of coarse factors not perfectly divisible by channels/filters or not",
+    )
+    parser.add_argument(
         "--disable_wandb",
         action="store_false",
         help="whether to disable wandb or not",
@@ -94,6 +99,7 @@ if __name__ == "__main__":
             partition_parser.latency_driven_design(
                 run_name="latency_driven_modeling",
                 plot_summaries=False,
+                alignedfactors=not args.nonalignedfactors,
                 wandb_config=config,
             )
     elif args.type == "layer":

@@ -257,6 +257,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
         self,
         run_name: str,
         plot_summaries: bool = False,
+        alignedfactors: bool = False,
         wandb_config: wandb.Config = None,
     ) -> None:
         """
@@ -296,7 +297,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
             ml_flow_id=None,
             wandb_config=wandb_config,
         )
-        optimizer.run_optimizer_latency()
+        optimizer.run_optimizer_latency(alignedfactors=alignedfactors)
         return
 
         conv_types = []

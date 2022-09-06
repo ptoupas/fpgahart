@@ -1164,7 +1164,7 @@ class SimulatedAnnealing(BaseLayer):
         return bblocks
 
     def generate_building_blocks_config(
-        self, bblocks: list, previous_config: dict = None
+        self, bblocks: list, alignedfactors: bool, previous_config: dict = None
     ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
@@ -1320,22 +1320,28 @@ class SimulatedAnnealing(BaseLayer):
             ):
 
                 if bb in ["Conv3DDw", "Conv3DPw"]:
-                    coarse_in = (
-                        random.choice(utils.get_factors(channels_in_dim))
-                        / channels_in_dim
-                    )
-                    coarse_out = (
-                        random.choice(utils.get_factors(channels_out_dim))
-                        / channels_out_dim
-                    )
-                    # coarse_in = (
-                    #     np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
-                    #     / channels_in_dim
-                    # )
-                    # coarse_out = (
-                    #     np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
-                    #     / channels_out_dim
-                    # )
+                    if alignedfactors:
+                        coarse_in = (
+                            random.choice(utils.get_factors(channels_in_dim))
+                            / channels_in_dim
+                        )
+                        coarse_out = (
+                            random.choice(utils.get_factors(channels_out_dim))
+                            / channels_out_dim
+                        )
+                    else:
+                        coarse_in = (
+                            np.random.choice(
+                                np.arange(channels_in_dim) + 1, replace=False
+                            )
+                            / channels_in_dim
+                        )
+                        coarse_out = (
+                            np.random.choice(
+                                np.arange(channels_out_dim) + 1, replace=False
+                            )
+                            / channels_out_dim
+                        )
                     if bb == "Conv3DDw":
                         coarse_out = coarse_in
 
@@ -1343,31 +1349,44 @@ class SimulatedAnnealing(BaseLayer):
                         f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
                 elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
-                    coarse_inout = (
-                        random.choice(utils.get_factors(channels_in_dim))
-                        / channels_in_dim
-                    )
-                    # coarse_inout = (
-                    #     np.random.choice(np.arange(channels_in_dim) + 1, replace=False)
-                    #     / channels_in_dim
-                    # )
+                    if alignedfactors:
+                        coarse_inout = (
+                            random.choice(utils.get_factors(channels_in_dim))
+                            / channels_in_dim
+                        )
+                    else:
+                        coarse_inout = (
+                            np.random.choice(
+                                np.arange(channels_in_dim) + 1, replace=False
+                            )
+                            / channels_in_dim
+                        )
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarse_inout=coarse_inout
                     )
                 elif bb == "Gemm":
-                    coarse_in = (
-                        random.choice(utils.get_factors(channels_in_dim))
-                        / channels_in_dim
-                    )
-                    coarse_out = (
-                        random.choice(utils.get_factors(channels_out_dim))
-                        / channels_out_dim
-                    )
-                    # coarse_in = (np.random.choice(np.arange(channels_in_dim) + 1, replace=False) / channels_in_dim )
-                    # coarse_out = (
-                    #     np.random.choice(np.arange(channels_out_dim) + 1, replace=False)
-                    #     / channels_out_dim
-                    # )
+                    if alignedfactors:
+                        coarse_in = (
+                            random.choice(utils.get_factors(channels_in_dim))
+                            / channels_in_dim
+                        )
+                        coarse_out = (
+                            random.choice(utils.get_factors(channels_out_dim))
+                            / channels_out_dim
+                        )
+                    else:
+                        coarse_in = (
+                            np.random.choice(
+                                np.arange(channels_in_dim) + 1, replace=False
+                            )
+                            / channels_in_dim
+                        )
+                        coarse_out = (
+                            np.random.choice(
+                                np.arange(channels_out_dim) + 1, replace=False
+                            )
+                            / channels_out_dim
+                        )
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
@@ -1574,18 +1593,20 @@ class SimulatedAnnealing(BaseLayer):
             final_BRAM += bblocks_config[bb]["BRAM_util"]
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
-    def run_optimizer_latency(self) -> None:
+    def run_optimizer_latency(self, alignedfactors: bool) -> None:
         # wandb.config.update({"config_generation": "mape_c70_w100"})
 
         bblocks = self.generate_building_blocks()
-        bblocks_config = self.generate_building_blocks_config(bblocks)
+        bblocks_config = self.generate_building_blocks_config(bblocks, alignedfactors)
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
             bblocks_config
         )
 
         if cost is None:
             for _ in range(100):
-                bblocks_config = self.generate_building_blocks_config(bblocks)
+                bblocks_config = self.generate_building_blocks_config(
+                    bblocks, alignedfactors
+                )
                 cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
                     bblocks_config
                 )
@@ -1616,7 +1637,7 @@ class SimulatedAnnealing(BaseLayer):
 
             for _ in range(self.iterationPerTemp):
                 new_state = self.generate_building_blocks_config(
-                    bblocks, previous_config=None
+                    bblocks, alignedfactors, previous_config=None
                 )
                 (
                     new_cost,
@@ -1667,10 +1688,6 @@ class SimulatedAnnealing(BaseLayer):
         print(
             f"DSP Utilization: {final_DSP_util:.3f} - BRAM Utilization: {final_BRAM_util:.3f} - MemBw Utilization: {final_avg_MemBw_util:.3f}"
         )
-        print(
-            f"Optimization finished. Block setup: {json.dumps(final_config, indent=2)}"
-        )
-        print(f"Final per layer configuration: {json.dumps(prev_scheduling, indent=2)}")
         if not self.wandb_config == None:
             artifact = wandb.Artifact("config", type="json")
             with artifact.new_file("config.json") as f:
