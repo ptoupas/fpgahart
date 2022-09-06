@@ -318,10 +318,10 @@ class PartitionParser(PartitionDescriptor):
             for pair in edge:
                 if (
                     graph.nodes[pair[0]]["type"] == "ElementWise"
-                    and graph.nodes[pair[0]]["hw"].type == "Mul"
+                    and graph.nodes[pair[0]]["hw"].op_type == "Mul"
                 ) or (
                     graph.nodes[pair[1]]["type"] == "ElementWise"
-                    and graph.nodes[pair[1]]["hw"].type == "Mul"
+                    and graph.nodes[pair[1]]["hw"].op_type == "Mul"
                 ):
                     continue
                 assert (

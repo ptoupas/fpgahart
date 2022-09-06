@@ -14,7 +14,7 @@ class ActivationLayer(BaseLayer):
     def __init__(self, max_DSP_util, max_BRAM_util, description):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 
-        self.activation_type = description["operation"]
+        self.op_type = description["operation"]
         self.input_shape = description["shape_in"][0]
         if len(self.input_shape) > 2:
             self.depth_in = self.input_shape[2]
@@ -59,11 +59,11 @@ class ActivationLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        if self.activation_type == "Relu":
+        if self.op_type == "Relu":
             return 1
-        elif self.activation_type == "Sigmoid":
+        elif self.op_type == "Sigmoid":
             return int(np.prod(np.array(self.output_shape[1:]))) * 5
-        elif self.activation_type == "Swish":
+        elif self.op_type == "Swish":
             return int(np.prod(np.array(self.output_shape[1:]))) * 6
 
     def get_resource_util(
@@ -150,15 +150,15 @@ class ActivationLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         layer_fifos_arrays = {}
-        if self.activation_type == "Relu":
+        if self.op_type == "Relu":
             max_parallel_muls = 0
             max_parallel_adds = 0
             depth = 2
-        elif self.activation_type == "Sigmoid":
+        elif self.op_type == "Sigmoid":
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 3)
             max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
             depth = 28  # 28 cycles is the delay for the execution of math for sigmoid. This value came up from some experiments on HLS.
-        elif self.activation_type == "Swish":
+        elif self.op_type == "Swish":
             max_parallel_muls = math.ceil(self.channels * coarse_inout * 4)
             max_parallel_adds = math.ceil(self.channels * coarse_inout * 2)
             depth = 33  # 33 cycles is the delay for the execution of math for swish. This value came up from some experiments on HLS.

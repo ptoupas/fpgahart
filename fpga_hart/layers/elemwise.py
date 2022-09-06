@@ -16,7 +16,7 @@ class ElementWiseLayer(BaseLayer):
 
         # Available options 'C' channel parallelism, 'DC' channel AND depth parallelism
         self.parrallel_dims = "C"
-        self.type = description["operation"]
+        self.op_type = description["operation"]
         self.input_shape_1 = description["shape_in"][0]
         self.depth_in_1 = self.input_shape_1[2]
         self.rows_in_1 = self.input_shape_1[3]
@@ -55,7 +55,7 @@ class ElementWiseLayer(BaseLayer):
             assert (
                 self.output_shape == self.input_shape
             ), "Elementwise layer ({}) input {} and output {} shapes does not match.".format(
-                self.type, self.input_shape, self.output_shape
+                self.op_type, self.input_shape, self.output_shape
             )
         else:
             self.input_shape = self.input_shape_1
@@ -64,7 +64,7 @@ class ElementWiseLayer(BaseLayer):
                 self.output_shape == self.input_shape_1
                 and self.output_shape == self.input_shape_2
             ), "Elementwise layer ({}) input 1 {}, input 2 {} and output {} shapes does not match.".format(
-                self.type, self.input_shape_1, self.input_shape_2, self.output_shape
+                self.op_type, self.input_shape_1, self.input_shape_2, self.output_shape
             )
 
     def update_layer(self):
@@ -89,11 +89,11 @@ class ElementWiseLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        if self.type == "Add":
+        if self.op_type == "Add":
             return 1
-        elif self.type == "Mul":
+        elif self.op_type == "Mul":
             return int(np.prod(np.array(self.output_shape[1:])))
-        elif self.type == "Div":
+        elif self.op_type == "Div":
             return int(np.prod(np.array(self.output_shape[1:]))) * 2
 
     def get_resource_util(
@@ -241,7 +241,7 @@ class ElementWiseLayer(BaseLayer):
         final_channel = self.input_shape[1]
         final_depth = self.input_shape[2]
 
-        if self.type == "Add":
+        if self.op_type == "Add":
             if self.parrallel_dims == "C":
                 max_parallel_adds = math.ceil(final_channel * coarse_inout)
                 max_parallel_muls = 0
@@ -250,7 +250,7 @@ class ElementWiseLayer(BaseLayer):
                     final_channel * final_depth * coarse_inout
                 )
                 max_parallel_muls = 0
-        elif self.type == "Mul":
+        elif self.op_type == "Mul":
             if self.parrallel_dims == "C":
                 max_parallel_adds = 0
                 max_parallel_muls = math.ceil(final_channel * coarse_inout)
@@ -259,7 +259,7 @@ class ElementWiseLayer(BaseLayer):
                 max_parallel_muls = math.ceil(
                     final_channel * final_depth * coarse_inout
                 )
-        elif self.type == "Div":
+        elif self.op_type == "Div":
             if self.parrallel_dims == "C":
                 max_parallel_adds = 0
                 max_parallel_muls = math.ceil(final_channel * coarse_inout) * 2
@@ -366,9 +366,9 @@ class ElementWiseLayer(BaseLayer):
             rate_matrix[1, 1] = 1
             rate_matrix[1, 2] = 1
 
-            if self.type == "Add" or self.type == "Mul":
+            if self.op_type == "Add" or self.op_type == "Mul":
                 rate_matrix[2, 2] = 1
-            elif self.type == "Div":
+            elif self.op_type == "Div":
                 assert False, "Currently not supporting ElementWise Division layer"
                 exit()
 

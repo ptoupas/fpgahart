@@ -39,7 +39,11 @@ def split_graph(
     for node in graph.nodes:
         op_type = graph.nodes[node]["type"]
         hw = graph.nodes[node]["hw"]
-        if op_type == "ElementWise" and graph.in_degree[node] > 1 and hw.type == "Mul":
+        if (
+            op_type == "ElementWise"
+            and graph.in_degree[node] > 1
+            and hw.op_type == "Mul"
+        ):
             break_node_gap = node
 
     phase_1 = deque()

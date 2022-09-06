@@ -169,11 +169,11 @@ class SqueezeExcitationLayer(BaseLayer):
                         curr_layer_rate,
                     )
             elif isinstance(l, ActivationLayer):
-                if l.activation_type == "Relu":
+                if l.op_type == "Relu":
                     dp_info = l.get_design_point(
                         f_relu_cinout, prev_layer_rate, curr_layer_rate
                     )
-                elif l.activation_type == "Sigmoid":
+                elif l.op_type == "Sigmoid":
                     dp_info = l.get_design_point(
                         f_sigm_cinout, prev_layer_rate, curr_layer_rate
                     )
