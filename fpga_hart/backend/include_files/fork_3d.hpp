@@ -211,3 +211,77 @@ loop_batch:
         }
     }
 }
+
+template <
+    unsigned int BATCH,
+    unsigned int CHANNELS,
+    unsigned int HEIGHT,
+    unsigned int WIDTH,
+    unsigned int DEPTH,
+    unsigned int STRIDE_HEIGHT,
+    unsigned int STRIDE_WIDTH,
+    unsigned int STRIDE_DEPTH,
+    unsigned int COARSE_OUT,
+    typename T>
+void fork_3d(hls::stream<T> &in,
+             hls::stream<T> out[COARSE_OUT],
+             unsigned int stride_h_rt,
+             unsigned int stride_w_rt,
+             unsigned int stride_d_rt)
+{
+
+#pragma HLS INLINE OFF
+
+    // set all parameters as constants
+    const unsigned int batch = BATCH;
+    const unsigned int height = HEIGHT;
+    const unsigned int width = WIDTH;
+    const unsigned int depth = DEPTH;
+    const unsigned int strideh = STRIDE_HEIGHT;
+    const unsigned int stridew = STRIDE_WIDTH;
+    const unsigned int strided = STRIDE_DEPTH;
+    const unsigned int channels = CHANNELS;
+    const unsigned int coarse_out = COARSE_OUT;
+
+    const unsigned int occurrence_coarse_distance = batch * height * width * depth * channels;
+
+    T local_cache;
+
+loop_batch:
+    for (unsigned int batch_index = 0; batch_index < batch; batch_index++)
+    {
+    loop_rows:
+        for (unsigned int row_index = 0; row_index < height; row_index++)
+        {
+        loop_cols:
+            for (unsigned int col_index = 0; col_index < width; col_index++)
+            {
+            loop_depth:
+                for (unsigned int depth_index = 0; depth_index < depth; depth_index++)
+                {
+                loop_channels:
+                    for (unsigned int channel_index = 0; channel_index < channels; channel_index++)
+                    {
+#pragma HLS LOOP_FLATTEN
+#pragma HLS PIPELINE II = 1 rewind
+                    coarse_loop:
+                        for (unsigned int coarse_index = 0; coarse_index < coarse_out; coarse_index++)
+                        {
+                            if (coarse_index == 0)
+                            {
+                                DO_PRAGMA(HLS OCCURRENCE cycle = occurrence_coarse_distance)
+                                local_cache = in.read();
+                            }
+                            if ((row_index % strideh == 0) &&
+                                (col_index % stridew == 0) &&
+                                (depth_index % strided == 0))
+                            {
+                                out[coarse_index].write(local_cache);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
