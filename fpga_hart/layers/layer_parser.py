@@ -1,8 +1,7 @@
 import csv
 import logging
 import os
-from dataclasses import dataclass, field
-from multiprocessing import Pool
+from dataclasses import dataclass
 
 import numpy as np
 import wandb
@@ -10,7 +9,6 @@ from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
 from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
 from fpga_hart.utils import utils
-from matplotlib import pyplot as plt
 
 
 def multithreaded_modeling(operation, input, pool):
@@ -162,31 +160,31 @@ class LayerParser(ModelLayerDescriptor):
                 ]
             )
 
-        name = "custom_conv_layer_gemm"
-        gemm_descriptor = {
-            "operation": "Gemm",
-            "shape_in": [[1, 200]],
-            "shape_out": [1, 100],
-            "node_in": ["960"],
-            "node_out": "970",
-            "branching": False,
-            "kernel": [200, 100],
-            "bias": [100],
-        }
-        # conv_descriptor = {
-        #     "operation": "Conv",
-        #     "shape_in": [[1, 3, 8, 16, 16]],
-        #     "shape_out": [1, 6, 8, 8, 8],
-        #     "node_in": ["575"],
-        #     "node_out": "576",
+        name = "custom_conv_layer"
+        # gemm_descriptor = {
+        #     "operation": "Gemm",
+        #     "shape_in": [[1, 200]],
+        #     "shape_out": [1, 100],
+        #     "node_in": ["960"],
+        #     "node_out": "970",
         #     "branching": False,
-        #     "kernel": [6, 3, 3, 3, 3],
-        #     "bias": [6],
-        #     "padding": [1, 1, 1],
-        #     "stride": [1, 2, 2],
-        #     "groups": 1,
-        #     "dilation": [1, 1, 1],
+        #     "kernel": [200, 100],
+        #     "bias": [100],
         # }
+        conv_descriptor = {
+            "operation": "Conv",
+            "shape_in": [[1, 3, 8, 16, 16]],
+            "shape_out": [1, 6, 8, 8, 8],
+            "node_in": ["575"],
+            "node_out": "576",
+            "branching": False,
+            "kernel": [6, 3, 3, 3, 3],
+            "bias": [6],
+            "padding": [1, 1, 1],
+            "stride": [1, 2, 2],
+            "groups": 1,
+            "dilation": [1, 1, 1],
+        }
         # conv_descriptor = {
         #     "operation": "Conv",
         #     "shape_in": [[1, 4, 4, 6, 6]],
@@ -215,4 +213,4 @@ class LayerParser(ModelLayerDescriptor):
         #     "groups": 1,
         #     "dilation": [1, 1, 1],
         # }
-        self.model_layer(name, gemm_descriptor)
+        self.model_layer(name, conv_descriptor)

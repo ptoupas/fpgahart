@@ -1,9 +1,9 @@
 import argparse
 import logging
+import time
 
 import seaborn as sns
 import yaml
-from boto import config
 
 import wandb
 from fpga_hart import _logger
@@ -81,6 +81,7 @@ if __name__ == "__main__":
         wandb.init(config=config_dictionary, project=project_name)
         config = wandb.config
 
+    start_time = time.time()
     if args.type == "partition":
         partition_parser = PartitionParser(
             model_name=args.model_name,
@@ -116,6 +117,9 @@ if __name__ == "__main__":
             layer_parser.model_custom_layer()
         elif args.target == "latency":
             pass
-
     else:
         raise ValueError("Invalid type of processing")
+    end_time = time.time()
+    print(
+        f"Total execution time: {time.strftime('%H:%M:%S', time.gmtime(end_time - start_time))}"
+    )

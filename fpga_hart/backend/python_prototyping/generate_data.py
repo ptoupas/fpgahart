@@ -7,8 +7,6 @@ import sys
 from collections import deque
 
 import numpy as np
-import onnx
-import onnxoptimizer as optimizer
 import pandas as pd
 import torch
 from torch import nn

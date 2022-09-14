@@ -12,8 +12,7 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils import utils
-from fpga_hart.utils.matrix_balancing import (balance_matrix,
-                                              balance_memory_rates)
+from fpga_hart.utils.matrix_balancing import balance_memory_rates
 
 np.set_printoptions(precision=5, suppress=True, linewidth=250)
 np.seterr(divide="ignore", invalid="ignore")

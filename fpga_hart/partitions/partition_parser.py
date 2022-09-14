@@ -1,13 +1,10 @@
 import configparser
 import csv
-import itertools
 import json
 import os
 import time
-from dataclasses import dataclass, field
-from multiprocessing import Pool
+from dataclasses import dataclass
 
-import mlflow
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -23,11 +20,7 @@ from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.network_representation.partition_descriptor import \
     PartitionDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
-from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
-from matplotlib import pyplot as plt
-from nltk import ngrams
-from sqlalchemy import column
 
 
 def multithreaded_modeling(operation, input, pool):
@@ -121,8 +114,6 @@ class PartitionParser(PartitionDescriptor):
         PG.write_png(path + ".png")
         if not self.wandb_config == None:
             wandb.log({"graph": wandb.Image(path + ".png")})
-        # with mlflow.start_run(run_id=run_id):
-        #     mlflow.log_artifact(path + ".png")
 
     def update_shapes(
         self,
@@ -336,16 +327,10 @@ class PartitionParser(PartitionDescriptor):
                 )
             branch_buffer += max_shape
 
-        if self.wandb_config == None:
-            with mlflow.start_run(run_name=name) as run:
-                run_id = run.info.run_id
-        else:
-            run_id = None
-
         self.visualize_graph(
             graph,
             os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name,
-            run_id=run_id,
+            run_id=None,
         )
 
         _logger.info("Partition: {}: ".format(name))

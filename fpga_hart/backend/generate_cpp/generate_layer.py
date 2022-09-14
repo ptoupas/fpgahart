@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 
 import pandas as pd
 from fpga_hart.backend.python_prototyping.generate_data import (
@@ -13,18 +12,14 @@ from fpga_hart.backend.python_prototyping.generate_data import (
     sigmoid_3d,
 )
 from fpga_hart.layers.layer_parser import LayerParser
-from fpga_hart.utils import utils
 
 from generate_tb import generate_tb_files
-from generate_top_level import generate_top_level_files
 from layers.generate_conv import generate_conv_files
 from layers.generate_elemwise import generate_elemwise_files
 from layers.generate_gap import generate_gap_files
 from layers.generate_gemm import generate_gemm_files
 from layers.generate_relu import generate_relu_files
 from layers.generate_sigmoid import generate_sigmoid_files
-from layers.generate_split import generate_split_files
-from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
 
 

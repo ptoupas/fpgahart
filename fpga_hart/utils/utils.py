@@ -19,9 +19,7 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from matplotlib import pyplot as plt
-from regex import F
 from scipy.spatial.distance import cdist
-from sklearn import metrics
 from sklearn.cluster import KMeans
 
 sns.set(rc={"figure.figsize": (15, 8)})

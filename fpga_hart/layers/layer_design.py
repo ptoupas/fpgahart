@@ -2,11 +2,9 @@ import csv
 import itertools
 import os
 from multiprocessing import Pool
-from typing import Tuple
 
 import networkx as nx
 import numpy as np
-import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.activation import ActivationLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
