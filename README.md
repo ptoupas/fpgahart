@@ -4,7 +4,7 @@
 
 > python main.py {cnn-model-onnx-file-name} {optimization-type} {optimization-target}
 
-- `cnn-model-onnx-file-name`: Name of the CNN model to be optimized. The model should be provided in an .onnx file and the the value of this parameters should be the name of the .onnx file without the suffix.
+- `cnn-model-onnx-file-name`: Name of the CNN model to be optimized. The model should be provided in an .onnx file and placed under the folder `models/`. The the value of this parameters should be the name of the .onnx file without the suffix.
 - `optimization-type`: This argument accepts only two values **partition and layer**. It dictates the type of optimization to be performed. Whether to optimize the model completely as a whole or a specific layer of the model.
 - `optimization-target`: This argument accepts only two values **throughput and latency**. Dictates the target of the optimization process.
 

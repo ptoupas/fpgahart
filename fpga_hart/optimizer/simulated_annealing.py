@@ -22,9 +22,12 @@ from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                has_gap, split_graph,
-                                                visualize_graph)
+from fpga_hart.utils.graph_manipulation import (
+    add_off_chip_connections,
+    has_gap,
+    split_graph,
+    visualize_graph,
+)
 
 
 class SimulatedAnnealing(BaseLayer):
@@ -318,6 +321,12 @@ class SimulatedAnnealing(BaseLayer):
                         copy.deepcopy(new_mem_bw_2),
                         copy.deepcopy(new_dp_info_2),
                     )
+                    if not os.path.exists(
+                        os.getcwd() + "/fpga_modeling_reports/partition_graphs/"
+                    ):
+                        os.makedirs(
+                            os.getcwd() + "/fpga_modeling_reports/partition_graphs/"
+                        )
                     visualize_graph(
                         graph_1,
                         os.getcwd()
@@ -347,6 +356,12 @@ class SimulatedAnnealing(BaseLayer):
                             copy.deepcopy(new_mem_bw_2),
                             copy.deepcopy(new_dp_info_2),
                         )
+                        if not os.path.exists(
+                            os.getcwd() + "/fpga_modeling_reports/partition_graphs/"
+                        ):
+                            os.makedirs(
+                                os.getcwd() + "/fpga_modeling_reports/partition_graphs/"
+                            )
                         visualize_graph(
                             graph_1,
                             os.getcwd()

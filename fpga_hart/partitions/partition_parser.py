@@ -327,6 +327,8 @@ class PartitionParser(PartitionDescriptor):
                 )
             branch_buffer += max_shape
 
+        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/partition_graphs/"):
+            os.makedirs(os.getcwd() + "/fpga_modeling_reports/partition_graphs/")
         self.visualize_graph(
             graph,
             os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name,

@@ -1,0 +1,9 @@
+seaborn
+pyyaml
+wandb
+networkx
+scipy
+sklearn
+onnx
+pydot
+onnxoptimizer<=0.2.7
