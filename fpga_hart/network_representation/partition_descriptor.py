@@ -1,11 +1,8 @@
-import itertools
 import os
 from collections import Counter, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import networkx as nx
-import numpy as np
-import seaborn as sns
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
@@ -280,7 +277,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
                 "Mul",
                 "Gemm",
             ]
-        ][2:]
+        ]
 
         graph = self.create_graph(sub_layers)
         self.visualize_graph(

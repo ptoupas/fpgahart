@@ -60,6 +60,103 @@ def get_factors(n, max_parallel=None, sec_passed=None) -> list:
         return (factors[factors <= max_parallel]).tolist()
 
 
+def generate_description_from_type(
+    bb: str,
+    channels_in_dim: int,
+    depth_in_dim: int,
+    height_in_dim: int,
+    width_in_dim: int,
+    channels_out_dim: int,
+    depth_out_dim: int,
+    height_out_dim: int,
+    width_out_dim: int,
+):
+    if "Conv" in bb:
+        dw = True if "Dw" in bb else False
+        pw = True if "Pw" in bb else False
+        kernel_shape = [int(x) for x in bb.split("k")[-1][:3]]
+        padding = [int(x) for x in bb.split("p")[-1][:3]]
+        stride = [int(x) for x in bb.split("s")[-1][:3]]
+
+        bb_descriptor = {
+            "operation": "Conv",
+            "shape_in": [
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+            ],
+            "shape_out": [
+                1,
+                channels_in_dim,
+                depth_out_dim,
+                height_out_dim,
+                width_out_dim,
+            ],
+            "kernel": [channels_out_dim, 1] + kernel_shape
+            if dw
+            else [channels_out_dim, channels_in_dim] + kernel_shape,
+            "bias": [channels_in_dim],
+            "padding": padding,
+            "stride": stride,
+            "groups": channels_in_dim,
+            "dilation": [1, 1, 1],
+            "branching": False,
+        }
+    elif bb == "Activation":
+        bb_descriptor = {
+            "operation": "Activation",
+            "shape_in": [
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+            ],
+            "shape_out": [
+                1,
+                channels_in_dim,
+                depth_in_dim,
+                height_in_dim,
+                width_in_dim,
+            ],
+        }
+    elif bb == "GlobalAveragePool":
+        bb_descriptor = {
+            "operation": "GlobalAveragePool",
+            "shape_in": [
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+            ],
+            "shape_out": [
+                1,
+                channels_in_dim,
+                1,
+                1,
+                1,
+            ],
+        }
+    elif bb == "ElementWise":
+        # TODO: We assume here that we always have two inputs of the same shape. (i.e. no broadcasting)
+        bb_descriptor = {
+            "operation": "ElementWise",
+            "shape_in": [
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
+            ],
+            "shape_out": [
+                1,
+                channels_in_dim,
+                depth_in_dim,
+                height_in_dim,
+                width_in_dim,
+            ],
+        }
+    elif bb == "Gemm":
+        bb_descriptor = {
+            "operation": "Gemm",
+            "shape_in": [[1, channels_in_dim]],
+            "shape_out": [1, channels_out_dim],
+            "kernel": [channels_in_dim, channels_out_dim],
+            "bias": [channels_out_dim],
+        }
+    else:
+        raise ValueError("Unknown block type: {}".format(bb))
+    return bb_descriptor
+
+
 def get_fine_feasible(kernel_size):
     if kernel_size[0] != kernel_size[1] and kernel_size[1] == kernel_size[2]:
         if kernel_size[0] == 1:
@@ -722,11 +819,11 @@ def get_random_shape(
     shapes_list = []
     for n in graph.nodes():
         bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type and bb == "Gemm":
+        if bb in bb_type and bb == "Gemm":
             shapes_list.append(
                 [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
             )
-        elif bb == bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
+        elif bb in bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
             shapes_list.append(
                 [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
             )

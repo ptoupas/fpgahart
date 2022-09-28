@@ -1124,9 +1124,10 @@ class SimulatedAnnealing(BaseLayer):
         """
 
         nodes = utils.get_nodes_sorted(self.graph)
+        _logger.info(msg=f"Validating building blocks setup... {bblocks}")
         for n in nodes:
             bb = self.graph.nodes[n]["hw_type"]
-            if bb in bblocks:
+            if any(bb in block for block in bblocks):
                 continue
             else:
                 _logger.critical(
@@ -1143,16 +1144,43 @@ class SimulatedAnnealing(BaseLayer):
         Returns:
             dict: bb_setup
         """
+        types = {}
+        for n in self.graph.nodes:
+            if self.graph.nodes[n]["hw_type"] not in types:
+                if "Conv" in self.graph.nodes[n]["hw_type"]:
+                    types[self.graph.nodes[n]["hw_type"]] = {
+                        "Padding": [],
+                        "Stride": [],
+                    }
+                else:
+                    types[self.graph.nodes[n]["hw_type"]] = {}
 
+        for n in self.graph.nodes:
+            if "Conv" in self.graph.nodes[n]["hw_type"]:
+                types[self.graph.nodes[n]["hw_type"]]["Padding"].append(
+                    self.graph.nodes[n]["hw"].padding
+                )
+                types[self.graph.nodes[n]["hw_type"]]["Stride"].append(
+                    self.graph.nodes[n]["hw"].stride
+                )
+
+        bblocks = []
+        for t in types:
+            if "Conv" in t:
+                unique_padding = [
+                    list(x) for x in set(tuple(x) for x in types[t]["Padding"])
+                ]
+                unique_stride = [
+                    list(x) for x in set(tuple(x) for x in types[t]["Stride"])
+                ]
+                final_padding = max(unique_padding)
+                final_stride = min(unique_stride)
+                bblocks.append(
+                    f"{t}p{''.join([str(elem) for elem in final_padding])}s{''.join([str(elem) for elem in final_stride])}"
+                )
+            else:
+                bblocks.append(t)
         # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
-        bblocks = [
-            "Conv3DDw",
-            "Conv3DPw",
-            "Activation",
-            "GlobalAveragePool",
-            "ElementWise",
-            "Gemm",
-        ]
         assert self.validate_building_blocks_setup(
             bblocks
         ), "Invalid building blocks setup. Cannot find a valid scheduling."
@@ -1193,102 +1221,19 @@ class SimulatedAnnealing(BaseLayer):
             else:
                 channels_in_dim, channels_out_dim = shape_in[1], shape_out[1]
 
-            if bb == "Conv3DDw":
-                bb_descriptor = {
-                    "operation": "Conv",
-                    "shape_in": [
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
-                    ],
-                    "shape_out": [
-                        1,
-                        channels_in_dim,
-                        depth_out_dim,
-                        height_out_dim,
-                        width_out_dim,
-                    ],
-                    "kernel": [channels_in_dim, 1, 3, 3, 3],
-                    "bias": [channels_in_dim],
-                    "padding": [1, 1, 1],
-                    "stride": [1, 1, 1],
-                    "groups": channels_in_dim,
-                    "dilation": [1, 1, 1],
-                    "branching": False,
-                }
-            elif bb == "Conv3DPw":
-                bb_descriptor = {
-                    "operation": "Conv",
-                    "shape_in": [
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
-                    ],
-                    "shape_out": [
-                        1,
-                        channels_out_dim,
-                        depth_out_dim,
-                        height_out_dim,
-                        width_out_dim,
-                    ],
-                    "kernel": [channels_out_dim, channels_in_dim, 1, 1, 1],
-                    "bias": [channels_out_dim],
-                    "padding": [0, 0, 0],
-                    "stride": [1, 1, 1],
-                    "groups": 1,
-                    "dilation": [1, 1, 1],
-                    "branching": False,
-                }
-            elif bb == "Activation":
-                bb_descriptor = {
-                    "operation": "Activation",
-                    "shape_in": [
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
-                    ],
-                    "shape_out": [
-                        1,
-                        channels_in_dim,
-                        depth_in_dim,
-                        height_in_dim,
-                        width_in_dim,
-                    ],
-                }
-            elif bb == "GlobalAveragePool":
-                bb_descriptor = {
-                    "operation": "GlobalAveragePool",
-                    "shape_in": [
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
-                    ],
-                    "shape_out": [
-                        1,
-                        channels_in_dim,
-                        1,
-                        1,
-                        1,
-                    ],
-                }
-            elif bb == "ElementWise":
-                # TODO: We assume here that we always have two inputs of the same shape. (i.e. no broadcasting)
-                bb_descriptor = {
-                    "operation": "ElementWise",
-                    "shape_in": [
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
-                        [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim],
-                    ],
-                    "shape_out": [
-                        1,
-                        channels_in_dim,
-                        depth_in_dim,
-                        height_in_dim,
-                        width_in_dim,
-                    ],
-                }
-            elif bb == "Gemm":
-                bb_descriptor = {
-                    "operation": "Gemm",
-                    "shape_in": [[1, channels_in_dim]],
-                    "shape_out": [1, channels_out_dim],
-                    "kernel": [channels_in_dim, channels_out_dim],
-                    "bias": [channels_out_dim],
-                }
+            bb_descriptor = utils.generate_description_from_type(
+                bb,
+                channels_in_dim,
+                depth_in_dim,
+                height_in_dim,
+                width_in_dim,
+                channels_out_dim,
+                depth_out_dim,
+                height_out_dim,
+                width_out_dim,
+            )
 
-            if bb in ["Conv3DDw", "Conv3DPw"]:
+            if "Conv" in bb:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
                     self.max_DSP_util, self.max_BRAM_util, bb_descriptor
                 )
@@ -1314,8 +1259,7 @@ class SimulatedAnnealing(BaseLayer):
             while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
                 self.max_BRAM_util - total_bram
             ):
-
-                if bb in ["Conv3DDw", "Conv3DPw"]:
+                if "Conv" in bb:
                     if alignedfactors:
                         coarse_in = (
                             random.choice(utils.get_factors(channels_in_dim))
@@ -1338,7 +1282,7 @@ class SimulatedAnnealing(BaseLayer):
                             )
                             / channels_out_dim
                         )
-                    if bb == "Conv3DDw":
+                    if "Conv3DDw" in bb:
                         coarse_out = coarse_in
 
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
@@ -1388,9 +1332,12 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 stop_counter += 1
                 if stop_counter > 50:
+                    _logger.warning(
+                        "Could not find a valid configuration for the current building block setup. Returning without result."
+                    )
                     return None
 
-            if bb in ["Conv3DDw", "Conv3DPw"]:
+            if "Conv" in bb:
                 bb_setup[bb]["shape_in"] = [
                     1,
                     channels_in_dim,
@@ -1461,21 +1408,28 @@ class SimulatedAnnealing(BaseLayer):
         scheduling = {}
         for node in self.graph.nodes:
             bb_type = self.graph.nodes[node]["hw_type"]
+            if len([bt for bt in bblocks_config if bb_type in bt]) != 1:
+                raise ValueError(f"More than one node of type {bb_type} in the graph")
+            bb_type = [bt for bt in bblocks_config if bb_type in bt][0]
             hw = self.graph.nodes[node]["hw"]
 
             if len(hw.input_shape) < 5:
-                shape_calls = 1
+                depth_calls = 1
+                height_calls = 1
+                width_calls = 1
             else:
                 # TODO: Search how to deal with cases where the output dimensions are also altered? Like in convolutional layers with stride > 1.
-                shape_calls = math.ceil(
-                    hw.input_shape[2]
-                    / bblocks_config[bb_type]["shape_in"][2]
-                    * hw.input_shape[3]
-                    / bblocks_config[bb_type]["shape_in"][3]
-                    * hw.input_shape[4]
-                    / bblocks_config[bb_type]["shape_in"][4]
+                depth_calls = math.ceil(
+                    hw.input_shape[2] / bblocks_config[bb_type]["shape_in"][2]
                 )
-            if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]:
+                height_calls = math.ceil(
+                    hw.input_shape[3] / bblocks_config[bb_type]["shape_in"][3]
+                )
+                width_calls = math.ceil(
+                    hw.input_shape[4] / bblocks_config[bb_type]["shape_in"][4]
+                )
+
+            if "Conv" in bb_type or "Gemm" in bb_type:
                 in_calls = math.ceil(
                     hw.input_shape[1]
                     / (
@@ -1491,10 +1445,14 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 )
                 if bb_type == "Gemm":
-                    total_block_calls = out_calls * shape_calls  # in_calls
+                    total_block_calls = (
+                        out_calls * depth_calls * height_calls * width_calls
+                    )  # in_calls
                 else:
-                    total_block_calls = in_calls * out_calls * shape_calls
-            elif bb_type in ["Activation", "GlobalAveragePool", "ElementWise"]:
+                    total_block_calls = (
+                        in_calls * out_calls * depth_calls * height_calls * width_calls
+                    )
+            else:
                 inout_calls = math.ceil(
                     hw.input_shape[1]
                     / (
@@ -1502,10 +1460,12 @@ class SimulatedAnnealing(BaseLayer):
                         * bblocks_config[bb_type]["interleaving_inout"]
                     )
                 )
-                total_block_calls = inout_calls * shape_calls
+                total_block_calls = (
+                    inout_calls * depth_calls * height_calls * width_calls
+                )
 
             # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
-            if bb_type in ["Conv3DDw", "Conv3DPw"]:
+            if "Conv" in bb_type:
                 r = bblocks_config[bb_type]["hw"].get_design_point(
                     f_fine=1,
                     f_coarseIn=bblocks_config[bb_type]["f_coarseIn"],
@@ -1556,28 +1516,28 @@ class SimulatedAnnealing(BaseLayer):
                 "Shape In": hw.input_shape,
                 "Shape In 2": hw.input_shape_red if bb_type == "ElementWise" else [],
                 "Shape Out": hw.output_shape,
-                "Times Called (channels)": in_calls
-                if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]
+                "Tiling Channels": in_calls
+                if "Conv" in bb_type or "Gemm" in bb_type
                 else inout_calls,
-                "Times Called (filters)": out_calls
-                if bb_type in ["Conv3DDw", "Conv3DPw", "Gemm"]
+                "Tiling Filters": out_calls
+                if "Conv" in bb_type or "Gemm" in bb_type
                 else 1,
-                "Times Called (tiles)": math.ceil(shape_calls),
+                "Tiling Depth": depth_calls,
+                "Tiling Height": height_calls,
+                "Tiling Width": width_calls,
                 "Latency": latency,
                 "Base Latency": r["latency(S)"],
                 "Read From": list(self.graph.predecessors(node)),
                 "Write To": list(self.graph.successors(node)),
                 "Store To Mem": (True if self.graph.out_degree(node) > 1 else False),
                 "Load From Mem": (True if self.graph.in_degree(node) > 1 else False),
-                "Kernel Shape": hw.kernel_shape
-                if bb_type in ["Conv3DDw", "Conv3DPw"]
-                else [],
-                "Stride": hw.stride if bb_type in ["Conv3DDw", "Conv3DPw"] else [],
-                "Padding": hw.padding if bb_type in ["Conv3DDw", "Conv3DPw"] else [],
+                "Kernel Shape": hw.kernel_shape if "Conv" in bb_type else [],
+                "Stride": hw.stride if "Conv" in bb_type else [],
+                "Padding": hw.padding if "Conv" in bb_type else [],
                 "Broadcast": hw.broadcasting if bb_type == "ElementWise" else False,
                 "Op Type": hw.op_type
                 if bb_type in ["Activation", "ElementWise"]
-                else "",
+                else "None",
             }
             cost += latency
 
@@ -1593,6 +1553,7 @@ class SimulatedAnnealing(BaseLayer):
 
         bblocks = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(bblocks, alignedfactors)
+
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
             bblocks_config
         )

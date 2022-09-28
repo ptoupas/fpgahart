@@ -120,6 +120,6 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid type of processing")
     end_time = time.time()
-    print(
-        f"Total execution time: {time.strftime('%H:%M:%S', time.gmtime(end_time - start_time))}"
+    _logger.info(
+        msg=f"Total execution time: {time.strftime('%H:%M:%S', time.gmtime(end_time - start_time))}"
     )

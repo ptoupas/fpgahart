@@ -17,7 +17,8 @@ from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.network_representation.partition_descriptor import PartitionDescriptor
+from fpga_hart.network_representation.partition_descriptor import \
+    PartitionDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 
@@ -274,7 +275,7 @@ class PartitionParser(PartitionDescriptor):
                 # TODO: check the two first convolutional layers and how to support them
                 hw_type = utils.get_conv_type(
                     layer=self.layers[layer],
-                    discriminate_kernel_size=False,
+                    discriminate_kernel_size=True,
                     discriminate_stide=False,
                     discriminate_padding=False,
                 )
