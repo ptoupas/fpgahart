@@ -2,7 +2,9 @@
 __pycache__/
 generated_files/
 generated_data/
+*.egg-info
 mlruns/
+wandb/
 *.py[cod]
 *$py.class
 **/*.pyc
@@ -20,3 +22,4 @@ pip-delete-this-directory.txt
 *.jpeg
 *.csv
 *.dat
+*.json
