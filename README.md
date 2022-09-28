@@ -1,5 +1,8 @@
 # FPGA-HART
 
+## Prerequisites
+Create a python environment with python version >=3.7 and install the dependencies from `requirements.txt` file.
+> pip install -r requirements.txt
 ## Library basic usage
 
 > python main.py {cnn-model-onnx-file-name} {optimization-type} {optimization-target}
