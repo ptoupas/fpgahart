@@ -27,3 +27,6 @@ Automates the process of optimization data generation and creation of the backen
 > ./layer_hls_project.sh (only works for *throughput* optimization-target)
 
 The arguments are the same as in the `backend_pipeline.sh` case.
+
+## Configuration files
+The configuration files for specifying the FPGA device characteristics (`config_fpga.ini`), the wandb and optimizer parameters (`config_param.yaml`), and the pytorch/onnx supported layers and parameters (`config_pytorch.ini`) are all under the following path `$fpga-hart/fpga_hart/config/`.
