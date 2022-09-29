@@ -4,7 +4,9 @@ import json
 import math
 import os
 import random
+from copy import deepcopy
 from functools import reduce
+from typing import Tuple
 
 import networkx as nx
 import numpy as np
@@ -58,6 +60,119 @@ def get_factors(n, max_parallel=None, sec_passed=None) -> list:
     else:
         factors = np.arange(n) + 1
         return (factors[factors <= max_parallel]).tolist()
+
+
+def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
+    conv_blocks_lookup_choices = []
+    conv_blocks_dw_lookup_choices = []
+    conv_blocks_choices = []
+    conv_dw_blocks_choices = []
+
+    conv_blocks = []
+    conv_dw_blocks = []
+    rest_operations = []
+    for bb in building_blocks:
+        if "Conv" in bb:
+            if "Dw" in bb:
+                conv_dw_blocks.append(bb)
+            else:
+                conv_blocks.append(bb)
+        else:
+            rest_operations.append(bb)
+
+    kernel_list = []
+    padding_list = []
+    stride_list = []
+    lookuptable = {}
+
+    # Combine convolutional blocks
+    for c in conv_blocks:
+        lookuptable[c.split("p")[0]] = c
+        kernel_shape = [int(x) for x in c.split("k")[-1][:3]]
+        kernel_list.append(kernel_shape)
+        padding = [int(x) for x in c.split("p")[-1][:3]]
+        padding_list.append(padding)
+        stride = [int(x) for x in c.split("s")[-1][:3]]
+        stride_list.append(stride)
+
+    conv_blocks_choices.append(conv_blocks)
+    conv_blocks_lookup_choices.append(deepcopy(lookuptable))
+
+    combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
+    combined_padding = np.max(np.array(padding_list), axis=0).tolist()
+    combined_stride = np.min(np.array(stride_list), axis=0).tolist()
+
+    try:
+        index = kernel_list.index(combined_kernel)
+    except ValueError:
+        index = -1
+
+    if index != -1:
+        block = f"{conv_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+    else:
+        block = f"Conv3Dk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+    lookuptable.clear()
+    for c in conv_blocks:
+        lookuptable[c.split("p")[0]] = block
+    conv_blocks_choices.append([block])
+    conv_blocks_lookup_choices.append(deepcopy(lookuptable))
+
+    # Combine convolutional depthwise blocks
+    kernel_list.clear()
+    padding_list.clear()
+    stride_list.clear()
+    lookuptable.clear()
+    for c in conv_dw_blocks:
+        lookuptable[c.split("p")[0]] = c
+        kernel_shape = [int(x) for x in c.split("k")[-1][:3]]
+        kernel_list.append(kernel_shape)
+        padding = [int(x) for x in c.split("p")[-1][:3]]
+        padding_list.append(padding)
+        stride = [int(x) for x in c.split("s")[-1][:3]]
+        stride_list.append(stride)
+
+    conv_dw_blocks_choices.append(conv_dw_blocks)
+    conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
+    combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
+    combined_padding = np.max(np.array(padding_list), axis=0).tolist()
+    combined_stride = np.min(np.array(stride_list), axis=0).tolist()
+
+    try:
+        index = kernel_list.index(combined_kernel)
+    except ValueError:
+        index = -1
+
+    if index != -1:
+        block = f"{conv_dw_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+    else:
+        block = f"Conv3DDwk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+    lookuptable.clear()
+    for c in conv_dw_blocks:
+        lookuptable[c.split("p")[0]] = block
+    conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
+    conv_dw_blocks_choices.append([block])
+
+    assert len(conv_blocks_choices) == len(conv_blocks_lookup_choices)
+    assert len(conv_dw_blocks_choices) == len(conv_blocks_dw_lookup_choices)
+
+    conv_blocks_idx = random.randint(0, len(conv_blocks_choices) - 1)
+    conv_dw_blocks_idx = random.randint(0, len(conv_dw_blocks_choices) - 1)
+    final_building_blocks = (
+        rest_operations
+        + conv_blocks_choices[conv_blocks_idx]
+        + conv_dw_blocks_choices[conv_dw_blocks_idx]
+    )
+
+    lookuptable = {}
+    for op in rest_operations:
+        lookuptable[op] = op
+    final_lookup_table = {
+        **lookuptable,
+        **conv_blocks_lookup_choices[conv_blocks_idx],
+        **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
+    }
+
+    return final_building_blocks, final_lookup_table
 
 
 def generate_description_from_type(
@@ -814,11 +929,11 @@ def get_conv_type(
 
 
 def get_random_shape(
-    graph: nx.DiGraph, bb_type: str, previous_config: dict = None
+    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None
 ) -> np.array:
     shapes_list = []
     for n in graph.nodes():
-        bb = graph.nodes[n]["hw_type"]
+        bb = lookuptable[graph.nodes[n]["hw_type"]]
         if bb in bb_type and bb == "Gemm":
             shapes_list.append(
                 [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]

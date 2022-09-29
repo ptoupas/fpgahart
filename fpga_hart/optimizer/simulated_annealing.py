@@ -1164,46 +1164,46 @@ class SimulatedAnnealing(BaseLayer):
             if self.graph.nodes[n]["hw_type"] not in types:
                 if "Conv" in self.graph.nodes[n]["hw_type"]:
                     types[self.graph.nodes[n]["hw_type"]] = {
-                        "Padding": [],
-                        "Stride": [],
+                        "Padding": [self.graph.nodes[n]["hw"].padding],
+                        "Stride": [self.graph.nodes[n]["hw"].stride],
                     }
                 else:
                     types[self.graph.nodes[n]["hw_type"]] = {}
-
-        for n in self.graph.nodes:
-            if "Conv" in self.graph.nodes[n]["hw_type"]:
-                types[self.graph.nodes[n]["hw_type"]]["Padding"].append(
-                    self.graph.nodes[n]["hw"].padding
-                )
-                types[self.graph.nodes[n]["hw_type"]]["Stride"].append(
-                    self.graph.nodes[n]["hw"].stride
-                )
+            else:
+                if "Conv" in self.graph.nodes[n]["hw_type"]:
+                    types[self.graph.nodes[n]["hw_type"]]["Padding"].append(
+                        self.graph.nodes[n]["hw"].padding
+                    )
+                    types[self.graph.nodes[n]["hw_type"]]["Stride"].append(
+                        self.graph.nodes[n]["hw"].stride
+                    )
 
         bblocks = []
         for t in types:
             if "Conv" in t:
-                unique_padding = [
-                    list(x) for x in set(tuple(x) for x in types[t]["Padding"])
-                ]
-                unique_stride = [
-                    list(x) for x in set(tuple(x) for x in types[t]["Stride"])
-                ]
-                final_padding = max(unique_padding)
-                final_stride = min(unique_stride)
+                final_padding = np.max(np.array(types[t]["Padding"]), axis=0).tolist()
+                final_stride = np.min(np.array(types[t]["Stride"]), axis=0).tolist()
                 bblocks.append(
                     f"{t}p{''.join([str(elem) for elem in final_padding])}s{''.join([str(elem) for elem in final_stride])}"
                 )
             else:
                 bblocks.append(t)
-        # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
-        assert self.validate_building_blocks_setup(
-            bblocks
-        ), "Invalid building blocks setup. Cannot find a valid scheduling."
 
-        return bblocks
+        # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
+        bblocks, lookuptable = utils.combine_building_blocks(bblocks)
+
+        # assert self.validate_building_blocks_setup(
+        #     bblocks
+        # ), "Invalid building blocks setup. Cannot find a valid scheduling."
+
+        return bblocks, lookuptable
 
     def generate_building_blocks_config(
-        self, bblocks: list, alignedfactors: bool, previous_config: dict = None
+        self,
+        bblocks: list,
+        alignedfactors: bool,
+        lookuptable: dict,
+        previous_config: dict = None,
     ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
@@ -1220,8 +1220,9 @@ class SimulatedAnnealing(BaseLayer):
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
 
+            # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
             shape_in, shape_out = utils.get_random_shape(
-                self.graph, bb, previous_config=previous_config
+                self.graph, bb, lookuptable, previous_config=previous_config
             )
 
             if bb != "Gemm":
@@ -1347,7 +1348,7 @@ class SimulatedAnnealing(BaseLayer):
                     )
                 stop_counter += 1
                 if stop_counter > 50:
-                    _logger.warning(
+                    _logger.debug(
                         "Could not find a valid configuration for the current building block setup. Returning without result."
                     )
                     return None
@@ -1415,17 +1416,14 @@ class SimulatedAnnealing(BaseLayer):
 
         return bb_setup
 
-    def get_cost_e2e(self, bblocks_config: dict) -> float:
+    def get_cost_e2e(self, bblocks_config: dict, lookuptable: dict) -> float:
         if bblocks_config is None:
             return None, None, None, None, None
         cost = 0.0
         avg_BW = 0.0
         scheduling = {}
         for node in self.graph.nodes:
-            bb_type = self.graph.nodes[node]["hw_type"]
-            if len([bt for bt in bblocks_config if bb_type in bt]) != 1:
-                raise ValueError(f"More than one node of type {bb_type} in the graph")
-            bb_type = [bt for bt in bblocks_config if bb_type in bt][0]
+            bb_type = lookuptable[self.graph.nodes[node]["hw_type"]]
             hw = self.graph.nodes[node]["hw"]
 
             if len(hw.input_shape) < 5:
@@ -1566,20 +1564,23 @@ class SimulatedAnnealing(BaseLayer):
 
     def run_optimizer_latency(self, alignedfactors: bool) -> None:
 
-        bblocks = self.generate_building_blocks()
-        bblocks_config = self.generate_building_blocks_config(bblocks, alignedfactors)
+        bblocks, lookuptable = self.generate_building_blocks()
+        bblocks_config = self.generate_building_blocks_config(
+            bblocks, alignedfactors, lookuptable
+        )
 
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
-            bblocks_config
+            bblocks_config, lookuptable
         )
 
         if cost is None:
             for _ in range(100):
+                bblocks, lookuptable = self.generate_building_blocks()
                 bblocks_config = self.generate_building_blocks_config(
-                    bblocks, alignedfactors
+                    bblocks, alignedfactors, lookuptable
                 )
                 cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
-                    bblocks_config
+                    bblocks_config, lookuptable
                 )
                 if cost is not None:
                     break
@@ -1607,8 +1608,9 @@ class SimulatedAnnealing(BaseLayer):
                 wandb.log(log_dict)
 
             for _ in range(self.iterationPerTemp):
+                bblocks, lookuptable = self.generate_building_blocks()
                 new_state = self.generate_building_blocks_config(
-                    bblocks, alignedfactors, previous_config=None
+                    bblocks, alignedfactors, lookuptable, previous_config=None
                 )
                 (
                     new_cost,
@@ -1616,7 +1618,7 @@ class SimulatedAnnealing(BaseLayer):
                     dsp_util,
                     bram_util,
                     bw_util,
-                ) = self.get_cost_e2e(new_state)
+                ) = self.get_cost_e2e(new_state, lookuptable)
 
                 if new_cost is None:
                     continue
