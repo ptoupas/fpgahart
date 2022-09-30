@@ -1479,38 +1479,56 @@ class SimulatedAnnealing(BaseLayer):
 
             # TODO: Update the shapes of the bblocks_config[bb_type]["hw"] to account for the overlapping regions because of feature map tilling
             if "Conv" in bb_type:
-                r = bblocks_config[bb_type]["hw"].get_design_point(
+                bblock_padding = deepcopy(bblocks_config[bb_type]["hw"].padding)
+                bblock_stride = deepcopy(bblocks_config[bb_type]["hw"].stride)
+
+                bblocks_config[bb_type]["hw"].padding = hw.padding
+                bblocks_config[bb_type]["hw"].stride = hw.stride
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     f_fine=1,
                     f_coarseIn=bblocks_config[bb_type]["f_coarseIn"],
                     f_coarseOut=bblocks_config[bb_type]["f_coarseOut"],
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
+                bblocks_config[bb_type]["hw"].padding = bblock_padding
+                bblocks_config[bb_type]["hw"].stride = bblock_stride
             elif bb_type == "Activation":
                 bblocks_config[bb_type]["hw"].op_type = hw.op_type
-                r = bblocks_config[bb_type]["hw"].get_design_point(
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
                 bblocks_config[bb_type]["hw"].op_type = "Activation"
             elif bb_type == "GlobalAveragePool":
-                r = bblocks_config[bb_type]["hw"].get_design_point(
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
                 )
             elif bb_type == "ElementWise":
                 bblocks_config[bb_type]["hw"].op_type = hw.op_type
-                r = bblocks_config[bb_type]["hw"].get_design_point(
+                bblock_input_shape_2 = deepcopy(
+                    bblocks_config[bb_type]["hw"].input_shape_2
+                )
+
+                layer_input_shape_2 = hw.input_shape_2
+                if np.prod(layer_input_shape_2[2:]) == 1:
+                    bblocks_config[bb_type]["hw"].input_shape_2[
+                        2:
+                    ] = layer_input_shape_2[2:]
+
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
                     mem_bw_in_1=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                     mem_bw_in_2=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                     mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
                 )
                 bblocks_config[bb_type]["hw"].op_type = "ElementWise"
+                bblocks_config[bb_type]["hw"].input_shape_2 = bblock_input_shape_2
             elif bb_type == "Gemm":
-                r = bblocks_config[bb_type]["hw"].get_design_point(
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_in=bblocks_config[bb_type]["coarse_in"],
                     coarse_out=bblocks_config[bb_type]["coarse_out"],
                     mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
@@ -1519,10 +1537,10 @@ class SimulatedAnnealing(BaseLayer):
 
             # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
 
-            bblocks_config[bb_type]["MemBw_util"] = r["memBwUtil"]
+            bblocks_config[bb_type]["MemBw_util"] = performance_modeling["memBwUtil"]
 
-            latency = r["latency(S)"] * math.ceil(total_block_calls)
-            avg_BW += r["memBwUtil"]
+            latency = performance_modeling["latency(S)"] * math.ceil(total_block_calls)
+            avg_BW += performance_modeling["memBwUtil"]
             assert math.ceil(total_block_calls) > 0, "Zero calls aborting..."
             scheduling[node] = {
                 "Block Type": bb_type,
@@ -1539,7 +1557,7 @@ class SimulatedAnnealing(BaseLayer):
                 "Tiling Height": height_calls,
                 "Tiling Width": width_calls,
                 "Latency": latency,
-                "Base Latency": r["latency(S)"],
+                "Base Latency": performance_modeling["latency(S)"],
                 "Read From": list(self.graph.predecessors(node)),
                 "Write To": list(self.graph.successors(node)),
                 "Store To Mem": (True if self.graph.out_degree(node) > 1 else False),
