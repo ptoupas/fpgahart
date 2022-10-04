@@ -44,7 +44,9 @@ class SimulatedAnnealing(BaseLayer):
         gap_approx=False,
         ml_flow_id=None,
         wandb_config=None,
+        cnn_model_name="",
     ):
+        self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
         super().__init__(
             max_DSP_util=95.0
@@ -1689,7 +1691,24 @@ class SimulatedAnnealing(BaseLayer):
                 json.dump(prev_scheduling, f, indent=2)
             wandb.log_artifact(artifact)
         else:
-            with open("fpga_modeling_reports/latency_driven/config.json", "w") as f:
+            if not os.path.exists(
+                "fpga_modeling_reports/latency_driven_results/" + self.cnn_model_name
+            ):
+                os.makedirs(
+                    "fpga_modeling_reports/latency_driven_results/"
+                    + self.cnn_model_name
+                )
+            with open(
+                "fpga_modeling_reports/latency_driven_results/"
+                + self.cnn_model_name
+                + "/config.json",
+                "w",
+            ) as f:
                 json.dump(final_config, f, indent=2)
-            with open("fpga_modeling_reports/latency_driven/scheduling.json", "w") as f:
+            with open(
+                "fpga_modeling_reports/latency_driven_results/"
+                + self.cnn_model_name
+                + "/scheduling.json",
+                "w",
+            ) as f:
                 json.dump(prev_scheduling, f, indent=2)
