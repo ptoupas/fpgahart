@@ -36,10 +36,15 @@ class ModelLayerDescriptor(OnnxModelParser):
             input_shape = [self.torch_layers[k]["input"][0]]
             output_shape = self.torch_layers[k]["output"]
             input_node = [self.torch_layers[k]["input_id"][0]]
-            if name == "Gemm_401":
-                input_node = self.torch_layers["GlobalAveragePool_391"]["output_id"]
-            if name == "Gemm_352":
-                input_node = self.torch_layers["GlobalAveragePool_342"]["output_id"]
+            if self.model_name == "x3d_m":
+                if name == "Gemm_401":
+                    input_node = self.torch_layers["GlobalAveragePool_391"]["output_id"]
+            if self.model_name == "slowonly":
+                if name == "Gemm_181":
+                    input_node = self.torch_layers["GlobalAveragePool_172"]["output_id"]
+            if self.model_name == "r2plus1d":
+                if name == "Gemm_239":
+                    input_node = self.torch_layers["GlobalAveragePool_230"]["output_id"]
             output_node = self.torch_layers[k]["output_id"]
 
             self.layers[name] = {
@@ -66,6 +71,16 @@ class ModelLayerDescriptor(OnnxModelParser):
                     self.layers[name]["conv_type"] = "depthwise"
                 elif np.prod(self.torch_layers[k]["kernel"][-3:]) == 1:
                     self.layers[name]["conv_type"] = "pointwise"
+                elif (
+                    self.torch_layers[k]["kernel"][2] != 1
+                    and np.prod(self.torch_layers[k]["kernel"][-2:]) == 1
+                ):
+                    self.layers[name]["conv_type"] = "3d_conv_temporal"
+                elif self.torch_layers[k]["kernel"][2] == 1 and (
+                    self.torch_layers[k]["kernel"][3] > 1
+                    and self.torch_layers[k]["kernel"][4] > 1
+                ):
+                    self.layers[name]["conv_type"] = "3d_conv_spatial"
                 else:
                     self.layers[name]["conv_type"] = "3d_conv"
             elif operation == "BatchNormalization":

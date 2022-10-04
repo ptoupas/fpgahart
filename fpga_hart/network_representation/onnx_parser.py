@@ -9,6 +9,7 @@ import onnx
 import onnx.numpy_helper
 import onnxoptimizer as optimizer
 from fpga_hart import _logger
+from onnxsim import simplify
 
 
 def add_input_from_initializer(model: onnx.ModelProto):
@@ -80,6 +81,9 @@ class OnnxModelParser:
     def init_onnx_model(self) -> None:
         self.onnx_model = onnx.load(self.model_path)
         onnx.checker.check_model(self.onnx_model)
+        self.onnx_model, check = simplify(self.onnx_model)
+        assert check, "Simplified ONNX model could not be validated"
+
         add_input_from_initializer(self.onnx_model)
         self.convert_matmul_to_gemm()
         self.onnx_model = onnx.shape_inference.infer_shapes(self.onnx_model)
@@ -96,57 +100,13 @@ class OnnxModelParser:
         self.onnx_model = optimizer.optimize(self.onnx_model, passes=passes)
         onnx.checker.check_model(self.onnx_model)
 
-        self.fix_classifier_shapes()
+        self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
         self.get_config()
         self.parse_layers()
         onnx.save(
             self.onnx_model,
             os.path.join(os.getcwd(), "models", self.model_name + "_optimized.onnx"),
         )
-
-    def fix_classifier_shapes(self) -> None:
-        if self.model_name == "x3d_m":
-            for i in range(len(self.onnx_model.graph.value_info)):
-                if self.onnx_model.graph.value_info[i].name == "968":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "968", onnx.TensorProto.FLOAT, [1, 432]
-                        )
-                    )
-                elif self.onnx_model.graph.value_info[i].name == "970":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "970", onnx.TensorProto.FLOAT, [1, 2048]
-                        )
-                    )
-                elif self.onnx_model.graph.value_info[i].name == "971":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "971", onnx.TensorProto.FLOAT, [1, 2048]
-                        )
-                    )
-            self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
-        if self.model_name == "x3d_m_seq":
-            for i in range(len(self.onnx_model.graph.value_info)):
-                if self.onnx_model.graph.value_info[i].name == "919":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "919", onnx.TensorProto.FLOAT, [1, 432]
-                        )
-                    )
-                elif self.onnx_model.graph.value_info[i].name == "921":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "921", onnx.TensorProto.FLOAT, [1, 2048]
-                        )
-                    )
-                elif self.onnx_model.graph.value_info[i].name == "922":
-                    self.onnx_model.graph.value_info[i].CopyFrom(
-                        onnx.helper.make_tensor_value_info(
-                            "922", onnx.TensorProto.FLOAT, [1, 2048]
-                        )
-                    )
-            self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
 
     def get_config(self) -> None:
         config = configparser.ConfigParser()
@@ -194,9 +154,13 @@ class OnnxModelParser:
                 if self.model_name == "x3d_m":
                     if n.name == "Gemm_401":
                         layers_outputs[n.input[0]] = [1, 432]
-                if self.model_name == "x3d_m_seq":
-                    if n.name == "Gemm_352":
-                        layers_outputs[n.input[0]] = [1, 432]
+                if self.model_name == "slowonly":
+                    if n.name == "Gemm_181":
+                        layers_outputs[n.input[0]] = [1, 2048]
+                if self.model_name == "r2plus1d":
+                    if n.name == "Gemm_239":
+                        layers_outputs[n.input[0]] = [1, 512]
+
                 layer_input_ids = []
                 layer_input_shapes = []
                 dilation = []
@@ -404,7 +368,7 @@ class OnnxModelParser:
                     )
                 init_index = list(self.onnx_model.graph.initializer).index(init)
                 weights = onnx.numpy_helper.to_array(init)
-                weights = np.swapaxes(weights, 0, 1)
+                # weights = np.swapaxes(weights, 0, 1)
                 if transpose_connection:
                     new_init = onnx.helper.make_tensor(
                         name=input_node.input[0],
@@ -443,12 +407,20 @@ class OnnxModelParser:
                     init_value_info_index, new_init_value_info
                 )
                 # add an empty bias term
-                new_bias = onnx.helper.make_tensor(
-                    name=".".join([input_node.input[0], "bias"]),
-                    data_type=init.data_type,
-                    dims=(weights.shape[1],),
-                    vals=np.zeros(weights.shape[1]).flatten().tolist(),
-                )
+                if transpose_connection:
+                    new_bias = onnx.helper.make_tensor(
+                        name=".".join([input_node.input[0], "bias"]),
+                        data_type=init.data_type,
+                        dims=(weights.shape[1],),
+                        vals=np.zeros(weights.shape[1]).flatten().tolist(),
+                    )
+                else:
+                    new_bias = onnx.helper.make_tensor(
+                        name=".".join([node.input[1], "bias"]),
+                        data_type=init.data_type,
+                        dims=(weights.shape[1],),
+                        vals=np.zeros(weights.shape[1]).flatten().tolist(),
+                    )
                 new_bias_value_info = onnx.helper.make_tensor_value_info(
                     new_bias.name, onnx.TensorProto.FLOAT, [weights.shape[1]]
                 )
@@ -471,7 +443,7 @@ class OnnxModelParser:
                     new_node = onnx.helper.make_node(
                         "Gemm",
                         name="Gemm" + node.name.split("MatMul")[-1],
-                        inputs=[*node.input, ".".join([input_node.input[0], "bias"])],
+                        inputs=[*node.input, ".".join([node.input[1], "bias"])],
                         outputs=node.output,
                     )
                 # remove old node and add new one

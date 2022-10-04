@@ -95,27 +95,28 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
         stride = [int(x) for x in c.split("s")[-1][:3]]
         stride_list.append(stride)
 
-    conv_blocks_choices.append(conv_blocks)
-    conv_blocks_lookup_choices.append(deepcopy(lookuptable))
+    if kernel_list:
+        conv_blocks_choices.append(conv_blocks)
+        conv_blocks_lookup_choices.append(deepcopy(lookuptable))
 
-    combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
-    combined_padding = np.max(np.array(padding_list), axis=0).tolist()
-    combined_stride = np.min(np.array(stride_list), axis=0).tolist()
+        combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
+        combined_padding = np.max(np.array(padding_list), axis=0).tolist()
+        combined_stride = np.min(np.array(stride_list), axis=0).tolist()
 
-    try:
-        index = kernel_list.index(combined_kernel)
-    except ValueError:
-        index = -1
+        try:
+            index = kernel_list.index(combined_kernel)
+        except ValueError:
+            index = -1
 
-    if index != -1:
-        block = f"{conv_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
-    else:
-        block = f"Conv3Dk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
-    lookuptable.clear()
-    for c in conv_blocks:
-        lookuptable[c.split("p")[0]] = block
-    conv_blocks_choices.append([block])
-    conv_blocks_lookup_choices.append(deepcopy(lookuptable))
+        if index != -1:
+            block = f"{conv_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        else:
+            block = f"Conv3Dk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        lookuptable.clear()
+        for c in conv_blocks:
+            lookuptable[c.split("p")[0]] = block
+        conv_blocks_choices.append([block])
+        conv_blocks_lookup_choices.append(deepcopy(lookuptable))
 
     # Combine convolutional depthwise blocks
     kernel_list.clear()
@@ -131,46 +132,66 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
         stride = [int(x) for x in c.split("s")[-1][:3]]
         stride_list.append(stride)
 
-    conv_dw_blocks_choices.append(conv_dw_blocks)
-    conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
-    combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
-    combined_padding = np.max(np.array(padding_list), axis=0).tolist()
-    combined_stride = np.min(np.array(stride_list), axis=0).tolist()
+    if kernel_list:
+        conv_dw_blocks_choices.append(conv_dw_blocks)
+        conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
+        combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
+        combined_padding = np.max(np.array(padding_list), axis=0).tolist()
+        combined_stride = np.min(np.array(stride_list), axis=0).tolist()
 
-    try:
-        index = kernel_list.index(combined_kernel)
-    except ValueError:
-        index = -1
+        try:
+            index = kernel_list.index(combined_kernel)
+        except ValueError:
+            index = -1
 
-    if index != -1:
-        block = f"{conv_dw_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
-    else:
-        block = f"Conv3DDwk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
-    lookuptable.clear()
-    for c in conv_dw_blocks:
-        lookuptable[c.split("p")[0]] = block
-    conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
-    conv_dw_blocks_choices.append([block])
+        if index != -1:
+            block = f"{conv_dw_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        else:
+            block = f"Conv3DDwk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        lookuptable.clear()
+        for c in conv_dw_blocks:
+            lookuptable[c.split("p")[0]] = block
+        conv_blocks_dw_lookup_choices.append(deepcopy(lookuptable))
+        conv_dw_blocks_choices.append([block])
 
     assert len(conv_blocks_choices) == len(conv_blocks_lookup_choices)
     assert len(conv_dw_blocks_choices) == len(conv_blocks_dw_lookup_choices)
 
-    conv_blocks_idx = random.randint(0, len(conv_blocks_choices) - 1)
-    conv_dw_blocks_idx = random.randint(0, len(conv_dw_blocks_choices) - 1)
-    final_building_blocks = (
-        rest_operations
-        + conv_blocks_choices[conv_blocks_idx]
-        + conv_dw_blocks_choices[conv_dw_blocks_idx]
+    conv_blocks_idx = (
+        random.randint(0, len(conv_blocks_choices) - 1) if conv_blocks_choices else -1
     )
+    conv_dw_blocks_idx = (
+        random.randint(0, len(conv_dw_blocks_choices) - 1)
+        if conv_dw_blocks_choices
+        else -1
+    )
+    final_building_blocks = rest_operations
+    if conv_blocks_idx != -1:
+        final_building_blocks += conv_blocks_choices[conv_blocks_idx]
+    if conv_dw_blocks_idx != -1:
+        final_building_blocks += conv_dw_blocks_choices[conv_dw_blocks_idx]
 
     lookuptable = {}
     for op in rest_operations:
         lookuptable[op] = op
-    final_lookup_table = {
-        **lookuptable,
-        **conv_blocks_lookup_choices[conv_blocks_idx],
-        **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
-    }
+    if conv_blocks_idx != -1 and conv_dw_blocks_idx != -1:
+        final_lookup_table = {
+            **lookuptable,
+            **conv_blocks_lookup_choices[conv_blocks_idx],
+            **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
+        }
+    elif conv_blocks_idx != -1 and conv_dw_blocks_idx == -1:
+        final_lookup_table = {
+            **lookuptable,
+            **conv_blocks_lookup_choices[conv_blocks_idx],
+        }
+    elif conv_blocks_idx == -1 and conv_dw_blocks_idx != -1:
+        final_lookup_table = {
+            **lookuptable,
+            **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
+        }
+    else:
+        final_lookup_table = lookuptable
 
     return final_building_blocks, final_lookup_table
 
