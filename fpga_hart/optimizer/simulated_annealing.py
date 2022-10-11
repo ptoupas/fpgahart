@@ -19,15 +19,13 @@ from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.memory_interface import MemoryNode
+from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import (
-    add_off_chip_connections,
-    has_gap,
-    split_graph,
-    visualize_graph,
-)
+from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
+                                                has_gap, split_graph,
+                                                visualize_graph)
 
 
 class SimulatedAnnealing(BaseLayer):
@@ -707,6 +705,20 @@ class SimulatedAnnealing(BaseLayer):
                         "coarse_in": coarse_in_factor,
                         "coarse_out": coarse_out_factor,
                     }
+                elif isinstance(hw, Pooling3DLayer):
+                    channels = hw.channels
+                    kernel_size = hw.kernel_shape
+                    coarse_inout_feasible = utils.get_factors(channels)
+                    fine_feasible = utils.get_fine_feasible(kernel_size)
+                    coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
+                    fine_factor = random.choice(fine_feasible) / np.prod(
+                        np.array(kernel_size)
+                    )
+                    new_config[node] = {
+                        "op_type": op_type,
+                        "fine": fine_factor,
+                        "coarse_inout": coarse_inout_factor,
+                    }
                 elif isinstance(hw, ActivationLayer):
                     channels = hw.channels
                     coarse_inout_feasible = utils.get_factors(channels)
@@ -861,6 +873,29 @@ class SimulatedAnnealing(BaseLayer):
                         "coarse_in": coarse_in_factor,
                         "coarse_out": coarse_out_factor,
                     }
+            elif isinstance(hw, Pooling3DLayer):
+                channels = hw.channels
+                kernel_size = hw.kernel_shape
+                coarse_inout_feasible = utils.get_factors(
+                    channels, sec_passed=seconds_passed
+                )
+                fine_feasible = utils.get_fine_feasible(kernel_size)
+                coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
+                fine_factor = random.choice(fine_feasible) / np.prod(
+                    np.array(kernel_size)
+                )
+                if neighbours and node in config.keys():
+                    transformations = list(config[node].keys())
+                    transformations.remove("op_type")
+                    apply_transform = random.choice(transformations)
+                    if apply_transform == "coarse_inout":
+                        config[node][apply_transform] = coarse_inout_factor
+                else:
+                    config[node] = {
+                        "op_type": op_type,
+                        "fine": fine_factor,
+                        "coarse_inout": coarse_inout_factor,
+                    }
             elif isinstance(hw, ActivationLayer):
                 channels = hw.channels
                 coarse_inout_feasible = utils.get_factors(
@@ -950,7 +985,6 @@ class SimulatedAnnealing(BaseLayer):
 
         return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
 
-    # TODO: Revise that to follow the changes on run_optimizer
     def run_optimizer_layer(self, layer):
         config, mem_bw = self.generate_random_config_layer(layer)
         cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
@@ -979,7 +1013,7 @@ class SimulatedAnnealing(BaseLayer):
                     continue
 
                 cost_diff = prev_cost - new_cost
-                if cost_diff >= 0:
+                if cost_diff > 0:
                     prev_state = copy.deepcopy(new_state)
                     prev_cost = copy.deepcopy(new_cost)
                     solution_mem, solution_dp = (
@@ -1043,6 +1077,13 @@ class SimulatedAnnealing(BaseLayer):
                 hw.mem_words_per_cycle * mem_bw[0][0],
                 hw.mem_words_per_cycle * mem_bw[1][0],
             )
+        elif isinstance(hw, Pooling3DLayer):
+            dp_info = hw.get_design_point(
+                config[0],
+                config[1],
+                hw.mem_words_per_cycle * mem_bw[0][0],
+                hw.mem_words_per_cycle * mem_bw[1][0],
+            )
         elif isinstance(hw, ActivationLayer):
             dp_info = hw.get_design_point(
                 config[0],
@@ -1099,6 +1140,14 @@ class SimulatedAnnealing(BaseLayer):
             coarse_out_factor = random.choice(coarse_out_feasible) / filters
             fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
             config = [coarse_in_factor, coarse_out_factor, fine_factor]
+        elif isinstance(hw, Pooling3DLayer):
+            channels = hw.channels
+            kernel_size = hw.kernel_shape
+            coarse_inout_feasible = utils.get_factors(channels)
+            fine_feasible = utils.get_fine_feasible(kernel_size)
+            coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
+            fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
+            config = [coarse_inout_factor, fine_factor]
         elif isinstance(hw, ActivationLayer):
             channels = hw.channels
             coarse_inout_feasible = utils.get_factors(channels)
@@ -1164,7 +1213,7 @@ class SimulatedAnnealing(BaseLayer):
         types = {}
         for n in self.graph.nodes:
             if self.graph.nodes[n]["hw_type"] not in types:
-                if "Conv" in self.graph.nodes[n]["hw_type"]:
+                if "Conv" in self.graph.nodes[n]["hw_type"] or "Pooling" in self.graph.nodes[n]["hw_type"]:
                     types[self.graph.nodes[n]["hw_type"]] = {
                         "Padding": [self.graph.nodes[n]["hw"].padding],
                         "Stride": [self.graph.nodes[n]["hw"].stride],
@@ -1172,7 +1221,7 @@ class SimulatedAnnealing(BaseLayer):
                 else:
                     types[self.graph.nodes[n]["hw_type"]] = {}
             else:
-                if "Conv" in self.graph.nodes[n]["hw_type"]:
+                if "Conv" in self.graph.nodes[n]["hw_type"] or "Pooling" in self.graph.nodes[n]["hw_type"]:
                     types[self.graph.nodes[n]["hw_type"]]["Padding"].append(
                         self.graph.nodes[n]["hw"].padding
                     )
@@ -1182,7 +1231,7 @@ class SimulatedAnnealing(BaseLayer):
 
         bblocks = []
         for t in types:
-            if "Conv" in t:
+            if "Conv" in t or "Pooling" in t:
                 final_padding = np.max(np.array(types[t]["Padding"]), axis=0).tolist()
                 final_stride = np.min(np.array(types[t]["Stride"]), axis=0).tolist()
                 bblocks.append(
@@ -1191,7 +1240,6 @@ class SimulatedAnnealing(BaseLayer):
             else:
                 bblocks.append(t)
 
-        # TODO: implement a fuction that generates building blocks comprising of a single layer or a set of layers.
         bblocks, lookuptable = utils.combine_building_blocks(bblocks)
 
         # assert self.validate_building_blocks_setup(
@@ -1221,12 +1269,13 @@ class SimulatedAnnealing(BaseLayer):
         for bb in bblocks:
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
-
-            # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
             shape_in, shape_out = utils.get_random_shape(
                 self.graph, bb, lookuptable, previous_config=previous_config
             )
-
+            # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
+            shape_in, shape_out = utils.get_random_arbitrary_shape(
+                self.graph, bb, lookuptable, previous_config=previous_config
+            )
             if bb != "Gemm":
                 _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
                 (
@@ -1253,6 +1302,10 @@ class SimulatedAnnealing(BaseLayer):
 
             if "Conv" in bb:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
+                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                )
+            if "Pooling" in bb:
+                bb_setup[bb]["hw"] = Pooling3DLayer(
                     self.max_DSP_util, self.max_BRAM_util, bb_descriptor
                 )
             elif bb == "Activation":
@@ -1302,9 +1355,30 @@ class SimulatedAnnealing(BaseLayer):
                         )
                     if "Conv3DDw" in bb:
                         coarse_out = coarse_in
-
+                    assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
+                    assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
+                    # TODO: Add fine factor random generation for Conv3D ops
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
+                    )
+                elif "Pooling" in bb:
+                    if alignedfactors:
+                        coarse_inout = (
+                            random.choice(utils.get_factors(channels_in_dim))
+                            / channels_in_dim
+                        )
+                    else:
+                        coarse_inout = (
+                            np.random.choice(
+                                np.arange(channels_in_dim) + 1, replace=False
+                            )
+                            / channels_in_dim
+                        )
+                    assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
+                    assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
+                    # TODO: Add fine factor random generation for Pooling3D ops
+                    dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                        f_fine=1, f_coarse_inout=coarse_inout
                     )
                 elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
                     if alignedfactors:
@@ -1319,6 +1393,7 @@ class SimulatedAnnealing(BaseLayer):
                             )
                             / channels_in_dim
                         )
+                    assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarse_inout=coarse_inout
                     )
@@ -1345,6 +1420,7 @@ class SimulatedAnnealing(BaseLayer):
                             )
                             / channels_out_dim
                         )
+                    assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
@@ -1363,8 +1439,8 @@ class SimulatedAnnealing(BaseLayer):
                     height_in_dim,
                     width_in_dim,
                 ]
-                bb_setup[bb]["f_coarseIn"] = coarse_in
-                bb_setup[bb]["coarse_in_factor"] = int(coarse_in * channels_in_dim)
+                bb_setup[bb]["f_coarseIn"] = float(coarse_in)
+                bb_setup[bb]["coarse_in_factor"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
                 bb_setup[bb]["shape_out"] = [
                     1,
@@ -1373,8 +1449,8 @@ class SimulatedAnnealing(BaseLayer):
                     height_out_dim,
                     width_out_dim,
                 ]
-                bb_setup[bb]["f_coarseOut"] = coarse_out
-                bb_setup[bb]["coarse_out_factor"] = int(coarse_out * channels_out_dim)
+                bb_setup[bb]["f_coarseOut"] = float(coarse_out)
+                bb_setup[bb]["coarse_out_factor"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
                 bb_setup[bb]["fine_factor"] = int(
                     1
@@ -1386,7 +1462,34 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["shape_bias"] = bb_descriptor["bias"]
                 bb_setup[bb]["padding"] = bb_descriptor["padding"]
                 bb_setup[bb]["stride"] = bb_descriptor["stride"]
-                bb_setup[bb]["groups"] = bb_descriptor["groups"]
+                bb_setup[bb]["groups"] = int(bb_descriptor["groups"])
+            elif "Pooling" in bb:
+                bb_setup[bb]["shape_in"] = [
+                    1,
+                    channels_in_dim,
+                    depth_in_dim,
+                    height_in_dim,
+                    width_in_dim,
+                ]
+                bb_setup[bb]["coarse_inout"] = coarse_inout
+                bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
+                bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
+                bb_setup[bb]["shape_out"] = [
+                    1,
+                    channels_out_dim,
+                    depth_out_dim,
+                    height_out_dim,
+                    width_out_dim,
+                ]
+                bb_setup[bb]["fine_factor"] = int(
+                    1
+                    * bb_descriptor["kernel"][0]
+                    * bb_descriptor["kernel"][1]
+                    * bb_descriptor["kernel"][2]
+                )
+                bb_setup[bb]["shape_kernel"] = bb_descriptor["kernel"]
+                bb_setup[bb]["padding"] = bb_descriptor["padding"]
+                bb_setup[bb]["stride"] = bb_descriptor["stride"]
             elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 bb_setup[bb]["shape_in"] = [
                     1,
@@ -1397,16 +1500,16 @@ class SimulatedAnnealing(BaseLayer):
                 ]
                 bb_setup[bb]["shape_out"] = bb_descriptor["shape_out"]
                 bb_setup[bb]["coarse_inout"] = coarse_inout
-                bb_setup[bb]["coarse_factor"] = int(coarse_inout * channels_in_dim)
+                bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
             elif bb == "Gemm":
                 bb_setup[bb]["shape_in"] = [1, channels_in_dim]
                 bb_setup[bb]["coarse_in"] = coarse_in
-                bb_setup[bb]["coarse_in_factor"] = int(coarse_in * channels_in_dim)
+                bb_setup[bb]["coarse_in_factor"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
                 bb_setup[bb]["shape_out"] = [1, channels_out_dim]
                 bb_setup[bb]["coarse_out"] = coarse_out
-                bb_setup[bb]["coarse_out_factor"] = int(coarse_out * channels_out_dim)
+                bb_setup[bb]["coarse_out_factor"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
                 bb_setup[bb]["shape_kernel"] = bb_descriptor["kernel"]
                 bb_setup[bb]["shape_bias"] = bb_descriptor["bias"]
@@ -1495,6 +1598,20 @@ class SimulatedAnnealing(BaseLayer):
                 )
                 bblocks_config[bb_type]["hw"].padding = bblock_padding
                 bblocks_config[bb_type]["hw"].stride = bblock_stride
+            elif "Pooling" in bb_type:
+                bblock_padding = deepcopy(bblocks_config[bb_type]["hw"].padding)
+                bblock_stride = deepcopy(bblocks_config[bb_type]["hw"].stride)
+
+                bblocks_config[bb_type]["hw"].padding = hw.padding
+                bblocks_config[bb_type]["hw"].stride = hw.stride
+                performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
+                    f_fine=1,
+                    f_coarse_inout=bblocks_config[bb_type]["coarse_inout"],
+                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                )
+                bblocks_config[bb_type]["hw"].padding = bblock_padding
+                bblocks_config[bb_type]["hw"].stride = bblock_stride
             elif bb_type == "Activation":
                 bblocks_config[bb_type]["hw"].op_type = hw.op_type
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
@@ -1539,7 +1656,7 @@ class SimulatedAnnealing(BaseLayer):
 
             # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
 
-            bblocks_config[bb_type]["MemBw_util"] = performance_modeling["memBwUtil"]
+            bblocks_config[bb_type]["MemBw_util"] = float(performance_modeling["memBwUtil"])
 
             latency = performance_modeling["latency(S)"] * math.ceil(total_block_calls)
             avg_BW += performance_modeling["memBwUtil"]

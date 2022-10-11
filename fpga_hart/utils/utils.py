@@ -5,6 +5,7 @@ import math
 import os
 import random
 from copy import deepcopy
+from ctypes import c_int
 from functools import reduce
 from typing import Tuple
 
@@ -19,6 +20,7 @@ from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist
@@ -65,11 +67,14 @@ def get_factors(n, max_parallel=None, sec_passed=None) -> list:
 def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
     conv_blocks_lookup_choices = []
     conv_blocks_dw_lookup_choices = []
+    pool_blocks_lookup_choices = []
     conv_blocks_choices = []
     conv_dw_blocks_choices = []
+    pool_blocks_choices = []
 
     conv_blocks = []
     conv_dw_blocks = []
+    pool_blocks = []
     rest_operations = []
     for bb in building_blocks:
         if "Conv" in bb:
@@ -77,15 +82,16 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
                 conv_dw_blocks.append(bb)
             else:
                 conv_blocks.append(bb)
+        elif "Pooling" in bb:
+            pool_blocks.append(bb)
         else:
             rest_operations.append(bb)
 
+    # Combine convolutional blocks
     kernel_list = []
     padding_list = []
     stride_list = []
     lookuptable = {}
-
-    # Combine convolutional blocks
     for c in conv_blocks:
         lookuptable[c.split("p")[0]] = c
         kernel_shape = [int(x) for x in c.split("k")[-1][:3]]
@@ -118,11 +124,48 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
         conv_blocks_choices.append([block])
         conv_blocks_lookup_choices.append(deepcopy(lookuptable))
 
+    # Combine pooling blocks
+    kernel_list = []
+    padding_list = []
+    stride_list = []
+    lookuptable = {}
+    for c in pool_blocks:
+        lookuptable[c.split("p")[0]] = c
+        kernel_shape = [int(x) for x in c.split("k")[-1][:3]]
+        kernel_list.append(kernel_shape)
+        padding = [int(x) for x in c.split("p")[-1][:3]]
+        padding_list.append(padding)
+        stride = [int(x) for x in c.split("s")[-1][:3]]
+        stride_list.append(stride)
+
+    if kernel_list:
+        pool_blocks_choices.append(pool_blocks)
+        pool_blocks_lookup_choices.append(deepcopy(lookuptable))
+
+        combined_kernel = np.max(np.array(kernel_list), axis=0).tolist()
+        combined_padding = np.max(np.array(padding_list), axis=0).tolist()
+        combined_stride = np.min(np.array(stride_list), axis=0).tolist()
+
+        try:
+            index = kernel_list.index(combined_kernel)
+        except ValueError:
+            index = -1
+
+        if index != -1:
+            block = f"{pool_blocks[index].split('p')[0]}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        else:
+            block = f"Poolingk{''.join([str(elem) for elem in combined_kernel])}p{''.join([str(elem) for elem in combined_padding])}s{''.join([str(elem) for elem in combined_stride])}"
+        lookuptable.clear()
+        for c in pool_blocks:
+            lookuptable[c.split("p")[0]] = block
+        pool_blocks_choices.append([block])
+        pool_blocks_lookup_choices.append(deepcopy(lookuptable))
+
     # Combine convolutional depthwise blocks
-    kernel_list.clear()
-    padding_list.clear()
-    stride_list.clear()
-    lookuptable.clear()
+    kernel_list = []
+    padding_list = []
+    stride_list = []
+    lookuptable = {}
     for c in conv_dw_blocks:
         lookuptable[c.split("p")[0]] = c
         kernel_shape = [int(x) for x in c.split("k")[-1][:3]]
@@ -155,43 +198,38 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
         conv_dw_blocks_choices.append([block])
 
     assert len(conv_blocks_choices) == len(conv_blocks_lookup_choices)
+    assert len(pool_blocks_choices) == len(pool_blocks_lookup_choices)
     assert len(conv_dw_blocks_choices) == len(conv_blocks_dw_lookup_choices)
 
     conv_blocks_idx = (
         random.randint(0, len(conv_blocks_choices) - 1) if conv_blocks_choices else -1
+    )
+    pool_blocks_idx = (
+        random.randint(0, len(pool_blocks_choices) - 1) if pool_blocks_choices else -1
     )
     conv_dw_blocks_idx = (
         random.randint(0, len(conv_dw_blocks_choices) - 1)
         if conv_dw_blocks_choices
         else -1
     )
-    final_building_blocks = rest_operations
+    final_building_blocks = deepcopy(rest_operations)
     if conv_blocks_idx != -1:
         final_building_blocks += conv_blocks_choices[conv_blocks_idx]
+    if pool_blocks_idx != -1:
+        final_building_blocks += pool_blocks_choices[conv_blocks_idx]
     if conv_dw_blocks_idx != -1:
         final_building_blocks += conv_dw_blocks_choices[conv_dw_blocks_idx]
 
-    lookuptable = {}
+    final_lookup_table = {}
     for op in rest_operations:
-        lookuptable[op] = op
-    if conv_blocks_idx != -1 and conv_dw_blocks_idx != -1:
-        final_lookup_table = {
-            **lookuptable,
-            **conv_blocks_lookup_choices[conv_blocks_idx],
-            **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
-        }
-    elif conv_blocks_idx != -1 and conv_dw_blocks_idx == -1:
-        final_lookup_table = {
-            **lookuptable,
-            **conv_blocks_lookup_choices[conv_blocks_idx],
-        }
-    elif conv_blocks_idx == -1 and conv_dw_blocks_idx != -1:
-        final_lookup_table = {
-            **lookuptable,
-            **conv_blocks_dw_lookup_choices[conv_dw_blocks_idx],
-        }
-    else:
-        final_lookup_table = lookuptable
+        final_lookup_table[op] = op
+
+    if conv_blocks_idx != -1:
+        final_lookup_table |= conv_blocks_lookup_choices[conv_blocks_idx]
+    if pool_blocks_idx != -1:
+        final_lookup_table |= pool_blocks_lookup_choices[pool_blocks_idx]
+    if conv_dw_blocks_idx != -1:
+        final_lookup_table |= conv_blocks_dw_lookup_choices[conv_dw_blocks_idx]
 
     return final_building_blocks, final_lookup_table
 
@@ -221,7 +259,7 @@ def generate_description_from_type(
             ],
             "shape_out": [
                 1,
-                channels_in_dim,
+                channels_out_dim,
                 depth_out_dim,
                 height_out_dim,
                 width_out_dim,
@@ -229,11 +267,33 @@ def generate_description_from_type(
             "kernel": [channels_out_dim, 1] + kernel_shape
             if dw
             else [channels_out_dim, channels_in_dim] + kernel_shape,
-            "bias": [channels_in_dim],
+            "bias": [channels_out_dim],
             "padding": padding,
             "stride": stride,
-            "groups": channels_in_dim,
+            "groups": channels_in_dim if dw else 1,
             "dilation": [1, 1, 1],
+            "branching": False,
+        }
+    elif "Pooling" in bb:
+        kernel_shape = [int(x) for x in bb.split("k")[-1][:3]]
+        padding = [int(x) for x in bb.split("p")[-1][:3]]
+        stride = [int(x) for x in bb.split("s")[-1][:3]]
+
+        bb_descriptor = {
+            "operation": "Pooling",
+            "shape_in": [
+                [1, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim]
+            ],
+            "shape_out": [
+                1,
+                channels_out_dim,
+                depth_out_dim,
+                height_out_dim,
+                width_out_dim,
+            ],
+            "kernel": kernel_shape,
+            "padding": padding,
+            "stride": stride,
             "branching": False,
         }
     elif bb == "Activation":
@@ -526,6 +586,21 @@ def generate_layer_config(layer, config):
         layer_config["coarse_out_factor"] = (
             coarse_out_factor if not depthwise else coarse_in_factor
         )
+    elif isinstance(layer, Pooling3DLayer):
+        input_shape = layer.input_shape
+        output_shape = layer.output_shape
+        kerner_shape = layer.kernel_shape
+        padding = layer.padding
+        stride = layer.stride
+        fine_factor = int(config[0] * layer.kd * layer.kh * layer.kw)
+        coarse_factor = int(config[1] * layer.channels)
+        layer_config["shape_in"] = input_shape
+        layer_config["shape_out"] = output_shape
+        layer_config["shape_kernel"] = kerner_shape
+        layer_config["padding"] = padding
+        layer_config["stride"] = stride
+        layer_config["fine_factor"] = fine_factor
+        layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, ActivationLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
@@ -640,6 +715,11 @@ def check_configuration_validation(config, layers):
             streams_in, streams_out = layer["layer"].get_num_streams()
             streams_in = math.ceil(streams_in * config[i][1])
             streams_out = math.ceil(streams_out * config[i][2])
+            input_streams.append(streams_in)
+        if isinstance(layer["layer"], Pooling3DLayer):
+            streams_in, streams_out = layer["layer"].get_num_streams()
+            streams_in = math.ceil(streams_in * config[i][1])
+            streams_out = math.ceil(streams_out * config[i][1])
             input_streams.append(streams_in)
         elif isinstance(layer["layer"], BatchNorm3DLayer):
             streams_in, streams_out = layer["layer"].get_num_streams()
@@ -919,6 +999,26 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
     return bin_edges
 
 
+def get_pool_type(
+    layer: dict(),
+    discriminate_kernel_size: bool = False,
+    discriminate_stide: bool = False,
+    discriminate_padding: bool = False,
+) -> str:
+    pool_type = "Pooling"
+    kernel_shape = layer["kernel"]
+    padding = layer["padding"]
+    stride = layer["stride"]
+
+    if discriminate_kernel_size:
+        pool_type += "k{}".format("".join(map(str, kernel_shape)))
+    if discriminate_stide:
+        pool_type += "s{}".format("".join(map(str, stride)))
+    if discriminate_padding:
+        pool_type += "p{}".format("".join(map(str, padding)))
+
+    return pool_type
+
 def get_conv_type(
     layer: dict(),
     discriminate_kernel_size: bool = False,
@@ -947,6 +1047,62 @@ def get_conv_type(
         conv_type += "c{}".format(cin)
         conv_type += "f{}".format(cout)
     return conv_type
+
+def get_random_arbitrary_shape(
+    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None
+) -> np.array:
+    in_shapes = []
+    out_shapes = []
+    for node in graph.nodes:
+        bb = lookuptable[graph.nodes[node]["hw_type"]]
+        if bb == "Activation" and len(graph.nodes[node]["hw"].input_shape) < 5:
+            continue
+        if bb in bb_type:
+            in_shapes.append(graph.nodes[node]["hw"].input_shape)
+            out_shapes.append(graph.nodes[node]["hw"].output_shape)
+
+    if len(in_shapes[0]) == 5:
+        _, c_min, d_min, h_min, w_min = np.min(np.array(in_shapes), axis=0)
+        _, c_max, d_max, h_max, w_max = np.max(np.array(in_shapes), axis=0)
+        c_in = np.random.randint(c_min, c_max) if c_min != c_max else c_min
+        d_in = np.random.randint(d_min, d_max) if d_min != d_max else d_min
+        h_in = np.random.randint(h_min, h_max) if h_min != h_max else h_min
+        w_in = h_in
+
+        out_shapes_array = np.array(out_shapes)
+        out_depth_array = out_shapes_array[:, 2]
+        out_depth_idx = np.where(out_depth_array <= d_in)
+        out_shapes_array = out_shapes_array[out_depth_idx]
+        out_height_array = out_shapes_array[:, 3]
+        out_height_idx = np.where(out_height_array <= h_in)
+        out_shapes_array = out_shapes_array[out_height_idx]
+
+        if out_shapes_array.shape[0] == 0:
+            _logger.warning("No valid output shape found")
+            _, c_min_out, _, _, _ = np.min(np.array(out_shapes), axis=0)
+            _, c_max_out, _, _, _ = np.max(np.array(out_shapes), axis=0)
+            c_out = np.random.randint(c_min_out, c_max_out) if c_min_out != c_max_out else c_min_out
+            d_out = np.random.randint(0, d_in)
+            h_out = np.random.randint(0, h_in)
+            w_out = h_out
+        else:
+            _, c_min_out, d_min_out, h_min_out, w_min_out = np.min(out_shapes_array, axis=0)
+            _, c_max_out, d_max_out, h_max_out, w_max_out = np.max(out_shapes_array, axis=0)
+            c_out = np.random.randint(c_min_out, c_max_out) if c_min_out != c_max_out else c_min_out
+            d_out = np.random.randint(d_min_out, d_max_out) if d_min_out != d_max_out else d_min_out
+            h_out = np.random.randint(h_min_out, h_max_out) if h_min_out != h_max_out else h_min_out
+            w_out = h_out
+        assert d_in >= d_out and h_in >= h_out and w_in >= w_out, "Invalid output shape: {} -> {}".format([1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out])
+        return [1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out]
+    elif len(in_shapes[0]) == 2:
+        _, features_min = np.min(np.array(in_shapes), axis=0)
+        _, features_max = np.max(np.array(in_shapes), axis=0)
+        features_in = np.random.randint(features_min, features_max) if features_min != features_max else features_min
+
+        _, features_min_out = np.min(np.array(out_shapes), axis=0)
+        _, features_max_out = np.max(np.array(out_shapes), axis=0)
+        features_out = np.random.randint(features_min_out, features_max_out) if features_min_out != features_max_out else features_min_out
+        return [1, features_in], [1, features_out]
 
 
 def get_random_shape(
