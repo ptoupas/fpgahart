@@ -1273,9 +1273,9 @@ class SimulatedAnnealing(BaseLayer):
                 self.graph, bb, lookuptable, previous_config=previous_config
             )
             # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
-            shape_in, shape_out = utils.get_random_arbitrary_shape(
-                self.graph, bb, lookuptable, previous_config=previous_config
-            )
+            # shape_in, shape_out = utils.get_random_arbitrary_shape(
+            #     self.graph, bb, lookuptable, previous_config=previous_config
+            # )
             if bb != "Gemm":
                 _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
                 (
