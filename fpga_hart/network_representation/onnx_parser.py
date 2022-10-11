@@ -243,6 +243,8 @@ class OnnxModelParser:
                             padding = list(attr.ints[:3])
                         elif attr.name == "strides":
                             stride = list(attr.ints)
+                        elif attr.name == "kernel_shape":
+                            kernel = list(attr.ints)
 
                 elif n.op_type == "Mul" or n.op_type == "Add" or n.op_type == "Div":
                     layer_input_ids.append(n.input[0])

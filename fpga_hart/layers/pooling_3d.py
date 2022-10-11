@@ -15,7 +15,7 @@ class Pooling3DLayer(BaseLayer):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
         # _logger.setLevel(level=logging.DEBUG)
 
-        self.op_type = description["operation"]
+        self.op_type = "max" if "Max" in description["operation"] else "avg"
 
         self.input_shape = description["shape_in"][0]
         self.depth_in = self.input_shape[2]
@@ -26,7 +26,7 @@ class Pooling3DLayer(BaseLayer):
         self.rows_out = self.output_shape[3]
         self.cols_out = self.output_shape[4]
 
-        self.kernel_shape = description["kernel"][2:]
+        self.kernel_shape = description["kernel"]
         self.kd = self.kernel_shape[0]
         self.kh = self.kernel_shape[1]
         self.kw = self.kernel_shape[2]
@@ -50,7 +50,6 @@ class Pooling3DLayer(BaseLayer):
         self.data_size_in = np.prod(np.array(self.input_shape[1:]))
 
         self.output_shape = output_shape
-        self.filters = self.output_shape[1]
         self.depth_out = self.output_shape[2]
         self.rows_out = self.output_shape[3]
         self.cols_out = self.output_shape[4]
@@ -200,7 +199,7 @@ class Pooling3DLayer(BaseLayer):
             max_parallel_adds,
             layer_fifos_arrays,
             0,
-            kernel_shape=[self.filters, self.channels, self.kd, self.kh, self.kw],
+            kernel_shape=[self.channels, self.channels, self.kd, self.kh, self.kw],
             coarse_inout=math.ceil(self.channels * f_coarse_inout),
             fine=math.ceil(kernel_elems * f_fine),
         )
@@ -363,7 +362,7 @@ class Pooling3DLayer(BaseLayer):
             max_parallel_adds,
             layer_fifos_arrays,
             depth,
-            kernel_shape=[self.filters, self.channels, self.kd, self.kh, self.kw],
+            kernel_shape=[self.channels, self.channels, self.kd, self.kh, self.kw],
             coarse_inout=math.ceil(self.channels * f_coarse_inout),
             fine=math.ceil(kernel_elems * f_fine),
         )
@@ -374,7 +373,7 @@ class Pooling3DLayer(BaseLayer):
             np.prod(np.array(self.input_shape[2:])) * self.channels
         )  # Volumes per second
         thr_out /= (
-            np.prod(np.array(self.output_shape[2:])) * self.filters
+            np.prod(np.array(self.output_shape[2:])) * self.channels
         )  # Volumes per second
         assert math.isclose(
             thr_in, thr_out
@@ -554,7 +553,7 @@ class Pooling3DLayer(BaseLayer):
         workload_matrix[2, 2] = out_volume * kernel_volume * self.channels
 
         # Concatenation
-        workload_matrix[2, 3] = out_volume * self.filters
+        workload_matrix[2, 3] = out_volume * self.channels
 
         _logger.debug("WL:\n{}".format(workload_matrix))
         return workload_matrix

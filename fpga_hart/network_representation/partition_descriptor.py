@@ -6,7 +6,8 @@ import networkx as nx
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
+from fpga_hart.network_representation.model_descriptor import \
+    ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from matplotlib import pyplot as plt
@@ -262,24 +263,9 @@ class PartitionDescriptor(ModelLayerDescriptor):
         processing element to support all the convolutional layers in the graph.
         """
 
-        # Here we get all the layers in the graph but the first two convolutional layers
-        sub_layers = [
-            layer
-            for layer, config in self.layers.items()
-            if config["operation"]
-            in [
-                "Conv",
-                "Relu",
-                "Sigmoid",
-                "Swish",
-                "GlobalAveragePool",
-                "Add",
-                "Mul",
-                "Gemm",
-            ]
-        ]
+        model_layers = [layer for layer, config in self.layers.items()]
 
-        graph = self.create_graph(sub_layers)
+        graph = self.create_graph(model_layers)
         if not os.path.exists(
             os.getcwd() + "/fpga_modeling_reports/graphs/" + self.model_name + "/"
         ):
@@ -298,8 +284,8 @@ class PartitionDescriptor(ModelLayerDescriptor):
             graph,
             t_min=5e-5,
             t_max=10,
-            iterationPerTemp=10,
-            cooling_rate=0.98,
+            iterationPerTemp=15,
+            cooling_rate=0.99,
             ml_flow_id=None,
             wandb_config=wandb_config,
             cnn_model_name=self.model_name,

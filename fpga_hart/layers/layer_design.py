@@ -12,6 +12,7 @@ from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
@@ -32,6 +33,10 @@ def layer_design_points(
 ) -> None:
     if description["operation"] == "Conv":
         conv_design_points(
+            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+        )
+    elif description["operation"] == "MaxPool" or description["operation"] == "AveragePool":
+        pooling_design_points(
             name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
         )
     elif description["operation"] == "BatchNormalization":
@@ -95,15 +100,15 @@ def conv_design_points(
 
     kernel_size = conv.kernel_shape
     fine = utils.get_fine_feasible(kernel_size) / np.prod(np.array(kernel_size))
-    coarsein = utils.get_factors(conv.channels, max_parallel=None) / np.int64(
+    coarsein = utils.get_factors(conv.channels, max_parallel=None) / np.int32(
         conv.channels
     )
-    coarseout = utils.get_factors(conv.filters, max_parallel=None) / np.int64(
+    coarseout = utils.get_factors(conv.filters, max_parallel=None) / np.int32(
         conv.filters
     )
 
-    # coarsein = [2 / np.int64(conv.channels)]
-    # coarseout = [2 / np.int64(conv.filters)]
+    # coarsein = [2 / np.int32(conv.channels)]
+    # coarseout = [2 / np.int32(conv.filters)]
     # fine = [fine[-1]]
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
@@ -336,12 +341,181 @@ def conv_design_points(
     print("*" * 60)
 
 
+def pooling_design_points(
+    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+):
+    pool = Pooling3DLayer(max_DSP_util, max_BRAM_util, description)
+
+    op_type = pool.op_type
+
+    kernel_size = pool.kernel_shape
+    fine = utils.get_fine_feasible(kernel_size) / np.prod(np.array(kernel_size))
+    coarse_inout = utils.get_factors(pool.channels) / np.int32(pool.channels)
+
+    mem_bw = [(10000, 10000)]
+
+    total = [sorted(fine), sorted(coarse_inout), sorted(mem_bw)]
+    combinations = itertools.product(*total)
+
+    _logger.info(
+        "Calculating {} design points for layer {} ({}).".format(
+            len(fine), len(coarse_inout) * len(mem_bw), name, op_type
+        )
+    )
+
+    throughput_gops = []
+    throughput_vols = []
+    latency = []
+    dsp_util = []
+    bram_util = []
+
+    min_latency = 1000000000000
+    best = {}
+    with open(model_file, mode="a") as layer_dp:
+        csv_writer = csv.writer(
+            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
+        )
+
+        if not singlethreaded:
+            processes_pool = Pool(10)
+            input_vars = []
+            for (f, cinout, (bw_in, bw_out)) in combinations:
+                input_vars.append(
+                    [
+                        f,
+                        cinout,
+                        pool.mem_words_per_cycle * bw_in,
+                        pool.mem_words_per_cycle * bw_out,
+                    ]
+                )
+            results = multithreaded_modeling(
+                pool.get_design_point, input_vars, processes_pool
+            )
+            processes_pool.close()
+            for r in results:
+                if r["config"]:
+                    throughput_gops.append(r["GOP/s"])
+                    throughput_vols.append(r["vols/s"])
+                    latency.append(r["latency(C)"])
+                    dsp_util.append(r["DSP"])
+                    bram_util.append(r["BRAM"])
+
+                    if r["latency(C)"] < min_latency and (
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    ):
+                        min_latency = r["latency(C)"]
+                        best = r
+                    elif r["latency(C)"] == min_latency and (
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    ):
+                        if r["DSP"] < best["DSP"]:
+                            min_latency = r["latency(C)"]
+                            best = r
+        else:
+            for (f, cinout, (bw_in, bw_out)) in combinations:
+                r = pool.get_design_point(
+                    f_fine=f,
+                    f_coarse_inout=cinout,
+                    mem_bw_in=pool.mem_words_per_cycle * bw_in,
+                    mem_bw_out=pool.mem_words_per_cycle * bw_out,
+                )
+
+                if r["config"]:
+                    throughput_gops.append(r["GOP/s"])
+                    throughput_vols.append(r["vols/s"])
+                    latency.append(r["latency(C)"])
+                    dsp_util.append(r["DSP"])
+                    bram_util.append(r["BRAM"])
+
+                    if r["latency(C)"] < min_latency and (
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    ):
+                        min_latency = r["latency(C)"]
+                        best = r
+                    elif r["latency(C)"] == min_latency and (
+                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    ):
+                        if r["DSP"] < best["DSP"]:
+                            min_latency = r["latency(C)"]
+                            best = r
+
+        conv_config = utils.generate_layer_config(pool, best["config"][:3])
+
+        csv_writer.writerow(
+            [
+                name,
+                "Conv",
+                best["latency(C)"] - best["depth"],
+                best["latency(C)"],
+                best["latency(S)"],
+                best["GOP/s"],
+                best["GOPs"],
+                best["vols/s"],
+                best["DSP"],
+                best["BRAM"],
+                best["rateIn"],
+                best["rateOut"],
+                best["depth"],
+                best["branch_depth"],
+                best["muls"],
+                best["adds"],
+                best["memWords"],
+                best["memKBs"],
+                best["dataSizeIn"],
+                best["dataSizeOut"],
+                best["memBoundedIn"],
+                best["memBoundedOut"],
+                conv_config,
+            ]
+        )
+    _logger.info(
+        "Latency: {}.\n(fine={:.2f}->{}, cInOut={:.2f}->{}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSPs(%)={}({:.2f}), BRAMs(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
+            best["latency(S)"],
+            best["config"][0],
+            best["config"][4],
+            best["config"][1],
+            best["config"][5],
+            best["config"][2],
+            best["config"][3],
+            best["latency(C)"],
+            best["latency(S)"],
+            best["GOP/s"],
+            best["vols/s"],
+            best["DSP_RAW"],
+            best["DSP"],
+            best["BRAM_RAW"],
+            best["BRAM"],
+            best["rateIn"],
+            best["rateOut"],
+            best["depth"],
+            best["muls"],
+            best["adds"],
+            best["memWords"],
+            best["memKBs"],
+            best["memBoundedIn"],
+            best["memBoundedOut"],
+        )
+    )
+    # exit()
+    print("*" * 60)
+    _logger.info(
+        "Searching for optimal point with simulated annealing for layer {} ({}).".format(
+            name, op_type
+        )
+    )
+    graph = nx.DiGraph()
+    graph.add_node(name, type=description["operation"], hw=pool)
+
+    optimizer = SimulatedAnnealing(graph, branch_mem=0)
+    optimizer.run_optimizer_layer(name)
+    print("*" * 60)
+
 def batchnorm_design_points(
     name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
 ):
     bn = BatchNorm3DLayer(max_DSP_util, max_BRAM_util, description)
 
-    coarse_inout = utils.get_factors(bn.channels) / np.int64(bn.channels)
+    coarse_inout = utils.get_factors(bn.channels) / np.int32(bn.channels)
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
@@ -516,7 +690,7 @@ def gap_design_points(
 ):
     gap = GAPLayer(max_DSP_util, max_BRAM_util, description)
 
-    coarse_inout = utils.get_factors(gap.channels) / np.int64(gap.channels)
+    coarse_inout = utils.get_factors(gap.channels) / np.int32(gap.channels)
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
@@ -691,7 +865,7 @@ def activation_design_points(
 ):
     activ = ActivationLayer(max_DSP_util, max_BRAM_util, description)
 
-    coarse_inout = utils.get_factors(activ.channels) / np.int64(activ.channels)
+    coarse_inout = utils.get_factors(activ.channels) / np.int32(activ.channels)
 
     # mem_bw = [(0.1,0.9), (0.2,0.8), (0.3,0.7), (0.4,0.6), (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1)]
     mem_bw = [(10000000, 10000000)]
@@ -1100,7 +1274,7 @@ def elemwise_design_points(
 ):
     elem = ElementWiseLayer(max_DSP_util, max_BRAM_util, description)
 
-    coarse_inout = utils.get_factors(elem.channels_1) / np.int64(elem.channels_1)
+    coarse_inout = utils.get_factors(elem.channels_1) / np.int32(elem.channels_1)
 
     # mem_bw = [(0.1, 0.1, 0.8), (0.2, 0.2, 0.6), (0.3, 0.3, 0.4), (0.4, 0.4, 0.2), (0.3, 0.3, 0.4), (0.1, 0.4, 0.5), (0.4, 0.2, 0.4), (0.7, 0.2, 0.1), (0.8, 0.1, 0.1)]
     mem_bw = [(10000000, 10000000, 10000000)]

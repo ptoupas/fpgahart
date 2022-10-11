@@ -10,6 +10,7 @@ from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils import utils
 from fpga_hart.utils.matrix_balancing import balance_memory_rates
@@ -305,6 +306,14 @@ class PartitionComposer(BaseLayer):
                     f_fine=c[0],
                     f_coarseIn=c[1],
                     f_coarseOut=c[2],
+                    mem_bw_in=curr_layer_rate,
+                    mem_bw_out=curr_layer_rate,
+                )
+                config[node] = utils.generate_layer_config(hw, c)
+            elif isinstance(hw, Pooling3DLayer):
+                dp_info = hw.get_design_point(
+                    f_fine=c[0],
+                    f_coarse_inout=c[1],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
                 )

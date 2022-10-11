@@ -16,6 +16,7 @@ from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.network_representation.partition_descriptor import \
     PartitionDescriptor
@@ -202,6 +203,17 @@ class PartitionParser(PartitionDescriptor):
                     self.layers[layer],
                 )
                 layer_type = self.layers[layer]["operation"]
+            elif self.layers[layer]["operation"] == "MaxPool" or self.layers[layer]["operation"] == "AveragePool":
+                hw_layer = Pooling3DLayer(
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_dsp_util,
+                    95.0
+                    if self.wandb_config == None
+                    else self.wandb_config.max_bram_util,
+                    self.layers[layer],
+                )
+                layer_type = "Pooling"
             elif (
                 self.layers[layer]["operation"] == "Relu"
                 or self.layers[layer]["operation"] == "Sigmoid"
@@ -272,8 +284,14 @@ class PartitionParser(PartitionDescriptor):
                     self.layers[layer]["operation"], layer
                 )
             if self.layers[layer]["operation"] == "Conv":
-                # TODO: check the two first convolutional layers and how to support them
                 hw_type = utils.get_conv_type(
+                    layer=self.layers[layer],
+                    discriminate_kernel_size=True,
+                    discriminate_stide=False,
+                    discriminate_padding=False,
+                )
+            elif self.layers[layer]["operation"] in ["MaxPool", "AveragePool"]:
+                hw_type = utils.get_pool_type(
                     layer=self.layers[layer],
                     discriminate_kernel_size=True,
                     discriminate_stide=False,
@@ -553,7 +571,6 @@ class PartitionParser(PartitionDescriptor):
             os.getcwd(), "fpga_modeling_reports", self.model_name + "_partitions.csv"
         )
 
-        # TODO: Maybe store this as a pandas Dataframe and wandb Table
         with open(self.partition_model_file, mode="w") as partition_dp:
             csv_writer = csv.writer(
                 partition_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL

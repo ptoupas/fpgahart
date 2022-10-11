@@ -7,7 +7,8 @@ import numpy as np
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import ModelLayerDescriptor
+from fpga_hart.network_representation.model_descriptor import \
+    ModelLayerDescriptor
 from fpga_hart.utils import utils
 
 
@@ -160,7 +161,19 @@ class LayerParser(ModelLayerDescriptor):
                 ]
             )
 
-        name = "custom_conv_layer"
+        name = "custom_pool_layer"
+
+        pool_descriptor = {
+            "operation": "MaxPool",
+            "shape_in": [[1, 64, 8, 128, 128]],
+            "shape_out": [1, 64, 8, 64, 64],
+            "node_in": ["323"],
+            "node_out": "324",
+            "branching": False,
+            "kernel": [1, 3, 3],
+            "padding": [0, 1, 1],
+            "stride": [1, 2, 2],
+        }
         # gemm_descriptor = {
         #     "operation": "Gemm",
         #     "shape_in": [[1, 200]],
@@ -171,20 +184,20 @@ class LayerParser(ModelLayerDescriptor):
         #     "kernel": [200, 100],
         #     "bias": [100],
         # }
-        conv_descriptor = {
-            "operation": "Conv",
-            "shape_in": [[1, 3, 8, 16, 16]],
-            "shape_out": [1, 6, 8, 8, 8],
-            "node_in": ["575"],
-            "node_out": "576",
-            "branching": False,
-            "kernel": [6, 3, 3, 3, 3],
-            "bias": [6],
-            "padding": [1, 1, 1],
-            "stride": [1, 2, 2],
-            "groups": 1,
-            "dilation": [1, 1, 1],
-        }
+        # conv_descriptor = {
+        #     "operation": "Conv",
+        #     "shape_in": [[1, 3, 8, 16, 16]],
+        #     "shape_out": [1, 6, 8, 8, 8],
+        #     "node_in": ["575"],
+        #     "node_out": "576",
+        #     "branching": False,
+        #     "kernel": [6, 3, 3, 3, 3],
+        #     "bias": [6],
+        #     "padding": [1, 1, 1],
+        #     "stride": [1, 2, 2],
+        #     "groups": 1,
+        #     "dilation": [1, 1, 1],
+        # }
         # conv_descriptor = {
         #     "operation": "Conv",
         #     "shape_in": [[1, 4, 4, 6, 6]],
@@ -213,4 +226,4 @@ class LayerParser(ModelLayerDescriptor):
         #     "groups": 1,
         #     "dilation": [1, 1, 1],
         # }
-        self.model_layer(name, conv_descriptor)
+        self.model_layer(name, pool_descriptor)

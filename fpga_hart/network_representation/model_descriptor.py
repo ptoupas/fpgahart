@@ -83,6 +83,10 @@ class ModelLayerDescriptor(OnnxModelParser):
                     self.layers[name]["conv_type"] = "3d_conv_spatial"
                 else:
                     self.layers[name]["conv_type"] = "3d_conv"
+            elif operation == "AveragePool" or operation == "MaxPool":
+                self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
+                self.layers[name]["padding"] = self.torch_layers[k]["padding"]
+                self.layers[name]["stride"] = self.torch_layers[k]["stride"]
             elif operation == "BatchNormalization":
                 self.layers[name]["kernel"] = self.torch_layers[k]["kernel"]
                 self.layers[name]["bias"] = self.torch_layers[k]["bias"]
