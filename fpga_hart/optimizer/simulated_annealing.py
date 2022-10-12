@@ -1425,7 +1425,7 @@ class SimulatedAnnealing(BaseLayer):
                         f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
                 stop_counter += 1
-                if stop_counter > 50:
+                if stop_counter > 100:
                     _logger.debug(
                         "Could not find a valid configuration for the current building block setup. Returning without result."
                     )
@@ -1439,7 +1439,7 @@ class SimulatedAnnealing(BaseLayer):
                     height_in_dim,
                     width_in_dim,
                 ]
-                bb_setup[bb]["f_coarseIn"] = float(coarse_in)
+                bb_setup[bb]["f_coarseIn"] = coarse_in
                 bb_setup[bb]["coarse_in_factor"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
                 bb_setup[bb]["shape_out"] = [
@@ -1449,7 +1449,7 @@ class SimulatedAnnealing(BaseLayer):
                     height_out_dim,
                     width_out_dim,
                 ]
-                bb_setup[bb]["f_coarseOut"] = float(coarse_out)
+                bb_setup[bb]["f_coarseOut"] = coarse_out
                 bb_setup[bb]["coarse_out_factor"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
                 bb_setup[bb]["fine_factor"] = int(
@@ -1735,6 +1735,8 @@ class SimulatedAnnealing(BaseLayer):
         current_temp = self.t_max
         print(f"Temperature  |  Latency    ")
         while current_temp > self.t_min:
+            bblocks, lookuptable = self.generate_building_blocks()
+
             if not self.wandb_config == None:
                 log_dict = {}
                 log_dict["temperature"] = current_temp
@@ -1742,10 +1744,10 @@ class SimulatedAnnealing(BaseLayer):
                 log_dict["dsp_util"] = prev_dsp
                 log_dict["bram_util"] = prev_bram
                 log_dict["mem_bw_util"] = prev_bw
+                log_dict["num_blocks"] = len(bblocks)
                 wandb.log(log_dict)
 
             for _ in range(self.iterationPerTemp):
-                bblocks, lookuptable = self.generate_building_blocks()
                 new_state = self.generate_building_blocks_config(
                     bblocks, alignedfactors, lookuptable, previous_config=None
                 )

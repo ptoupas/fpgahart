@@ -282,10 +282,10 @@ class PartitionDescriptor(ModelLayerDescriptor):
         )
         optimizer = SimulatedAnnealing(
             graph,
-            t_min=5e-5,
+            t_min=1e-5,
             t_max=10,
             iterationPerTemp=15,
-            cooling_rate=0.99,
+            cooling_rate=0.98,
             ml_flow_id=None,
             wandb_config=wandb_config,
             cnn_model_name=self.model_name,

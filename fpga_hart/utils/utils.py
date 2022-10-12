@@ -1061,6 +1061,8 @@ def get_random_arbitrary_shape(
             in_shapes.append(graph.nodes[node]["hw"].input_shape)
             out_shapes.append(graph.nodes[node]["hw"].output_shape)
 
+    final_shape_in = []
+    final_shape_out = []
     if len(in_shapes[0]) == 5:
         _, c_min, d_min, h_min, w_min = np.min(np.array(in_shapes), axis=0)
         _, c_max, d_max, h_max, w_max = np.max(np.array(in_shapes), axis=0)
@@ -1070,6 +1072,9 @@ def get_random_arbitrary_shape(
         w_in = h_in
 
         out_shapes_array = np.array(out_shapes)
+        out_channels_array = out_shapes_array[:, 1]
+        out_channels_idx = np.where(out_channels_array >= c_in)
+        out_shapes_array = out_shapes_array[out_channels_idx]
         out_depth_array = out_shapes_array[:, 2]
         out_depth_idx = np.where(out_depth_array <= d_in)
         out_shapes_array = out_shapes_array[out_depth_idx]
@@ -1079,21 +1084,19 @@ def get_random_arbitrary_shape(
 
         if out_shapes_array.shape[0] == 0:
             _logger.warning("No valid output shape found")
-            _, c_min_out, _, _, _ = np.min(np.array(out_shapes), axis=0)
-            _, c_max_out, _, _, _ = np.max(np.array(out_shapes), axis=0)
-            c_out = np.random.randint(c_min_out, c_max_out) if c_min_out != c_max_out else c_min_out
+            c_out = np.random.randint(c_in, c_max+1)
             d_out = np.random.randint(0, d_in)
             h_out = np.random.randint(0, h_in)
             w_out = h_out
         else:
-            _, c_min_out, d_min_out, h_min_out, w_min_out = np.min(out_shapes_array, axis=0)
-            _, c_max_out, d_max_out, h_max_out, w_max_out = np.max(out_shapes_array, axis=0)
+            _, c_min_out, d_min_out, h_min_out, _ = np.min(out_shapes_array, axis=0)
+            _, c_max_out, d_max_out, h_max_out, _ = np.max(out_shapes_array, axis=0)
             c_out = np.random.randint(c_min_out, c_max_out) if c_min_out != c_max_out else c_min_out
             d_out = np.random.randint(d_min_out, d_max_out) if d_min_out != d_max_out else d_min_out
             h_out = np.random.randint(h_min_out, h_max_out) if h_min_out != h_max_out else h_min_out
             w_out = h_out
         assert d_in >= d_out and h_in >= h_out and w_in >= w_out, "Invalid output shape: {} -> {}".format([1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out])
-        return [1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out]
+        final_shape_in, final_shape_out = [1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out]
     elif len(in_shapes[0]) == 2:
         _, features_min = np.min(np.array(in_shapes), axis=0)
         _, features_max = np.max(np.array(in_shapes), axis=0)
@@ -1102,8 +1105,9 @@ def get_random_arbitrary_shape(
         _, features_min_out = np.min(np.array(out_shapes), axis=0)
         _, features_max_out = np.max(np.array(out_shapes), axis=0)
         features_out = np.random.randint(features_min_out, features_max_out) if features_min_out != features_max_out else features_min_out
-        return [1, features_in], [1, features_out]
+        final_shape_in, final_shape_out = [1, features_in], [1, features_out]
 
+    return final_shape_in, final_shape_out
 
 def get_random_shape(
     graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None
@@ -1124,14 +1128,17 @@ def get_random_shape(
         final_shapes = random.choice(shapes_list)
         shape_in = final_shapes[0]
         shape_out = final_shapes[1]
-        if previous_config is not None:
-            prev_shape_in = previous_config[bb_type]["shape_in_max"]
+        if previous_config is not None and bb_type in previous_config:
+            prev_shape_in = previous_config[bb_type]["shape_in"]
             mape_channels = (
                 abs(prev_shape_in[1] - shape_in[1]) / abs(prev_shape_in[1])
             ) * 100
-            mape_width = (
-                abs(prev_shape_in[4] - shape_in[4]) / abs(prev_shape_in[4])
-            ) * 100
+            if len(prev_shape_in) >= 5:
+                mape_width = (
+                    abs(prev_shape_in[4] - shape_in[4]) / abs(prev_shape_in[4])
+                ) * 100
+            else:
+                mape_width = 0
             if mape_channels > 70 or mape_width > 100:
                 continue
             break
