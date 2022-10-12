@@ -1,5 +1,7 @@
 import argparse
+import cProfile
 import logging
+import pstats
 import time
 
 import seaborn as sns
@@ -67,12 +69,20 @@ def parse_args():
         action="store_false",
         help="whether to disable wandb or not",
     )
-
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="whether to profile the whole programm or not",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
+
+    if args.profile:
+        pr = cProfile.Profile()
+        pr.enable()
 
     _logger.setLevel(level=logging.INFO)
 
@@ -128,3 +138,8 @@ if __name__ == "__main__":
     _logger.info(
         msg=f"Total execution time: {time.strftime('%H:%M:%S', time.gmtime(end_time - start_time))}"
     )
+
+    if args.profile:
+        pr.disable()
+        stats = pstats.Stats(pr).sort_stats('cumtime')
+        stats.print_stats()
