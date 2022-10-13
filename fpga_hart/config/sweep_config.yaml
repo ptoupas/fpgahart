@@ -7,13 +7,13 @@ parameters:
   simulatedAnnealing:
     parameters:
       t_min:
-        values: [1e-4, 1e-5, 1e-6]
+        value: 1e-5
       t_max:
-        values: [5, 10, 15]
+        value: 10
       iterationPerTemp:
-        values: [10, 15, 20]
+        value: 15
       cooling_rate:
-        values: [0.96, 0.97, 0.98, 0.99]
+        value: 0.985
       best_of_iter:
         value: 3
   max_dsp_util:
@@ -25,17 +25,17 @@ parameters:
   bblock_generation:
     values: ['pre_while', 'post_while'] # pre_while or post_while
   bblock_keep_percentage:
-    values: [0.25, 0.5, 0.75, 1.0]
+    values: [0.25, 0.6, 1.0]
   use_arbitrary_shape:
     values: [True, False]
   use_previous_config:
     values: [True, False]
   chan_dist_thresh:
-    values: [20, 40, 60, 80]
+    values: [20, 60]
   depth_dist_thresh:
-    values: [10, 20, 30]
+    value: 15
   height_dist_thresh:
-    values: [20, 40, 60, 80]
+    values: [20, 60]
 # early_terminate:
 #   type: hyperband
 #   s: 2
