@@ -1254,6 +1254,9 @@ class SimulatedAnnealing(BaseLayer):
         alignedfactors: bool,
         lookuptable: dict,
         previous_config: dict = None,
+        use_arbitrary_shape: bool = False,
+        chan_dist_thresh: int = 10,
+        height_dist_thresh: int = 10
     ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
@@ -1269,67 +1272,70 @@ class SimulatedAnnealing(BaseLayer):
         for bb in bblocks:
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
-            shape_in, shape_out = utils.get_random_shape(
-                self.graph, bb, lookuptable, previous_config=previous_config
-            )
-            # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
-            # shape_in, shape_out = utils.get_random_arbitrary_shape(
-            #     self.graph, bb, lookuptable, previous_config=previous_config
-            # )
-            if bb != "Gemm":
-                _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
-                (
-                    _,
-                    channels_out_dim,
-                    depth_out_dim,
-                    height_out_dim,
-                    width_out_dim,
-                ) = shape_out
-            else:
-                channels_in_dim, channels_out_dim = shape_in[1], shape_out[1]
-
-            bb_descriptor = utils.generate_description_from_type(
-                bb,
-                channels_in_dim,
-                depth_in_dim,
-                height_in_dim,
-                width_in_dim,
-                channels_out_dim,
-                depth_out_dim,
-                height_out_dim,
-                width_out_dim,
-            )
-
-            if "Conv" in bb:
-                bb_setup[bb]["hw"] = Convolutional3DLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
-            if "Pooling" in bb:
-                bb_setup[bb]["hw"] = Pooling3DLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
-            elif bb == "Activation":
-                bb_setup[bb]["hw"] = ActivationLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
-            elif bb == "GlobalAveragePool":
-                bb_setup[bb]["hw"] = GAPLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
-            elif bb == "ElementWise":
-                bb_setup[bb]["hw"] = ElementWiseLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
-            elif bb == "Gemm":
-                bb_setup[bb]["hw"] = FCLayer(
-                    self.max_DSP_util, self.max_BRAM_util, bb_descriptor
-                )
 
             dsp_util, bram_util = 100, 100
             stop_counter = 0
             while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
                 self.max_BRAM_util - total_bram
             ):
+                if use_arbitrary_shape:
+                    # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
+                    shape_in, shape_out = utils.get_random_arbitrary_shape(
+                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                    )
+                else:
+                    shape_in, shape_out = utils.get_random_shape(
+                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                    )
+                if bb != "Gemm":
+                    _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
+                    (
+                        _,
+                        channels_out_dim,
+                        depth_out_dim,
+                        height_out_dim,
+                        width_out_dim,
+                    ) = shape_out
+                else:
+                    channels_in_dim, channels_out_dim = shape_in[1], shape_out[1]
+
+                bb_descriptor = utils.generate_description_from_type(
+                    bb,
+                    channels_in_dim,
+                    depth_in_dim,
+                    height_in_dim,
+                    width_in_dim,
+                    channels_out_dim,
+                    depth_out_dim,
+                    height_out_dim,
+                    width_out_dim,
+                )
+
+                if "Conv" in bb:
+                    bb_setup[bb]["hw"] = Convolutional3DLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+                if "Pooling" in bb:
+                    bb_setup[bb]["hw"] = Pooling3DLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+                elif bb == "Activation":
+                    bb_setup[bb]["hw"] = ActivationLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+                elif bb == "GlobalAveragePool":
+                    bb_setup[bb]["hw"] = GAPLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+                elif bb == "ElementWise":
+                    bb_setup[bb]["hw"] = ElementWiseLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+                elif bb == "Gemm":
+                    bb_setup[bb]["hw"] = FCLayer(
+                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                    )
+
                 if "Conv" in bb:
                     if alignedfactors:
                         coarse_in = (
@@ -1700,10 +1706,23 @@ class SimulatedAnnealing(BaseLayer):
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
     def run_optimizer_latency(self, alignedfactors: bool) -> None:
+        if not self.wandb_config == None:
+            block_gen = self.wandb_config["bblock_generation"]
+            use_arbitrary_shape = self.wandb_config["use_arbitrary_shape"]
+            use_previous_config = self.wandb_config["use_previous_config"]
+            chan_dist_thresh = self.wandb_config["chan_dist_thresh"]
+            height_dist_thresh = self.wandb_config["height_dist_thresh"]
+        else:
+            block_gen = 'pre_while'
+            use_arbitrary_shape = True
+            use_previous_config = True
+            chan_dist_thresh = 75
+            height_dist_thresh = 75
+
 
         bblocks, lookuptable = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(
-            bblocks, alignedfactors, lookuptable
+            bblocks, alignedfactors, lookuptable, use_arbitrary_shape=use_arbitrary_shape
         )
 
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
@@ -1714,7 +1733,7 @@ class SimulatedAnnealing(BaseLayer):
             for _ in range(100):
                 bblocks, lookuptable = self.generate_building_blocks()
                 bblocks_config = self.generate_building_blocks_config(
-                    bblocks, alignedfactors, lookuptable
+                    bblocks, alignedfactors, lookuptable, use_arbitrary_shape=use_arbitrary_shape
                 )
                 cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
                     bblocks_config, lookuptable
@@ -1722,7 +1741,7 @@ class SimulatedAnnealing(BaseLayer):
                 if cost is not None:
                     break
             if cost is None:
-                print("No configuration found in 100 iterations. Exiting...")
+                _logger.error("No configuration found in 100 iterations. Exiting...")
                 return None
 
         prev_state = bblocks_config
@@ -1735,7 +1754,8 @@ class SimulatedAnnealing(BaseLayer):
         current_temp = self.t_max
         print(f"Temperature  |  Latency    ")
         while current_temp > self.t_min:
-            bblocks, lookuptable = self.generate_building_blocks()
+            if block_gen == 'pre_while':
+                bblocks, lookuptable = self.generate_building_blocks()
 
             if not self.wandb_config == None:
                 log_dict = {}
@@ -1744,13 +1764,27 @@ class SimulatedAnnealing(BaseLayer):
                 log_dict["dsp_util"] = prev_dsp
                 log_dict["bram_util"] = prev_bram
                 log_dict["mem_bw_util"] = prev_bw
-                log_dict["num_blocks"] = len(bblocks)
+                log_dict["num_blocks"] = len(prev_state)
                 wandb.log(log_dict)
 
+            cont_fail = 0
             for _ in range(self.iterationPerTemp):
-                new_state = self.generate_building_blocks_config(
-                    bblocks, alignedfactors, lookuptable, previous_config=None
-                )
+                if block_gen == 'post_while':
+                    bblocks, lookuptable = self.generate_building_blocks()
+
+                if use_previous_config:
+                    new_state = self.generate_building_blocks_config(
+                        bblocks, alignedfactors, lookuptable, previous_config=prev_state, use_arbitrary_shape=use_arbitrary_shape, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                    )
+                else:
+                    new_state = self.generate_building_blocks_config(
+                        bblocks, alignedfactors, lookuptable, previous_config=None, use_arbitrary_shape=use_arbitrary_shape
+                    )
+
+                if new_state is None:
+                    cont_fail += 1
+                    continue
+
                 (
                     new_cost,
                     new_scheduling,
@@ -1759,8 +1793,6 @@ class SimulatedAnnealing(BaseLayer):
                     bw_util,
                 ) = self.get_cost_e2e(new_state, lookuptable)
 
-                if new_cost is None:
-                    continue
 
                 cost_diff = prev_cost - new_cost
                 if cost_diff >= 0:
@@ -1779,6 +1811,9 @@ class SimulatedAnnealing(BaseLayer):
                         prev_bw = copy.deepcopy(bw_util)
                         prev_scheduling = copy.deepcopy(new_scheduling)
 
+            if cont_fail/self.iterationPerTemp > 0.65:
+                _logger.warning(f'Failed to generate bblock\'s config {cont_fail}/{self.iterationPerTemp} ({(cont_fail/self.iterationPerTemp)*100:.2f}%) times')
+                continue
             current_temp *= self.cooling_rate
             print(
                 f"{current_temp:.5e}\t{prev_cost:.5e}",
