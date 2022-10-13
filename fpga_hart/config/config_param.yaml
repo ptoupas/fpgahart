@@ -6,8 +6,11 @@ simulatedAnnealing:
   best_of_iter: 3
 max_dsp_util: 95
 max_bram_util: 95
+alignedfactors: False
 bblock_generation: 'pre_while' # pre_while or post_while
+bblock_keep_percentage: 0.5
 use_arbitrary_shape: True
 use_previous_config: True
 chan_dist_thresh: 30
+depth_dist_thresh: 10
 height_dist_thresh: 30

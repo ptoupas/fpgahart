@@ -43,6 +43,13 @@ class SimulatedAnnealing(BaseLayer):
         ml_flow_id=None,
         wandb_config=None,
         cnn_model_name="",
+        block_gen='post_while',
+        bblock_keep_percentage=0.5,
+        use_arbitrary_shape=False,
+        use_previous_config=False,
+        chan_dist_thresh=10,
+        depth_dist_thresh=10,
+        height_dist_thresh=10
     ):
         self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
@@ -55,16 +62,6 @@ class SimulatedAnnealing(BaseLayer):
             else self.wandb_config.max_bram_util,
         )
         # _logger.setLevel(level=logging.DEBUG)
-        if self.wandb_config != None:
-            self.wandb_config.update(
-                {
-                    "Device": self.fpga_device,
-                    "Clock frequency": self.clock_freq,
-                    "DSPs": self.dsp,
-                    "BRAMs": self.bram,
-                    "Memory BW": self.mem_bw,
-                }
-            )
 
         self.gap_approx = gap_approx
         self.ml_flow_id = ml_flow_id
@@ -104,6 +101,42 @@ class SimulatedAnnealing(BaseLayer):
             if self.wandb_config == None
             else self.wandb_config.simulatedAnnealing["best_of_iter"]
         )
+        self.block_gen = (
+            block_gen
+            if self.wandb_config == None
+            else self.wandb_config["bblock_generation"]
+        )
+        self.bblock_keep_percentage = (
+            bblock_keep_percentage
+            if self.wandb_config == None
+            else self.wandb_config["bblock_keep_percentage"]
+        )
+        self.use_arbitrary_shape = (
+            use_arbitrary_shape
+            if self.wandb_config == None
+            else self.wandb_config["use_arbitrary_shape"]
+        )
+        self.use_previous_config = (
+            use_previous_config
+            if self.wandb_config == None
+            else self.wandb_config["use_previous_config"]
+        )
+        self.chan_dist_thresh = (
+            chan_dist_thresh
+            if self.wandb_config == None
+            else self.wandb_config["chan_dist_thresh"]
+        )
+        self.depth_dist_thresh = (
+            depth_dist_thresh
+            if self.wandb_config == None
+            else self.wandb_config["depth_dist_thresh"]
+        )
+        self.height_dist_thresh = (
+            height_dist_thresh
+            if self.wandb_config == None
+            else self.wandb_config["height_dist_thresh"]
+        )
+
         self.param_changes = 0
         self.freeze_param = False
 
@@ -1253,10 +1286,7 @@ class SimulatedAnnealing(BaseLayer):
         bblocks: list,
         alignedfactors: bool,
         lookuptable: dict,
-        previous_config: dict = None,
-        use_arbitrary_shape: bool = False,
-        chan_dist_thresh: int = 10,
-        height_dist_thresh: int = 10
+        previous_config: dict = None
     ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
@@ -1265,6 +1295,8 @@ class SimulatedAnnealing(BaseLayer):
         Returns:
             dict: bb_setup
         """
+        bb_choice = [bb for bb in bblocks]
+        bb_choice = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))
 
         bb_setup = dict()
         total_dsp = 0
@@ -1278,14 +1310,13 @@ class SimulatedAnnealing(BaseLayer):
             while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
                 self.max_BRAM_util - total_bram
             ):
-                if use_arbitrary_shape:
-                    # TODO: Should try here with arbitrary shapes and not just the shapes that exist in the graph.
+                if self.use_arbitrary_shape:
                     shape_in, shape_out = utils.get_random_arbitrary_shape(
-                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=self.chan_dist_thresh, depth_dist_thresh=self.depth_dist_thresh, height_dist_thresh=self.height_dist_thresh
                     )
                 else:
                     shape_in, shape_out = utils.get_random_shape(
-                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                        self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=self.chan_dist_thresh, depth_dist_thresh=self.depth_dist_thresh,height_dist_thresh=self.height_dist_thresh
                     )
                 if bb != "Gemm":
                     _, channels_in_dim, depth_in_dim, height_in_dim, width_in_dim = shape_in
@@ -1706,23 +1737,10 @@ class SimulatedAnnealing(BaseLayer):
         return cost, scheduling, final_DSP, final_BRAM, avg_BW
 
     def run_optimizer_latency(self, alignedfactors: bool) -> None:
-        if not self.wandb_config == None:
-            block_gen = self.wandb_config["bblock_generation"]
-            use_arbitrary_shape = self.wandb_config["use_arbitrary_shape"]
-            use_previous_config = self.wandb_config["use_previous_config"]
-            chan_dist_thresh = self.wandb_config["chan_dist_thresh"]
-            height_dist_thresh = self.wandb_config["height_dist_thresh"]
-        else:
-            block_gen = 'pre_while'
-            use_arbitrary_shape = True
-            use_previous_config = True
-            chan_dist_thresh = 30
-            height_dist_thresh = 30
-
 
         bblocks, lookuptable = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(
-            bblocks, alignedfactors, lookuptable, use_arbitrary_shape=use_arbitrary_shape
+            bblocks, alignedfactors, lookuptable
         )
 
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
@@ -1733,7 +1751,7 @@ class SimulatedAnnealing(BaseLayer):
             for _ in range(100):
                 bblocks, lookuptable = self.generate_building_blocks()
                 bblocks_config = self.generate_building_blocks_config(
-                    bblocks, alignedfactors, lookuptable, use_arbitrary_shape=use_arbitrary_shape
+                    bblocks, alignedfactors, lookuptable
                 )
                 cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
                     bblocks_config, lookuptable
@@ -1754,7 +1772,7 @@ class SimulatedAnnealing(BaseLayer):
         current_temp = self.t_max
         print(f"Temperature  |  Latency    ")
         while current_temp > self.t_min:
-            if block_gen == 'pre_while':
+            if self.block_gen == 'pre_while':
                 bblocks, lookuptable = self.generate_building_blocks()
 
             if not self.wandb_config == None:
@@ -1769,16 +1787,16 @@ class SimulatedAnnealing(BaseLayer):
 
             cont_fail = 0
             for _ in range(self.iterationPerTemp):
-                if block_gen == 'post_while':
+                if self.block_gen == 'post_while':
                     bblocks, lookuptable = self.generate_building_blocks()
 
-                if use_previous_config:
+                if self.use_previous_config:
                     new_state = self.generate_building_blocks_config(
-                        bblocks, alignedfactors, lookuptable, previous_config=prev_state, use_arbitrary_shape=use_arbitrary_shape, chan_dist_thresh=chan_dist_thresh, height_dist_thresh=height_dist_thresh
+                        bblocks, alignedfactors, lookuptable, previous_config=prev_state
                     )
                 else:
                     new_state = self.generate_building_blocks_config(
-                        bblocks, alignedfactors, lookuptable, previous_config=None, use_arbitrary_shape=use_arbitrary_shape
+                        bblocks, alignedfactors, lookuptable, previous_config=None
                     )
 
                 if new_state is None:
@@ -1811,7 +1829,7 @@ class SimulatedAnnealing(BaseLayer):
                         prev_bw = copy.deepcopy(bw_util)
                         prev_scheduling = copy.deepcopy(new_scheduling)
 
-            if cont_fail/self.iterationPerTemp > 0.65:
+            if cont_fail/self.iterationPerTemp > 0.5:
                 _logger.warning(f'Failed to generate bblock\'s config {cont_fail}/{self.iterationPerTemp} ({(cont_fail/self.iterationPerTemp)*100:.2f}%) times')
                 continue
             current_temp *= self.cooling_rate

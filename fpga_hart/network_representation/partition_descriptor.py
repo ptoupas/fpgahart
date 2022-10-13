@@ -253,7 +253,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
 
     def latency_driven_design(
         self,
-        run_name: str,
         plot_summaries: bool = False,
         alignedfactors: bool = False,
         wandb_config: wandb.Config = None,
@@ -282,16 +281,9 @@ class PartitionDescriptor(ModelLayerDescriptor):
         )
         optimizer = SimulatedAnnealing(
             graph,
-            t_min=1e-5,
-            t_max=10,
-            iterationPerTemp=15,
-            cooling_rate=0.98,
-            ml_flow_id=None,
             wandb_config=wandb_config,
             cnn_model_name=self.model_name,
         )
-        if wandb_config is not None:
-            wandb_config.update({"aligned_folding_factors": alignedfactors})
         optimizer.run_optimizer_latency(alignedfactors=alignedfactors)
         return
 

@@ -1072,7 +1072,7 @@ def calc_conv_out_shape(cin: int, din: int, hin: int, kernel_shape: list, pad: l
     return [1, int(cout), int(dout), int(hout), int(wout)]
 
 def get_random_arbitrary_shape(
-    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, height_dist_thresh: int = 10
+    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, depth_dist_thresh: int = 10, height_dist_thresh: int = 10
 ) -> np.array:
     in_shapes = []
     out_shapes = []
@@ -1097,7 +1097,7 @@ def get_random_arbitrary_shape(
             prev_h_in = previous_config[bb_type]["shape_in"][3]
 
             c_in_range = math.ceil(prev_c_in*chan_dist_thresh/100)
-            d_in_range = math.ceil(prev_d_in*50/100)
+            d_in_range = math.ceil(prev_d_in*depth_dist_thresh/100)
             h_in_range = math.ceil(prev_h_in*height_dist_thresh/100)
 
             c_in = np.random.randint(max(1, prev_c_in-c_in_range), prev_c_in+c_in_range)
@@ -1161,7 +1161,7 @@ def get_random_arbitrary_shape(
     return final_shape_in, final_shape_out
 
 def get_random_shape(
-    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, height_dist_thresh: int = 10
+    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, depth_dist_thresh: int = 10, height_dist_thresh: int = 10
 ) -> np.array:
     shapes_list = []
     for n in graph.nodes():

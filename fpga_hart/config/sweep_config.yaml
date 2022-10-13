@@ -1,0 +1,45 @@
+name: fpga_hart_optimization_sweep
+method: grid # bayes or random or grid
+metric:
+  goal: minimize
+  name: latency
+parameters:
+  simulatedAnnealing:
+    parameters:
+      t_min:
+        # values: [1e-4, 1e-5, 1e-6]
+        value: 1.0
+      t_max:
+        values: [5, 10, 15]
+      iterationPerTemp:
+        values: [10, 15, 20]
+      cooling_rate:
+        # values: [0.96, 0.97, 0.98, 0.99]
+        value: 0.25
+      best_of_iter:
+        value: 3
+  max_dsp_util:
+    value: 95
+  max_bram_util:
+    value: 95
+  alignedfactors:
+    values: [True, False]
+  bblock_generation:
+    values: ['pre_while', 'post_while'] # pre_while or post_while
+  bblock_keep_percentage:
+    values: [0.25, 0.5, 0.75, 1.0]
+  use_arbitrary_shape:
+    values: [True, False]
+  use_previous_config:
+    values: [True, False]
+  chan_dist_thresh:
+    values: [20, 40, 60, 80]
+  depth_dist_thresh:
+    values: [10, 20, 30]
+  height_dist_thresh:
+    values: [20, 40, 60, 80]
+# early_terminate:
+#   type: hyperband
+#   s: 2
+#   eta: 3
+#   max_iter: 27
