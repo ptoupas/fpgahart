@@ -7,15 +7,13 @@ parameters:
   simulatedAnnealing:
     parameters:
       t_min:
-        # values: [1e-4, 1e-5, 1e-6]
-        value: 1.0
+        values: [1e-4, 1e-5, 1e-6]
       t_max:
         values: [5, 10, 15]
       iterationPerTemp:
         values: [10, 15, 20]
       cooling_rate:
-        # values: [0.96, 0.97, 0.98, 0.99]
-        value: 0.25
+        values: [0.96, 0.97, 0.98, 0.99]
       best_of_iter:
         value: 3
   max_dsp_util:
