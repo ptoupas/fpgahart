@@ -189,7 +189,24 @@ class BaseLayer:
                 * coarse_out
                 + weights_bram * fine * coarse_in * coarse_out
             )
+        if "pool_sw_lb_3d" in layer_fifos_arrays.keys():
+            filters, channels, kd, kh, kw = kernel_shape
+            line_buffer_3d_brams = self.bram_stream_resource_model(
+                layer_fifos_arrays["pool_sw_lb_3d"], 16
+            )
+            line_buffer_2d_brams = self.bram_stream_resource_model(
+                layer_fifos_arrays["pool_sw_lb_2d"], 16
+            )
+            window_buffer_3d_brams = self.bram_stream_resource_model(
+                layer_fifos_arrays["pool_sw_wb_3d"], 16
+            )
 
+            sw_brams = (
+                kh * (kw - 1) * line_buffer_3d_brams
+                + (kh - 1) * line_buffer_2d_brams
+                + kh * kw * (kd - 1) * window_buffer_3d_brams
+            )
+            bram_raw += sw_brams * coarse_in
         if "elemwise_bc" in layer_fifos_arrays.keys():
             array_elemwise_brams = self.bram_memory_resource_model(
                 layer_fifos_arrays["elemwise_bc"], 30

@@ -216,7 +216,7 @@ def combine_building_blocks(building_blocks: list) -> Tuple[list, dict]:
     if conv_blocks_idx != -1:
         final_building_blocks += conv_blocks_choices[conv_blocks_idx]
     if pool_blocks_idx != -1:
-        final_building_blocks += pool_blocks_choices[conv_blocks_idx]
+        final_building_blocks += pool_blocks_choices[pool_blocks_idx]
     if conv_dw_blocks_idx != -1:
         final_building_blocks += conv_dw_blocks_choices[conv_dw_blocks_idx]
 
@@ -1051,7 +1051,7 @@ def get_conv_type(
 def calc_mape(value_a: int, value_b: int) -> float:
     return (abs(value_a - value_b) / abs(value_a)) * 100
 
-def calc_conv_out_shape(cin: int, din: int, hin: int, kernel_shape: list, pad: list, stride: list, dw: bool, chan_dist_thresh: int = 10):
+def calc_conv_out_shape(cin: int, din: int, hin: int, kernel_shape: list, pad: list, stride: list, dw: bool, chan_dist_thresh: int = 10, is_pool: bool = False) -> list:
     kd, kh, _ = kernel_shape
     pad_d, pad_h, _ = pad
     if kd == 1:
@@ -1063,7 +1063,7 @@ def calc_conv_out_shape(cin: int, din: int, hin: int, kernel_shape: list, pad: l
     hout = max(1, math.floor((hin + 2*pad_h -kh)/stride_h + 1))
     wout = hout
 
-    if dw:
+    if dw or is_pool:
         cout = cin
     else:
         c_in_range = math.ceil(cin*chan_dist_thresh/100)
@@ -1076,7 +1076,9 @@ def get_random_arbitrary_shape(
 ) -> np.array:
     in_shapes = []
     out_shapes = []
-    kernel_shape = [int(x) for x in bb_type.split("k")[-1][:3]] if "Conv" in bb_type else []
+    kernel_shape = [int(x) for x in bb_type.split("k")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
+    padding = [int(x) for x in bb_type.split("p")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
+    stride = [int(x) for x in bb_type.split("s")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
     dw = True if "Dw" in bb_type else False
     for node in graph.nodes:
         bb = lookuptable[graph.nodes[node]["hw_type"]]
@@ -1103,7 +1105,9 @@ def get_random_arbitrary_shape(
             h_in = np.random.randint(max(1, prev_h_in-h_in_range), prev_h_in+h_in_range)
 
             if "Conv" in bb_type:
-                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, np.random.randint(low=0, high=2, size=3).tolist(), np.random.randint(low=1, high=3, size=3).tolist(), dw, chan_dist_thresh)
+                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh)
+            elif "Pooling" in bb_type:
+                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh, is_pool=True)
             elif "GlobalAveragePool" in bb_type:
                 c_out = c_in
                 d_out = 1
@@ -1127,7 +1131,9 @@ def get_random_arbitrary_shape(
         w_in = h_in
 
         if "Conv" in bb_type:
-            _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, np.random.randint(low=0, high=2, size=3).tolist(), np.random.randint(low=1, high=3, size=3).tolist(), dw, chan_dist_thresh)
+            _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh)
+        elif "Pooling" in bb_type:
+                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh, is_pool=True)
         elif "GlobalAveragePool" in bb_type:
             c_out = c_in
             d_out = 1

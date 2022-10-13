@@ -24,27 +24,34 @@ class ModelLayerDescriptor(OnnxModelParser):
 
         for k in self.torch_layers.keys():
 
-            curr_output_id = int(self.torch_layers[k]["output_id"])
-            if not prev_output_id == -1:
-                assert (
-                    curr_output_id >= prev_output_id + 1
-                ), "Modules are not in the correct order. Revise the graph creation"
-            prev_output_id = curr_output_id
+            # curr_output_id = int(self.torch_layers[k]["output_id"])
+            # if not prev_output_id == -1:
+            #     assert (
+            #         curr_output_id >= prev_output_id + 1
+            #     ), "Modules are not in the correct order. Revise the graph creation"
+            # prev_output_id = curr_output_id
 
             name = k
+            if "Flatten" in name:
+                continue
             operation = self.torch_layers[k]["operation"]
             input_shape = [self.torch_layers[k]["input"][0]]
             output_shape = self.torch_layers[k]["output"]
             input_node = [self.torch_layers[k]["input_id"][0]]
             if self.model_name == "x3d_m":
                 if name == "Gemm_401":
-                    input_node = self.torch_layers["GlobalAveragePool_391"]["output_id"]
+                    input_node = [self.torch_layers["GlobalAveragePool_391"]["output_id"]]
             if self.model_name == "slowonly":
                 if name == "Gemm_181":
-                    input_node = self.torch_layers["GlobalAveragePool_172"]["output_id"]
+                    input_node = [self.torch_layers["GlobalAveragePool_172"]["output_id"]]
             if self.model_name == "r2plus1d":
                 if name == "Gemm_239":
-                    input_node = self.torch_layers["GlobalAveragePool_230"]["output_id"]
+                    input_node = [self.torch_layers["GlobalAveragePool_230"]["output_id"]]
+            if self.model_name == "c3d":
+                if name == "Gemm_32":
+                    input_node = [self.torch_layers["Relu_25"]["output_id"]]
+                if name == "Gemm_22":
+                    input_node = [self.torch_layers["MaxPool_20"]["output_id"]]
             output_node = self.torch_layers[k]["output_id"]
 
             self.layers[name] = {

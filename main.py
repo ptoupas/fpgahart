@@ -23,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="fpga-hart toolflow parser")
     parser.add_argument(
         "model_name",
-        choices=["x3d_m", "slowonly", "r2plus1d"],
+        choices=["x3d_m", "slowonly", "r2plus1d", "c3d"],
         type=str,
         help="name of the HAR model",
     )

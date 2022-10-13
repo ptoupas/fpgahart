@@ -136,17 +136,15 @@ class Pooling3DLayer(BaseLayer):
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         layer_fifos_arrays = {
-            "sw_lb_3d": 0,
-            "sw_lb_2d": 0,
-            "sw_wb_3d": 0,
-            "acc_fifo": 0,
-            "acc_array": 0,
+            "pool_sw_lb_3d": 0,
+            "pool_sw_lb_2d": 0,
+            "pool_sw_wb_3d": 0,
         }
 
         depth_line_buffer_3d = (
             math.ceil(1 / f_coarse_inout) * (self.depth_in + 2 * self.padding[0]) + 1
         )
-        layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+        layer_fifos_arrays["pool_sw_lb_3d"] = depth_line_buffer_3d
 
         depth_line_buffer_2d = (
             math.ceil(1 / f_coarse_inout)
@@ -158,24 +156,12 @@ class Pooling3DLayer(BaseLayer):
             )
             + 1
         )
-        layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+        layer_fifos_arrays["pool_sw_lb_2d"] = depth_line_buffer_2d
 
         depth_window_buffer_3d = math.ceil(1 / f_coarse_inout) + 1
-        layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+        layer_fifos_arrays["pool_sw_wb_3d"] = depth_window_buffer_3d
 
-        # Accumulator Module (AM) Depth and Memory
-        depth_accumulator = math.ceil(1 / f_coarse_inout) + 1
-        layer_fifos_arrays["acc_fifo"] = depth_accumulator
-
-        # Accumulation Buffer
-        array_accumulator = math.ceil(1 / f_coarse_inout)
-        layer_fifos_arrays["acc_array"] = array_accumulator
-
-        max_parallel_muls = (
-            math.ceil(kernel_elems * f_fine)
-            * math.ceil(self.channels * f_coarse_inout)
-            * math.ceil(self.channels * f_coarse_inout)
-        )
+        max_parallel_muls = 0 if self.op_type == "max" else 1
         max_parallel_adds = (
             math.ceil((kernel_elems - 1) * f_fine)
             * math.ceil(self.channels * f_coarse_inout)
@@ -193,8 +179,8 @@ class Pooling3DLayer(BaseLayer):
             bram_raw,
             _,
         ) = self.get_dp_performance(
-            np.zeros(shape=(2, 3), dtype=float),
-            np.zeros(shape=(2, 3), dtype=float),
+            np.zeros(shape=(3, 4), dtype=float),
+            np.zeros(shape=(3, 4), dtype=float),
             max_parallel_muls,
             max_parallel_adds,
             layer_fifos_arrays,
@@ -218,32 +204,17 @@ class Pooling3DLayer(BaseLayer):
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         layer_fifos_arrays = {
-            "sw_lb_3d": 0,
-            "sw_lb_2d": 0,
-            "sw_wb_3d": 0,
-            "acc_fifo": 0,
-            "acc_array": 0,
+            "pool_sw_lb_3d": 0,
+            "pool_sw_lb_2d": 0,
+            "pool_sw_wb_3d": 0,
         }
 
         depth = 2
 
-        # Sliding Window Module (SWM) Depth and Memory
-        first_time_read_input = (
-            self.padding[1]
-            * math.ceil(1 / f_coarse_inout)
-            * (self.cols_in + 2 * self.padding[2])
-            * (self.depth_in + 2 * self.padding[0])
-            + self.padding[2]
-            * math.ceil(1 / f_coarse_inout)
-            * (self.depth_in + 2 * self.padding[0])
-            + self.padding[0] * math.ceil(1 / f_coarse_inout)
-            + 1
-        )
-
         depth_line_buffer_3d = (
             math.ceil(1 / f_coarse_inout) * (self.depth_in + 2 * self.padding[0]) + 1
         )
-        layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+        layer_fifos_arrays["pool_sw_lb_3d"] = depth_line_buffer_3d
 
         depth_line_buffer_2d = (
             math.ceil(1 / f_coarse_inout)
@@ -255,10 +226,10 @@ class Pooling3DLayer(BaseLayer):
             )
             + 1
         )
-        layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+        layer_fifos_arrays["pool_sw_lb_2d"] = depth_line_buffer_2d
 
         depth_window_buffer_3d = math.ceil(1 / f_coarse_inout) + 1
-        layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+        layer_fifos_arrays["pool_sw_wb_3d"] = depth_window_buffer_3d
 
         # DEPTH V1
         depth += (
@@ -275,43 +246,10 @@ class Pooling3DLayer(BaseLayer):
             (self.kh - 1) * self.kw * self.kd + (self.kw - 1) * self.kd + (self.kd - 1)
         )
 
-        # DEPTH V2
-        # depth += self.kh*(self.kw-1) * depth_line_buffer_3d + (self.kh-1) * depth_line_buffer_2d + self.kh*self.kw*(self.kd-1) * depth_window_buffer_3d
-
-        # DEPTH V3
-        # depth_ = math.ceil(1/f_coarse_inout) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
-        #         math.ceil(1/f_coarse_inout) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
-        #         math.ceil(1/f_coarse_inout) * (self.kd - 1)
-        # depth += depth_ - first_time_read_input - (self.cols_in - 1) * math.ceil(1/f_coarse_inout) * (self.kd - 1) - math.ceil(1/f_coarse_inout) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1)
-
-        # Fork Module (FM) Depth and Memory
-
         # Convolution Module (CM) Depth and Memory
         depth += math.ceil(1 / f_fine) + 1
 
-        # Accumulator Module (AM) Depth and Memory
-
-        # Glue Module (GM) Depth and Memory
-
-        # Accumulator Module (AM) Depth and Memory
-        depth_accumulator = math.ceil(1 / f_coarse_inout) + 1
-        layer_fifos_arrays["acc_fifo"] = depth_accumulator
-
-        # Accumulation Buffer
-        array_accumulator = math.ceil(1 / f_coarse_inout)
-        layer_fifos_arrays["acc_array"] = array_accumulator
-
-        # DEPTH V1
-        # depth += depth_accumulator
-
-        # DEPTH V2
-        depth += math.ceil(1 / f_coarse_inout) + 1
-
-        max_parallel_muls = (
-            math.ceil(kernel_elems * f_fine)
-            * math.ceil(self.channels * f_coarse_inout)
-            * math.ceil(self.channels * f_coarse_inout)
-        )
+        max_parallel_muls = 0 if self.op_type == "max" else 1
         max_parallel_adds = (
             math.ceil((kernel_elems - 1) * f_fine)
             * math.ceil(self.channels * f_coarse_inout)
@@ -496,13 +434,7 @@ class Pooling3DLayer(BaseLayer):
         stream_matrix[1, 2] = (
             math.ceil(self.channels * f_coarse_inout) * self.kd * self.kw * self.kh
         )
-        stream_matrix[2, 2] = (
-            math.ceil(self.channels * f_coarse_inout)
-            * math.ceil(self.channels * f_coarse_inout)
-            * self.kd
-            * self.kw
-            * self.kh
-        )
+        stream_matrix[2, 2] = math.ceil(self.channels * f_coarse_inout)
 
         # Concatenation
         stream_matrix[2, 3] = 1
@@ -550,7 +482,7 @@ class Pooling3DLayer(BaseLayer):
 
         # Pool
         workload_matrix[1, 2] = out_volume * kernel_volume * self.channels
-        workload_matrix[2, 2] = out_volume * kernel_volume * self.channels
+        workload_matrix[2, 2] = out_volume * self.channels
 
         # Concatenation
         workload_matrix[2, 3] = out_volume * self.channels

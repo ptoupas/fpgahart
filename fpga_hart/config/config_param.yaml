@@ -6,8 +6,8 @@ simulatedAnnealing:
   best_of_iter: 3
 max_dsp_util: 95
 max_bram_util: 95
-bblock_generation: 'post_while' # pre_while or post_while
+bblock_generation: 'pre_while' # pre_while or post_while
 use_arbitrary_shape: True
 use_previous_config: True
-chan_dist_thresh: 70
-height_dist_thresh: 70
+chan_dist_thresh: 30
+height_dist_thresh: 30

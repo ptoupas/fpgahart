@@ -160,6 +160,9 @@ class OnnxModelParser:
                 if self.model_name == "r2plus1d":
                     if n.name == "Gemm_239":
                         layers_outputs[n.input[0]] = [1, 512]
+                if self.model_name == "c3d":
+                    if n.name == "Gemm_32":
+                        layers_outputs[n.input[0]] = [1, 4096]
 
                 layer_input_ids = []
                 layer_input_shapes = []

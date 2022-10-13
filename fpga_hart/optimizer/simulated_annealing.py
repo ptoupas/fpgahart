@@ -1716,8 +1716,8 @@ class SimulatedAnnealing(BaseLayer):
             block_gen = 'pre_while'
             use_arbitrary_shape = True
             use_previous_config = True
-            chan_dist_thresh = 75
-            height_dist_thresh = 75
+            chan_dist_thresh = 30
+            height_dist_thresh = 30
 
 
         bblocks, lookuptable = self.generate_building_blocks()
