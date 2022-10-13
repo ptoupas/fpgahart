@@ -11,7 +11,7 @@ parameters:
       t_max:
         value: 10
       iterationPerTemp:
-        value: 15
+        values: [10, 20]
       cooling_rate:
         value: 0.985
       best_of_iter:
