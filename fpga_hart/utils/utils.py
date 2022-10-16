@@ -755,7 +755,8 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
 
 def update_report_file(filename: str, final_dict: dict) -> None:
     if os.path.isfile(filename) is False:
-        raise Exception("File not found")
+        _logger.info("File {} does not exists. Creating a new one.".format(filename))
+        open(filename, 'a').close()
 
     if os.path.getsize(filename) == 0:
         listObj = []
