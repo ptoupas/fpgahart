@@ -1093,6 +1093,7 @@ class SimulatedAnnealing(BaseLayer):
             )
         )
         print("*" * 60)
+        return solution_dp
 
     def get_cost_layer(self, config, mem_bw, layer):
         hw = self.graph.nodes[layer]["hw"]

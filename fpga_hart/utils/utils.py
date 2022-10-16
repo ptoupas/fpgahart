@@ -704,6 +704,70 @@ def get_paretto_csv(
                 for p in pareto:
                     csv_writer_par.writerow(curr_df.iloc[p].to_list()[1:])
 
+def update_report_config(template_dict: dict, result_dict: dict, name: str, layer_type: str, layer_hw) -> dict:
+    template_dict["Layer"] = name
+    template_dict["Type"] = layer_type
+    template_dict["Latency(C)-No-Depth"] = result_dict["latency(C)"] - result_dict["depth"],
+    template_dict["Latency(C)"] = result_dict["latency(C)"],
+    template_dict["Latency(S)"] = result_dict["latency(S)"],
+    template_dict["GOP/s"] = result_dict["GOP/s"],
+    template_dict["GOPs"] = result_dict["GOPs"],
+    template_dict["volumes/s"] = result_dict["vols/s"],
+    template_dict["DSPs"] = result_dict["DSP_RAW"],
+    template_dict["DSP(%)"] = result_dict["DSP"],
+    template_dict["BRAMs"] = result_dict["BRAM_RAW"],
+    template_dict["BRAM(%)"] = result_dict["BRAM"],
+    template_dict["RateIn"] = result_dict["rateIn"],
+    template_dict["RateOut"] = result_dict["rateOut"],
+    template_dict["Depth"] = result_dict["depth"],
+    template_dict["Branch Depth"] = result_dict["branch_depth"],
+    template_dict["Muls"] = result_dict["muls"],
+    template_dict["Adds"] = result_dict["adds"],
+    template_dict["Mem(W)"] = result_dict["memWords"],
+    template_dict["Mem(KB)"] = result_dict["memKBs"],
+    template_dict["DataSizeIn(MB)"] = result_dict["dataSizeIn"],
+    template_dict["DataSizeOut(MB)"] = result_dict["dataSizeOut"],
+    template_dict["MemBoundIn"] = result_dict["memBoundedIn"],
+    template_dict["MemBoundOut"] = result_dict["memBoundedOut"],
+
+    if isinstance(layer_hw, Convolutional3DLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    elif isinstance(layer_hw, Pooling3DLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    elif isinstance(layer_hw, GAPLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    elif isinstance(layer_hw, FCLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    elif isinstance(layer_hw, ElementWiseLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    elif isinstance(layer_hw, ActivationLayer):
+        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+    else:
+        raise ValueError("Layer type {} not supported".format(layer_type))
+    for key in layer_config:
+        template_dict["config"][key] = layer_config[key]
+
+    for key in template_dict:
+        if isinstance(template_dict[key], tuple):
+            template_dict[key] = template_dict[key][0]
+
+    return template_dict
+
+def update_report_file(filename: str, final_dict: dict) -> None:
+    if os.path.isfile(filename) is False:
+        raise Exception("File not found")
+
+    if os.path.getsize(filename) == 0:
+        listObj = []
+    else:
+        with open(filename, 'r') as fp:
+            listObj = json.load(fp)
+
+    listObj.append(final_dict)
+
+    with open(filename, 'w') as json_file:
+        json.dump(listObj, json_file,
+                            indent=2)
 
 def check_configuration_validation(config, layers):
     valid = True

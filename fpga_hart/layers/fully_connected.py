@@ -21,6 +21,9 @@ class FCLayer(BaseLayer):
         self.dim_out = self.weights_shape[1]
         self.bias_shape = description["bias"]
 
+        self.data_size_in = np.prod(np.array(self.input_shape[1:]))
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
+
     def update_layer(self):
         self.full_rate_in = []
         self.full_rate_out = []
@@ -51,6 +54,7 @@ class FCLayer(BaseLayer):
         dp_info["latency(C)"] = self.latency_cycles
         dp_info["latency(S)"] = self.latency_sec
         dp_info["GOP/s"] = self.throughput_ops * 1e-9
+        dp_info["GOPs"] = self.get_total_workload() * 1e-9
         dp_info["vols/s"] = self.throughput_vols
         dp_info["DSP"] = self.dsps_util
         dp_info["DSP_RAW"] = self.dsps_raw
@@ -59,10 +63,13 @@ class FCLayer(BaseLayer):
         dp_info["rateIn"] = self.full_rate_in
         dp_info["rateOut"] = self.full_rate_out
         dp_info["depth"] = self.depth
+        dp_info["branch_depth"] = 0
         dp_info["muls"] = self.max_parallel_muls
         dp_info["adds"] = self.max_parallel_adds
         dp_info["memWords"] = self.memory
         dp_info["memKBs"] = self.memoryKB
+        dp_info["dataSizeIn"] = (self.data_size_in * self.word_bytes) / 1e6
+        dp_info["dataSizeOut"] = (self.data_size_out * self.word_bytes) / 1e6
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
         dp_info["memBwUtil"] = self.total_bw_util

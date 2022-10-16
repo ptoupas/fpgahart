@@ -25,6 +25,9 @@ class BatchNorm3DLayer(BaseLayer):
         self.channels = self.input_shape[1]
         self.filters = self.output_shape[1]
 
+        self.data_size_in = np.prod(np.array(self.input_shape[1:]))
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
+
     def update_layer(self):
         self.full_rate_in = []
         self.full_rate_out = []
@@ -35,6 +38,7 @@ class BatchNorm3DLayer(BaseLayer):
         self.depth = 0
         self.mem_bd_in = []
         self.mem_bd_out = []
+        self.total_bw_util = 0
         self.config = []
         self.dsps_util = 0
         self.dsp_raw = 0
@@ -54,6 +58,7 @@ class BatchNorm3DLayer(BaseLayer):
         dp_info["latency(C)"] = self.latency_cycles
         dp_info["latency(S)"] = self.latency_sec
         dp_info["GOP/s"] = self.throughput_ops * 1e-9
+        dp_info["GOPs"] = self.get_total_workload() * 1e-9
         dp_info["vols/s"] = self.throughput_vols
         dp_info["DSP"] = self.dsps_util
         dp_info["DSP_RAW"] = self.dsp_raw
@@ -62,12 +67,16 @@ class BatchNorm3DLayer(BaseLayer):
         dp_info["rateIn"] = self.full_rate_in
         dp_info["rateOut"] = self.full_rate_out
         dp_info["depth"] = self.depth
+        dp_info["branch_depth"] = 0
         dp_info["muls"] = self.max_parallel_muls
         dp_info["adds"] = self.max_parallel_adds
         dp_info["memWords"] = self.memory
         dp_info["memKBs"] = self.memoryKB
+        dp_info["dataSizeIn"] = (self.data_size_in * self.word_bytes) / 1e6
+        dp_info["dataSizeOut"] = (self.data_size_out * self.word_bytes) / 1e6
         dp_info["memBoundedIn"] = self.mem_bd_in
         dp_info["memBoundedOut"] = self.mem_bd_out
+        dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
 
         return dp_info
@@ -92,6 +101,17 @@ class BatchNorm3DLayer(BaseLayer):
         )
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
+
+        layer_mem_bw_in = (
+            abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+        )
+        layer_mem_bw_out = (
+            abs(gamma_matrix_balanced[-1, -1]) * self.cycles_per_sec * self.word_length
+        )
+        total_bw_util = (
+            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+        ) * 100
+
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
         if DEBUG:
@@ -137,6 +157,7 @@ class BatchNorm3DLayer(BaseLayer):
             self.depth = depth
             self.mem_bd_in = [mem_bounded_in]
             self.mem_bd_out = [mem_bounded_out]
+            self.total_bw_util = total_bw_util
 
             config = [coarse_inout, mem_bw_in, mem_bw_out]
             self.config = config

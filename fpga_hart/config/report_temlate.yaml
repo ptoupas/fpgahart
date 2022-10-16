@@ -1,0 +1,41 @@
+Layer: ""
+Type: ""
+Latency(C)-No-Depth: -1
+Latency(C): -1
+Latency(S): -1.0
+GOP/s: -1.0
+GOPs: -1.0
+volumes/s: -1.0
+DSPs: -1
+DSP(%): -1.0
+BRAMs: -1
+BRAM(%): -1.0
+RateIn: []
+RateOut: []
+Depth: -1
+Branch Depth: -1
+Muls: -1
+Adds: -1
+Mem(W): -1
+Mem(KB): -1
+DataSizeIn(MB): -1.0
+DataSizeOut(MB): -1.0
+MemBoundIn: False
+MemBoundOut: False
+config:
+  shape_in: []
+  shape_out: []
+  shape_kernel: []
+  shape_weights: []
+  shape_bias: -1
+  padding: []
+  stride: []
+  groups: -1
+  depthwise: -1
+  pointwise: -1
+  broadcasting: -1
+  op_type: ""
+  fine_factor: -1
+  coarse_in_factor: -1
+  coarse_out_factor: -1
+  coarse_factor: -1

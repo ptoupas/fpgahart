@@ -29,23 +29,24 @@ def layer_design_points(
     max_DSP_util: float,
     max_BRAM_util: float,
     model_file: str,
+    report_dict: dict,
     singlethreaded: bool,
 ) -> None:
     if description["operation"] == "Conv":
         conv_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "MaxPool" or description["operation"] == "AveragePool":
         pooling_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "BatchNormalization":
         batchnorm_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "GlobalAveragePool":
         gap_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif (
         description["operation"] == "Relu"
@@ -53,19 +54,19 @@ def layer_design_points(
         or description["operation"] == "Swish"
     ):
         activation_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "SqueezeExcitation":
         se_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Add" or description["operation"] == "Mul":
         elemwise_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
         fc_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
         )
     else:
         assert False, "{} operation in layer {} is not supported".format(
@@ -87,7 +88,13 @@ def contains_list(part, whole):
 
 
 def conv_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     conv = Convolutional3DLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -134,168 +141,81 @@ def conv_design_points(
 
     min_latency = 1000000000000
     best = {}
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
 
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (f, c1, c2, (bw_in, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        f,
-                        c1,
-                        c2,
-                        conv.mem_words_per_cycle * bw_in,
-                        conv.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                conv.get_design_point, input_vars, processes_pool
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (f, c1, c2, (bw_in, bw_out)) in combinations:
+            input_vars.append(
+                [
+                    f,
+                    c1,
+                    c2,
+                    conv.mem_words_per_cycle * bw_in,
+                    conv.mem_words_per_cycle * bw_out,
+                ]
             )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    # wandb.log(
-                    #     {
-                    #         "latency": r["latency(S)"],
-                    #         "dsp_util": r["DSP"],
-                    #         "bram_util": r["BRAM"],
-                    #     }
-                    # )
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
+        results = multithreaded_modeling(
+            conv.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                # wandb.log(
+                #     {
+                #         "latency": r["latency(S)"],
+                #         "dsp_util": r["DSP"],
+                #         "bram_util": r["BRAM"],
+                #     }
+                # )
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                    # csv_writer.writerow(
-                    #     [
-                    #         name,
-                    #         "Conv",
-                    #         r["latency(C)"] - r["depth"],
-                    #         r["latency(C)"],
-                    #         r["latency(S)"],
-                    #         r["GOP/s"],
-                    #         r["GOPs"],
-                    #         r["vols/s"],
-                    #         r["DSP"],
-                    #         r["BRAM"],
-                    #         r["rateIn"],
-                    #         r["rateOut"],
-                    #         r["depth"],
-                    #         r["branch_depth"],
-                    #         r["muls"],
-                    #         r["adds"],
-                    #         r["memWords"],
-                    #         r["memKBs"],
-                    #         r["dataSizeIn"],
-                    #         r["dataSizeOut"],
-                    #         r["memBoundedIn"],
-                    #         r["memBoundedOut"],
-                    #         r["config"],
-                    #     ]
-                    # )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (f, c1, c2, (bw_in, bw_out)) in combinations:
-                r = conv.get_design_point(
-                    f_fine=f,
-                    f_coarseIn=c1,
-                    f_coarseOut=c2,
-                    mem_bw_in=conv.mem_words_per_cycle * bw_in,
-                    mem_bw_out=conv.mem_words_per_cycle * bw_out,
-                )
+    else:
+        for (f, c1, c2, (bw_in, bw_out)) in combinations:
+            r = conv.get_design_point(
+                f_fine=f,
+                f_coarseIn=c1,
+                f_coarseOut=c2,
+                mem_bw_in=conv.mem_words_per_cycle * bw_in,
+                mem_bw_out=conv.mem_words_per_cycle * bw_out,
+            )
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                    # csv_writer.writerow(
-                    #     [
-                    #         name,
-                    #         "Conv",
-                    #         r["latency(C)"] - r["depth"],
-                    #         r["latency(C)"],
-                    #         r["latency(S)"],
-                    #         r["GOP/s"],
-                    #         r["GOPs"],
-                    #         r["vols/s"],
-                    #         r["DSP"],
-                    #         r["BRAM"],
-                    #         r["rateIn"],
-                    #         r["rateOut"],
-                    #         r["depth"],
-                    #         r["branch_depth"],
-                    #         r["muls"],
-                    #         r["adds"],
-                    #         r["memWords"],
-                    #         r["memKBs"],
-                    #         r["dataSizeIn"],
-                    #         r["dataSizeOut"],
-                    #         r["memBoundedIn"],
-                    #         r["memBoundedOut"],
-                    #         r["config"],
-                    #     ]
-                    # )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
 
         conv_config = utils.generate_layer_config(conv, best["config"][:3])
 
-        csv_writer.writerow(
-            [
-                name,
-                "Conv",
-                best["latency(C)"] - best["depth"],
-                best["latency(C)"],
-                best["latency(S)"],
-                best["GOP/s"],
-                best["GOPs"],
-                best["vols/s"],
-                best["DSP"],
-                best["BRAM"],
-                best["rateIn"],
-                best["rateOut"],
-                best["depth"],
-                best["branch_depth"],
-                best["muls"],
-                best["adds"],
-                best["memWords"],
-                best["memKBs"],
-                best["dataSizeIn"],
-                best["dataSizeOut"],
-                best["memBoundedIn"],
-                best["memBoundedOut"],
-                conv_config,
-            ]
-        )
     _logger.info(
         "Latency: {}.\n(fine={:.2f}->{}, cIn={:.2f}->{}, cOut={:.2f}->{}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSPs(%)={}({:.2f}), BRAMs(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
             best["latency(S)"],
@@ -336,13 +256,20 @@ def conv_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=conv)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 60)
-
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], conv)
+    utils.update_report_file(model_file, report_dict)
 
 def pooling_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     pool = Pooling3DLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -371,103 +298,72 @@ def pooling_design_points(
 
     min_latency = 1000000000000
     best = {}
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
 
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (f, cinout, (bw_in, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        f,
-                        cinout,
-                        pool.mem_words_per_cycle * bw_in,
-                        pool.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                pool.get_design_point, input_vars, processes_pool
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (f, cinout, (bw_in, bw_out)) in combinations:
+            input_vars.append(
+                [
+                    f,
+                    cinout,
+                    pool.mem_words_per_cycle * bw_in,
+                    pool.mem_words_per_cycle * bw_out,
+                ]
             )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
+        results = multithreaded_modeling(
+            pool.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (f, cinout, (bw_in, bw_out)) in combinations:
-                r = pool.get_design_point(
-                    f_fine=f,
-                    f_coarse_inout=cinout,
-                    mem_bw_in=pool.mem_words_per_cycle * bw_in,
-                    mem_bw_out=pool.mem_words_per_cycle * bw_out,
-                )
+    else:
+        for (f, cinout, (bw_in, bw_out)) in combinations:
+            r = pool.get_design_point(
+                f_fine=f,
+                f_coarse_inout=cinout,
+                mem_bw_in=pool.mem_words_per_cycle * bw_in,
+                mem_bw_out=pool.mem_words_per_cycle * bw_out,
+            )
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
 
         conv_config = utils.generate_layer_config(pool, best["config"][:3])
 
-        csv_writer.writerow(
-            [
-                name,
-                "Conv",
-                best["latency(C)"] - best["depth"],
-                best["latency(C)"],
-                best["latency(S)"],
-                best["GOP/s"],
-                best["GOPs"],
-                best["vols/s"],
-                best["DSP"],
-                best["BRAM"],
-                best["rateIn"],
-                best["rateOut"],
-                best["depth"],
-                best["branch_depth"],
-                best["muls"],
-                best["adds"],
-                best["memWords"],
-                best["memKBs"],
-                best["dataSizeIn"],
-                best["dataSizeOut"],
-                best["memBoundedIn"],
-                best["memBoundedOut"],
-                conv_config,
-            ]
-        )
     _logger.info(
         "Latency: {}.\n(fine={:.2f}->{}, cInOut={:.2f}->{}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSPs(%)={}({:.2f}), BRAMs(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
             best["latency(S)"],
@@ -496,7 +392,7 @@ def pooling_design_points(
             best["memBoundedOut"],
         )
     )
-    # exit()
+
     print("*" * 60)
     _logger.info(
         "Searching for optimal point with simulated annealing for layer {} ({}).".format(
@@ -506,12 +402,20 @@ def pooling_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=pool)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 60)
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], pool)
+    utils.update_report_file(model_file, report_dict)
 
 def batchnorm_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     bn = BatchNorm3DLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -538,115 +442,66 @@ def batchnorm_design_points(
     min_latency = 1000000000000
     best = {}
 
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
-
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (cinout, (bw_in, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        cinout,
-                        bn.mem_words_per_cycle * bw_in,
-                        bn.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                bn.get_design_point, input_vars, processes_pool
-            )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        min_latency = r["latency(C)"]
-                        best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (cinout, (bw_in, bw_out)) in combinations:
-                r = bn.get_design_point(
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (cinout, (bw_in, bw_out)) in combinations:
+            input_vars.append(
+                [
                     cinout,
                     bn.mem_words_per_cycle * bw_in,
                     bn.mem_words_per_cycle * bw_out,
-                )
+                ]
+            )
+        results = multithreaded_modeling(
+            bn.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
+    else:
+        for (cinout, (bw_in, bw_out)) in combinations:
+            r = bn.get_design_point(
+                cinout,
+                bn.mem_words_per_cycle * bw_in,
+                bn.mem_words_per_cycle * bw_out,
+            )
+
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
+
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
+                        min_latency = r["latency(C)"]
+                        best = r
 
     print(
         "Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
@@ -680,13 +535,21 @@ def batchnorm_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=bn)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 40)
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], bn)
+    utils.update_report_file(model_file, report_dict)
 
 
 def gap_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     gap = GAPLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -713,115 +576,66 @@ def gap_design_points(
     min_latency = 1000000000000
     best = {}
 
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
-
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (cinout, (bw_in, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        cinout,
-                        gap.mem_words_per_cycle * bw_in,
-                        gap.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                gap.get_design_point, input_vars, processes_pool
-            )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        min_latency = r["latency(C)"]
-                        best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (cinout, (bw_in, bw_out)) in combinations:
-                r = gap.get_design_point(
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (cinout, (bw_in, bw_out)) in combinations:
+            input_vars.append(
+                [
                     cinout,
                     gap.mem_words_per_cycle * bw_in,
                     gap.mem_words_per_cycle * bw_out,
-                )
+                ]
+            )
+        results = multithreaded_modeling(
+            gap.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
+    else:
+        for (cinout, (bw_in, bw_out)) in combinations:
+            r = gap.get_design_point(
+                cinout,
+                gap.mem_words_per_cycle * bw_in,
+                gap.mem_words_per_cycle * bw_out,
+            )
+
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
+
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
+                        min_latency = r["latency(C)"]
+                        best = r
 
     print(
         "Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
@@ -855,13 +669,21 @@ def gap_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=gap)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 40)
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], gap)
+    utils.update_report_file(model_file, report_dict)
 
 
 def activation_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     activ = ActivationLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -888,115 +710,66 @@ def activation_design_points(
     min_latency = 1000000000000
     best = {}
 
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
-
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (cinout, (bw_in, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        cinout,
-                        activ.mem_words_per_cycle * bw_in,
-                        activ.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                activ.get_design_point, input_vars, processes_pool
-            )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        min_latency = r["latency(C)"]
-                        best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (cinout, (bw_in, bw_out)) in combinations:
-                r = activ.get_design_point(
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (cinout, (bw_in, bw_out)) in combinations:
+            input_vars.append(
+                [
                     cinout,
                     activ.mem_words_per_cycle * bw_in,
                     activ.mem_words_per_cycle * bw_out,
-                )
+                ]
+            )
+        results = multithreaded_modeling(
+            activ.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
+    else:
+        for (cinout, (bw_in, bw_out)) in combinations:
+            r = activ.get_design_point(
+                cinout,
+                activ.mem_words_per_cycle * bw_in,
+                activ.mem_words_per_cycle * bw_out,
+            )
+
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
+
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
+                        min_latency = r["latency(C)"]
+                        best = r
 
     print(
         "Latency: {}.\n(cinout={:.2f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
@@ -1030,13 +803,21 @@ def activation_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=activ)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 40)
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], activ)
+    utils.update_report_file(model_file, report_dict)
 
 
 def se_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     se = SqueezeExcitationLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -1092,87 +873,15 @@ def se_design_points(
 
     min_latency = 1000000000000
     best = {}
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
 
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            # for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
-            #     input_vars.append([gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out])
-            for (gap, conv1, relu, conv2, sigm, mul) in combinations:
-                input_vars.append(
-                    [
-                        gap[0],
-                        gap[1],
-                        conv1[0],
-                        conv1[1],
-                        conv1[2],
-                        relu[0],
-                        conv2[0],
-                        conv2[1],
-                        conv2[2],
-                        sigm[0],
-                        mul[0],
-                        mul[1],
-                        mul[2],
-                        se.mem_words_per_cycle * bw_in,
-                        se.mem_words_per_cycle * bw_out,
-                    ]
-                )
-
-            results = multithreaded_modeling(
-                se.get_design_point, input_vars, processes_pool
-            )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        min_latency = r["latency(C)"]
-                        best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            # for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
-            #     r = se.get_design_point(gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out)
-            for (gap, conv1, relu, conv2, sigm, mul) in combinations:
-                r = se.get_design_point(
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        # for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
+        #     input_vars.append([gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out])
+        for (gap, conv1, relu, conv2, sigm, mul) in combinations:
+            input_vars.append(
+                [
                     gap[0],
                     gap[1],
                     conv1[0],
@@ -1188,48 +897,72 @@ def se_design_points(
                     mul[2],
                     se.mem_words_per_cycle * bw_in,
                     se.mem_words_per_cycle * bw_out,
-                )
+                ]
+            )
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
+        results = multithreaded_modeling(
+            se.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
+    else:
+        # for (gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, (bw_in, bw_out)) in combinations:
+        #     r = se.get_design_point(gapcin, gapcout, f1, c11, c21, f2, c12, c22, mulcinout, se.mem_words_per_cycle*bw_in, se.mem_words_per_cycle*bw_out)
+        for (gap, conv1, relu, conv2, sigm, mul) in combinations:
+            r = se.get_design_point(
+                gap[0],
+                gap[1],
+                conv1[0],
+                conv1[1],
+                conv1[2],
+                relu[0],
+                conv2[0],
+                conv2[1],
+                conv2[2],
+                sigm[0],
+                mul[0],
+                mul[1],
+                mul[2],
+                se.mem_words_per_cycle * bw_in,
+                se.mem_words_per_cycle * bw_out,
+            )
+
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
+
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
+                        min_latency = r["latency(C)"]
+                        best = r
 
     print(
         "Latency: {}.\n(gapcin = {:.2f}, gapcout = {:.2f}, fine1={:.2f}, coarsein1={:.2f}, coarseout1={:.2f}, relucinout={:.2f}, fine2={:.2f}, coarsein2={:.2f}, coarseout2={:.2f}, sigmcinout={:.2f},  fmulcin1={:.6f}, fmulcin2={:.6f}, fmulcout={:.6f}, bwIn={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
@@ -1270,7 +1003,13 @@ def se_design_points(
 
 
 def elemwise_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     elem = ElementWiseLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -1297,117 +1036,68 @@ def elemwise_design_points(
     min_latency = 1000000000000
     best = {}
 
-    with open(model_file, mode="a") as layer_dp:
-        csv_writer = csv.writer(
-            layer_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
-
-        if not singlethreaded:
-            processes_pool = Pool(10)
-            input_vars = []
-            for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
-                input_vars.append(
-                    [
-                        cinout,
-                        elem.mem_words_per_cycle * bw_in1,
-                        elem.mem_words_per_cycle * bw_in2,
-                        elem.mem_words_per_cycle * bw_out,
-                    ]
-                )
-            results = multithreaded_modeling(
-                elem.get_design_point, input_vars, processes_pool
-            )
-            processes_pool.close()
-            for r in results:
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        min_latency = r["latency(C)"]
-                        best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
-        else:
-            for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
-                r = elem.get_design_point(
+    if not singlethreaded:
+        processes_pool = Pool(10)
+        input_vars = []
+        for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
+            input_vars.append(
+                [
                     cinout,
                     elem.mem_words_per_cycle * bw_in1,
                     elem.mem_words_per_cycle * bw_in2,
                     elem.mem_words_per_cycle * bw_out,
-                )
+                ]
+            )
+        results = multithreaded_modeling(
+            elem.get_design_point, input_vars, processes_pool
+        )
+        processes_pool.close()
+        for r in results:
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
 
-                if r["config"]:
-                    throughput_gops.append(r["GOP/s"])
-                    throughput_vols.append(r["vols/s"])
-                    latency.append(r["latency(C)"])
-                    dsp_util.append(r["DSP"])
-                    bram_util.append(r["BRAM"])
-
-                    csv_writer.writerow(
-                        [
-                            name,
-                            r["latency(C)"],
-                            r["latency(S)"],
-                            r["GOP/s"],
-                            r["vols/s"],
-                            r["DSP"],
-                            r["BRAM"],
-                            r["rateIn"],
-                            r["rateOut"],
-                            r["depth"],
-                            r["muls"],
-                            r["adds"],
-                            r["memWords"],
-                            r["memKBs"],
-                            r["memBoundedIn"],
-                            r["memBoundedOut"],
-                            r["config"],
-                        ]
-                    )
-
-                    if r["latency(C)"] < min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
                         best = r
-                    elif r["latency(C)"] == min_latency and (
-                        r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
-                    ):
-                        if r["DSP"] < best["DSP"]:
-                            min_latency = r["latency(C)"]
-                            best = r
+    else:
+        for (cinout, (bw_in1, bw_in2, bw_out)) in combinations:
+            r = elem.get_design_point(
+                cinout,
+                elem.mem_words_per_cycle * bw_in1,
+                elem.mem_words_per_cycle * bw_in2,
+                elem.mem_words_per_cycle * bw_out,
+            )
+
+            if r["config"]:
+                throughput_gops.append(r["GOP/s"])
+                throughput_vols.append(r["vols/s"])
+                latency.append(r["latency(C)"])
+                dsp_util.append(r["DSP"])
+                bram_util.append(r["BRAM"])
+
+                if r["latency(C)"] < min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    min_latency = r["latency(C)"]
+                    best = r
+                elif r["latency(C)"] == min_latency and (
+                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                ):
+                    if r["DSP"] < best["DSP"]:
+                        min_latency = r["latency(C)"]
+                        best = r
 
     print(
         "Latency: {}.\n(cinout={:.2f}, bwIn1={:.2f}, bwIn2={:.2f}, bwOut={:.2f}) Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), RateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(
@@ -1444,13 +1134,20 @@ def elemwise_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=elem)
 
-    optimizer = SimulatedAnnealing(graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 40)
-
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], elem)
+    utils.update_report_file(model_file, report_dict)
 
 def fc_design_points(
-    name, description, max_DSP_util, max_BRAM_util, model_file, singlethreaded
+    name: str,
+    description: dict,
+    max_DSP_util: float,
+    max_BRAM_util: float,
+    model_file: str,
+    report_dict: dict,
+    singlethreaded: bool,
 ):
     fc = FCLayer(max_DSP_util, max_BRAM_util, description)
 
@@ -1462,6 +1159,8 @@ def fc_design_points(
             name
         )
     )
-    optimizer = SimulatedAnnealing(graph=graph, branch_mem=0)
-    optimizer.run_optimizer_layer(name)
+    optimizer = SimulatedAnnealing(graph=graph)
+    res = optimizer.run_optimizer_layer(name)
     print("*" * 40)
+    report_dict = utils.update_report_config(report_dict, res, name, description["operation"], fc)
+    utils.update_report_file(model_file, report_dict)
