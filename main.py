@@ -5,7 +5,6 @@ import logging
 import os
 import pstats
 import time
-from pickletools import optimize
 from typing import Tuple
 
 import seaborn as sns
@@ -74,9 +73,9 @@ def parse_args():
         help="whether to run a (wandb) sweep of the design space or not",
     )
     parser.add_argument(
-        "--disable_wandb",
-        action="store_false",
-        help="whether to disable wandb or not",
+        "--enable_wandb",
+        action="store_true",
+        help="whether to enable wandb or not",
     )
     parser.add_argument(
         "--profile",
@@ -105,7 +104,7 @@ def optimizer() -> None:
 
     project_name = f"fpga-hart-{args.model_name}-{args.type}-{args.target}"
 
-    with open("fpga_hart/config/config_param.yaml", "r") as yaml_file:
+    with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
         config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
         config_dictionary['aligned_folding_factors'] = not args.nonalignedfactors
         fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
@@ -117,7 +116,7 @@ def optimizer() -> None:
 
 
     config = None
-    if args.disable_wandb:
+    if args.enable_wandb:
         if args.sweep:
             wandb.init()
             config = wandb.config
@@ -156,7 +155,7 @@ def optimizer() -> None:
 
         if args.target == "throughput":
             # layer_parser.parse()
-            layer_parser.model_custom_layer()
+            layer_parser.model_custom_layer("Sigmoid")
         elif args.target == "latency":
             pass
     else:

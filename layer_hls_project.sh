@@ -7,7 +7,7 @@ LAYER_NAME="custom_conv"
 CONFIG_FILE="fpga_modeling_reports/x3d_m_layers.csv"
 HLS_PARENT_DIR="/home/ptoupas/Development/hls_single_layers"
 
-python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET --disable_wandb
+python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET
 
 python fpga_hart/backend/generate_cpp/generate_layer.py --model_name $MODEL_NAME --prefix $LAYER_NAME --config_file $CONFIG_FILE --hls_project_path $HLS_PARENT_DIR
 

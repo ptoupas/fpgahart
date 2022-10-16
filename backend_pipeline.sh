@@ -7,7 +7,7 @@ CONFIG_FILE="fpga_modeling_reports/x3d_m_custom_partitions.csv"
 PARTITION_NAME="custom_partitions"
 HLS_PARENT_DIR="/data/HLS_projects/fpga-hart-hls"
 
-python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET --disable_wandb
+python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET
 
 python fpga_hart/backend/python_prototyping/generate_data.py --op_type 3d_part --prefix $PARTITION_NAME --config_file $CONFIG_FILE
 

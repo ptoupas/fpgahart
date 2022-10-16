@@ -14,7 +14,7 @@ Create a python environment with python version >=3.7 and install the dependenci
 ### Additional arguments
 - `--gap_approx`: Whether to use historical data as approximation for GlobalAveragePooling (GAP) layers or not during the optimization process.
 - `--nonalignedfactors`: Whether to allow the use of folding factors not perfectly divisible by channels/filters or not.
-- `--disable_wandb`: Whether to disable wandb support or not (enabled by default).
+- `--enable_wandb`: Whether to enable wandb support or not (enabled by default).
 
 
 > ./backend_pipeline.sh (only works for *throughput* optimization-target)
@@ -32,4 +32,4 @@ Automates the process of optimization data generation and creation of the backen
 The arguments are the same as in the `backend_pipeline.sh` case.
 
 ## Configuration files
-The configuration files for specifying the FPGA device characteristics (`config_fpga.ini`), the wandb and optimizer parameters (`config_param.yaml`), and the pytorch/onnx supported layers and parameters (`config_pytorch.ini`) are all under the following path `$fpga-hart/fpga_hart/config/`.
+The configuration files for specifying the FPGA device characteristics (`config_fpga.ini`), the wandb and optimizer parameters (`config_optimizer.yaml`), and the pytorch/onnx supported layers and parameters (`config_pytorch.ini`) are all under the following path `$fpga-hart/fpga_hart/config/`.
