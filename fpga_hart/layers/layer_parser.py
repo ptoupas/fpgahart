@@ -88,6 +88,8 @@ class LayerParser(ModelLayerDescriptor):
         self.layer_model_file = os.path.join(
             os.getcwd(), "fpga_modeling_reports", "custom_layers", layer_type, f"{layer_type}_layers.json"
         )
+        if os.path.exists(self.layer_model_file):
+            os.remove(self.layer_model_file)
 
         if layer_type == "Pool":
             name = "custom_pool_layer"
