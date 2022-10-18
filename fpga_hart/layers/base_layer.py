@@ -15,6 +15,8 @@ class BaseLayer:
         ), "Wrong data format. Accepted formats are 'NHWDC' or 'NCHWD'"
         # _logger.setLevel(level=logging.DEBUG)
 
+        self.double_buffer_weights = False
+        self.stream_weights = False
         self.get_config()
         self.data_format = data_format
         self.word_bytes = self.word_length / 8
@@ -177,6 +179,8 @@ class BaseLayer:
             weights_depth = int(
                 (kd * kh * kw * channels * filters) / (fine * coarse_in * coarse_out)
             )
+            if self.double_buffer_weights:
+                weights_depth *= 2
             weights_bram = self.bram_memory_resource_model(weights_depth, 8)
             if weights_depth < 100:
                 weights_bram = 0

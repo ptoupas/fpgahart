@@ -280,6 +280,7 @@ class Convolutional3DLayer(BaseLayer):
         f_coarseIn: np.float64,
         f_coarseOut: np.float64,
         mem_bw_in: int,
+
         mem_bw_out: int,
     ) -> dict:
         self.update_layer()
@@ -431,14 +432,24 @@ class Convolutional3DLayer(BaseLayer):
         ) = self.balance_matrix(gamma_matrix.copy())
         _logger.debug("Γ Balanced:\n{}".format(gamma_matrix))
 
+        # get the gamma out for the conv module
+        conv_gamma = gamma_matrix[3,3]
+        if self.pointwise:
+            conv_gamma = gamma_matrix[2,2]
+
         layer_mem_bw_in = (
             abs(gamma_matrix[0, 0]) * self.cycles_per_sec * self.word_length
         )
         layer_mem_bw_out = (
             abs(gamma_matrix[-1, -1]) * self.cycles_per_sec * self.word_length
         )
+        layer_mem_bw_weights = 0
+        if self.stream_weights:
+            layer_mem_bw_weights = (
+                abs(conv_gamma) * self.cycles_per_sec * self.word_length # TODO: * fine_factor
+            )
         total_bw_util = (
-            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+            (layer_mem_bw_in + layer_mem_bw_out + layer_mem_bw_weights) / self.mem_bandwidth
         ) * 100
 
         workload_matrix = self.get_workload_matrix()
