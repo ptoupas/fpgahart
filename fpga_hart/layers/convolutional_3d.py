@@ -446,7 +446,7 @@ class Convolutional3DLayer(BaseLayer):
         layer_mem_bw_weights = 0
         if self.stream_weights:
             layer_mem_bw_weights = (
-                abs(conv_gamma) * self.cycles_per_sec * self.word_length # TODO: * fine_factor
+                abs(conv_gamma) * self.cycles_per_sec * self.word_length * (f_fine*kh*kw*kd)
             )
         total_bw_util = (
             (layer_mem_bw_in + layer_mem_bw_out + layer_mem_bw_weights) / self.mem_bandwidth
