@@ -7,4 +7,5 @@ sklearn
 onnx
 onnxsim
 pydot
+plotly
 onnxoptimizer<=0.2.7

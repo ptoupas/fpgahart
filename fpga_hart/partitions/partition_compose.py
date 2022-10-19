@@ -247,7 +247,7 @@ class PartitionComposer(BaseLayer):
         layers_ii = []
         for n, node in enumerate(graph.nodes()):
             if DEBUG:
-                print("#" * 50)
+                print("*" * 50)
                 print("Processing node: {}".format(node))
             op_type = graph.nodes[node]["type"]
             hw = graph.nodes[node]["hw"]
@@ -604,7 +604,6 @@ class PartitionComposer(BaseLayer):
         if (
             dsps_util < self.max_DSP_util
             and bram_util < self.max_BRAM_util
-            and dsps_util > 25.0
         ):
             self.full_rate_in = rates_in
             self.full_rate_out = rates_out

@@ -33,10 +33,10 @@ class SimulatedAnnealing(BaseLayer):
         self,
         graph,
         branch_mem=0,
-        t_min=1e-6,
-        t_max=7,
-        iterationPerTemp=15,
-        cooling_rate=0.99,
+        t_min=1e-5,
+        t_max=10,
+        iterationPerTemp=10,
+        cooling_rate=0.985,
         best_of_iter=1,
         partition_name="",
         gap_approx=False,
@@ -475,10 +475,10 @@ class SimulatedAnnealing(BaseLayer):
         if cost is None:
             start_time = time.time()
             while time.time() - start_time < 90.0:
-                # config, mem_bw, _, _ = self.generate_random_config(
-                #     seconds_passed=math.ceil(time.time() - start_time)
-                # )
-                config, mem_bw, _, _ = self.generate_random_config()
+                x = float(time.time() - start_time)
+                perc = 1/(1+math.exp(-0.15*(x-45)))
+                config, mem_bw, _, _ = self.generate_random_config(
+                    keep_percentage=perc)
                 cost, dp_info = self.get_cost(config, mem_bw)
 
                 if cost is not None:
@@ -522,18 +522,23 @@ class SimulatedAnnealing(BaseLayer):
             current_temp = self.t_max
             # first_restart, second_restart, third_restart = True, True, True
             count = 0
-            print(
-                f"Temperature  |  Latency     |   Count   |   Param Count   |   Param %"
-            )
+            print(f"Temperature  |  Latency     |   Count")
             while current_temp > self.t_min:
-                # wandb.log({"running_temp": current_temp, "running_latency": prev_cost})
-                for _ in range(self.iterationPerTemp):
-                    count += 1
+
+                # if not self.wandb_config == None:
+                #     log_dict = {}
+                #     log_dict["temperature"] = current_temp
+                #     log_dict["latency"] = prev_cost
+                #     wandb.log(log_dict)
+
+                num_iterations = 0
+                while num_iterations < self.iterationPerTemp:
+                # for _ in range(self.iterationPerTemp):
                     (
                         new_state,
                         new_mem_bw,
-                        param_count,
-                        param_perc,
+                        _,
+                        _,
                     ) = self.generate_random_config(
                         neighbours=True,
                         prev_state=prev_state,
@@ -545,6 +550,8 @@ class SimulatedAnnealing(BaseLayer):
 
                     if new_cost is None:
                         continue
+                    count += 1
+                    num_iterations += 1
 
                     cost_diff = prev_cost - new_cost
                     if cost_diff >= 0:
@@ -574,12 +581,12 @@ class SimulatedAnnealing(BaseLayer):
                 #     current_temp *= 1000
                 #     third_restart = False
                 print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}",
+                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}",
                     end="\r",
                 )
 
             print(
-                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}\t{param_count:5d}\t\t\t{param_perc:.3f}"
+                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}"
             )
 
             if prev_cost < best_latency:
@@ -643,6 +650,8 @@ class SimulatedAnnealing(BaseLayer):
                 comb_config[k] = [v["coarse_inout"]]
             elif v["op_type"] == "Conv":
                 comb_config[k] = [v["fine"], v["coarse_in"], v["coarse_out"]]
+            elif v["op_type"] == "Pooling":
+                comb_config[k] = [v["fine"], v["coarse_inout"]]
             elif v["op_type"] == "Activation":
                 comb_config[k] = [v["coarse_inout"]]
             elif v["op_type"] == "ElementWise":
@@ -808,7 +817,7 @@ class SimulatedAnnealing(BaseLayer):
         neighbours=False,
         prev_state=None,
         slowest_nodes=None,
-        seconds_passed=None,
+        keep_percentage=None,
         param_perc=0.3,
         n_in=1,
         n_out=1,
@@ -859,10 +868,10 @@ class SimulatedAnnealing(BaseLayer):
             if isinstance(hw, GAPLayer):
                 channels = hw.channels
                 coarse_inout_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -878,10 +887,10 @@ class SimulatedAnnealing(BaseLayer):
                 filters = hw.filters
                 kernel_size = hw.kernel_shape
                 coarse_in_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 coarse_out_feasible = utils.get_factors(
-                    filters, sec_passed=seconds_passed
+                    filters, keep_percentage=keep_percentage
                 )
                 fine_feasible = utils.get_fine_feasible(kernel_size)
                 coarse_in_factor = random.choice(coarse_in_feasible) / channels
@@ -889,7 +898,7 @@ class SimulatedAnnealing(BaseLayer):
                 fine_factor = random.choice(fine_feasible) / np.prod(
                     np.array(kernel_size)
                 )
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -910,14 +919,14 @@ class SimulatedAnnealing(BaseLayer):
                 channels = hw.channels
                 kernel_size = hw.kernel_shape
                 coarse_inout_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 fine_feasible = utils.get_fine_feasible(kernel_size)
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 fine_factor = random.choice(fine_feasible) / np.prod(
                     np.array(kernel_size)
                 )
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -932,10 +941,10 @@ class SimulatedAnnealing(BaseLayer):
             elif isinstance(hw, ActivationLayer):
                 channels = hw.channels
                 coarse_inout_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -949,10 +958,10 @@ class SimulatedAnnealing(BaseLayer):
             elif isinstance(hw, ElementWiseLayer):
                 channels = hw.channels_1
                 coarse_inout_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -966,10 +975,10 @@ class SimulatedAnnealing(BaseLayer):
             elif isinstance(hw, BatchNorm3DLayer):
                 channels = hw.channels
                 coarse_inout_feasible = utils.get_factors(
-                    channels, sec_passed=seconds_passed
+                    channels, keep_percentage=keep_percentage
                 )
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -986,14 +995,14 @@ class SimulatedAnnealing(BaseLayer):
                 dim_in = hw.dim_in
                 dim_out = hw.dim_out
                 coarse_in_feasible = utils.get_factors(
-                    dim_in, sec_passed=seconds_passed
+                    dim_in, keep_percentage=keep_percentage
                 )
                 coarse_out_feasible = utils.get_factors(
-                    dim_out, sec_passed=seconds_passed
+                    dim_out, keep_percentage=keep_percentage
                 )
                 coarse_in_factor = random.choice(coarse_in_feasible) / dim_in
                 coarse_out_factor = random.choice(coarse_out_feasible) / dim_out
-                if neighbours and node in config.keys():
+                if slowest_nodes and node in config.keys():
                     transformations = list(config[node].keys())
                     transformations.remove("op_type")
                     apply_transform = random.choice(transformations)
@@ -1865,23 +1874,18 @@ class SimulatedAnnealing(BaseLayer):
             wandb.log_artifact(artifact)
         else:
             if not os.path.exists(
-                "fpga_modeling_reports/latency_driven_results/" + self.cnn_model_name
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results"
             ):
                 os.makedirs(
-                    "fpga_modeling_reports/latency_driven_results/"
-                    + self.cnn_model_name
+                    "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results"
                 )
             with open(
-                "fpga_modeling_reports/latency_driven_results/"
-                + self.cnn_model_name
-                + "/config.json",
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results/config.json",
                 "w",
             ) as f:
                 json.dump(final_config, f, indent=2)
             with open(
-                "fpga_modeling_reports/latency_driven_results/"
-                + self.cnn_model_name
-                + "/scheduling.json",
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results/scheduling.json",
                 "w",
             ) as f:
                 json.dump(prev_scheduling, f, indent=2)

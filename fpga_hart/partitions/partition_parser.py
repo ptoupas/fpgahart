@@ -5,9 +5,11 @@ import os
 import time
 from dataclasses import dataclass
 
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.activation import ActivationLayer
@@ -23,6 +25,8 @@ from fpga_hart.network_representation.partition_descriptor import \
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 
+sns.set(rc={"figure.figsize": (15, 8)})
+sns.set_style("whitegrid")
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
@@ -42,6 +46,7 @@ class PartitionParser(PartitionDescriptor):
 
         columns = [
             "Partition Name",
+            "Times Repeated",
             "latency(C)",
             "latency(S)",
             "GOP/s",
@@ -59,22 +64,22 @@ class PartitionParser(PartitionDescriptor):
 
         self.model_avg_metrics = {}
 
-        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports")):
-            os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports"))
+        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)):
+            os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name))
 
         if self.se_block:
             self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_se.csv"
+                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_se.csv"
             )
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_se_pareto.csv"
+                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_se_pareto.csv"
             )
         else:
             self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + ".csv"
+                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + ".csv"
             )
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name + "_pareto.csv"
+                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_pareto.csv"
             )
 
         self.get_fpga_specs()
@@ -315,7 +320,7 @@ class PartitionParser(PartitionDescriptor):
 
         return graph
 
-    def model_partition(self, partition, name):
+    def model_partition(self, partition: list, name: str) -> None:
 
         graph = self.create_graph(partition)
         branch_edges = utils.get_branch_edges(graph)
@@ -345,11 +350,11 @@ class PartitionParser(PartitionDescriptor):
                 )
             branch_buffer += max_shape
 
-        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/partition_graphs/"):
-            os.makedirs(os.getcwd() + "/fpga_modeling_reports/partition_graphs/")
+        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/"):
+            os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/")
         self.visualize_graph(
             graph,
-            os.getcwd() + "/fpga_modeling_reports/partition_graphs/" + name,
+            os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/" + name,
             run_id=None,
         )
 
@@ -381,8 +386,10 @@ class PartitionParser(PartitionDescriptor):
 
         self.model_avg_metrics = log_metrics
 
+        times_repeat = 1 if name.count('+') == 0 else name.count('+') + 1
         self.df.loc[len(self.df.index)] = [
             name,
+            times_repeat,
             partition_results["latency(C)"],
             partition_results["latency(S)"],
             partition_results["GOP/s"],
@@ -526,7 +533,7 @@ class PartitionParser(PartitionDescriptor):
                 for sub_row in sub_rows:
                     csv_writer.writerow(sub_row)
 
-    def idetify_duplicates(self):
+    def idetify_sequential_duplicates(self):
         partitions = {}
         for i, partition in enumerate(self.partitions):
             graph = self.create_graph(partition)
@@ -544,6 +551,16 @@ class PartitionParser(PartitionDescriptor):
                             hw.groups,
                         ]
                     )
+                elif graph.nodes[node]["type"] == "Pooling":
+                    nodes_list.append(
+                        [
+                            hw.input_shape,
+                            hw.output_shape,
+                            hw.kernel_shape,
+                            hw.padding,
+                            hw.stride,
+                        ]
+                    )
                 elif graph.nodes[node]["type"] == "ElementWise":
                     nodes_list.append(
                         [hw.input_shape_1, hw.input_shape_2, hw.output_shape]
@@ -554,21 +571,32 @@ class PartitionParser(PartitionDescriptor):
 
         prev_partition = None
         remove_duplicates = []
+        inherit_duplicates = {}
         for i, partition in enumerate(self.partitions):
             v = partitions[i]
             if prev_partition is not None:
                 if v == prev_partition:
                     remove_duplicates.append(i)
+                    inherit_duplicates[i] = i - 1
             prev_partition = v
+
+        for k, v in inherit_duplicates.items():
+            if v in inherit_duplicates:
+                inherit_duplicates[k] = inherit_duplicates[v]
+        res = {}
+        for i, v in inherit_duplicates.items():
+            res[v] = [i] if v not in res.keys() else res[v] + [i]
 
         for index in sorted(remove_duplicates, reverse=True):
             del self.partitions[index]
+        return res
 
     def parse(self):
-        self.idetify_duplicates()
+        duplicates_dict = self.idetify_sequential_duplicates()
+        num_dev_reconfig = len(self.partitions) - 1
 
         self.partition_model_file = os.path.join(
-            os.getcwd(), "fpga_modeling_reports", self.model_name + "_partitions.csv"
+            os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_partitions.csv"
         )
 
         with open(self.partition_model_file, mode="w") as partition_dp:
@@ -604,88 +632,117 @@ class PartitionParser(PartitionDescriptor):
             )
 
         start = time.time()
+        name_offset = 0
         for i, partition in enumerate(self.partitions):
-            part_name = "part_{}".format(i)
+            part_name = "part_{}".format(i+name_offset)
+            if i+name_offset in duplicates_dict:
+                part_name += "+"
+                part_name += "+".join([str(x) for x in duplicates_dict[i+name_offset]])
+            times_called = 1 if i+name_offset not in duplicates_dict else 1 + len(duplicates_dict[i+name_offset])
+            name_offset += times_called - 1
+            print("Partition: {} (i = {}). Called {} times".format(part_name, i, times_called))
             self.model_partition(partition, name=part_name)
 
+        print("Total number of device reconfigurations: {}".format(num_dev_reconfig))
+
         for key in self.model_avg_metrics:
-            self.model_avg_metrics[key] = self.df.mean()[key].item()
-        self.model_avg_metrics["latency(C) Sum"] = self.df.sum()["latency(C)"]
-        self.model_avg_metrics["latency(S) Sum"] = self.df.sum()["latency(S)"]
-        self.model_avg_metrics["GOPs Sum"] = self.df.sum()["GOPs"]
-        self.model_avg_metrics["depth Sum"] = self.df.sum()["depth"]
+            self.model_avg_metrics[key] = self.df[key].repeat(self.df["Times Repeated"].to_list()).mean()
+        self.model_avg_metrics["latency(C) Sum"] = (self.df["latency(C)"] * self.df["Times Repeated"]).sum()
+        self.model_avg_metrics["latency(S) Sum"] = (self.df["latency(S)"] * self.df["Times Repeated"]).sum()
+        self.model_avg_metrics["GOPs Sum"] = (self.df["GOPs"] * self.df["Times Repeated"]).sum()
+        self.model_avg_metrics["depth Sum"] = (self.df["depth"] * self.df["Times Repeated"]).sum()
 
-        self.model_avg_metrics["latency(S) + reconfiguration"] = {
-            "Batch 1": (
-                (
-                    self.model_avg_metrics["latency(C) Sum"]
-                    - self.model_avg_metrics["depth Sum"]
-                )
-                * 1
-                + self.model_avg_metrics["depth Sum"]
-            )
-            / (self.clock_frequency * 1e6)
-            + (self.reconfiguration_time * (len(self.partitions) - 1)),
-            "Batch 100": (
-                (
-                    self.model_avg_metrics["latency(C) Sum"]
-                    - self.model_avg_metrics["depth Sum"]
-                )
-                * 100
-                + self.model_avg_metrics["depth Sum"]
-            )
-            / (self.clock_frequency * 1e6)
-            + (self.reconfiguration_time * (len(self.partitions) - 1)),
+        batch_size = np.arange(1, 250, 1)
+        lat_sec = ((self.model_avg_metrics["latency(C) Sum"] - self.model_avg_metrics["depth Sum"]) * batch_size + self.model_avg_metrics["depth Sum"]) / (self.clock_frequency * 1e6) + (self.reconfiguration_time * num_dev_reconfig)
+        plt.plot(batch_size, lat_sec)
+        plt.xlabel("Batch Size")
+        plt.ylabel("Seconds")
+        plt.title("Latency vs Batch Size")
+        if not self.wandb_config == None:
+            wandb.log({"Latency vs Batch Size": plt})
+        through_gops_sec = (self.model_avg_metrics["GOPs Sum"] * batch_size) / lat_sec
+        plt.cla()
+        plt.clf()
+        plt.plot(batch_size, through_gops_sec)
+        plt.xlabel("Batch Size")
+        plt.ylabel("GOPs/s")
+        plt.title("Throughput (GOPs/s) vs Batch Size")
+        if not self.wandb_config == None:
+            wandb.log({"Throughput (GOPs/s) vs Batch Size": plt})
+        through_vols_sec = batch_size / lat_sec
+        plt.cla()
+        plt.clf()
+        plt.plot(batch_size, through_vols_sec)
+        plt.xlabel("Batch Size")
+        plt.ylabel("Volumes/s")
+        plt.title("Throughput (Volumes/s) vs Batch Size")
+        if not self.wandb_config == None:
+            wandb.log({"Throughput (Volumes/s) vs Batch Size": plt})
+        gops_sec_dsp = through_gops_sec / self.total_dsp
+        plt.cla()
+        plt.clf()
+        plt.plot(batch_size, gops_sec_dsp)
+        plt.xlabel("Batch Size")
+        plt.ylabel("GOPs/s/DSP")
+        plt.title("Throughput (GOPs/s/DSP) vs Batch Size")
+        if not self.wandb_config == None:
+            wandb.log({"Throughput (GOPs/s/DSP) vs Batch Size": plt})
+        gops_sec_dsp_cycle = (gops_sec_dsp / self.clock_frequency) * 1e3
+        plt.cla()
+        plt.clf()
+        plt.plot(batch_size, gops_sec_dsp_cycle)
+        plt.xlabel("Batch Size")
+        plt.ylabel("GOPs/s/DSP/Cycle")
+        plt.title("Throughput (GOPs/s/DSP/Cycle) vs Batch Size")
+        if not self.wandb_config == None:
+            wandb.log({"Throughput (GOPs/s/DSP/Cycle) vs Batch Size": plt})
+
+        self.model_avg_metrics["latency(S)-reconfig"] = {
+            "Batch 1": lat_sec[0],
+            "Batch 30": lat_sec[29],
+            "Batch 100": lat_sec[99]
         }
 
-        self.model_avg_metrics["Througput (GOPs/s)"] = {
-            "Batch 1": (
-                (self.model_avg_metrics["GOPs Sum"] * 1)
-                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 1"]
-            ),
-            "Batch 100": (
-                (self.model_avg_metrics["GOPs Sum"] * 100)
-                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 100"]
-            ),
+        self.model_avg_metrics["GOPs/s"] = {
+            "Batch 1": through_gops_sec[0],
+            "Batch 30": through_gops_sec[29],
+            "Batch 100": through_gops_sec[99]
         }
-        self.model_avg_metrics["Througput (Volumes/s)"] = {
-            "Batch 1": (
-                1 / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 1"]
-            ),
-            "Batch 100": (
-                100
-                / self.model_avg_metrics["latency(S) + reconfiguration"]["Batch 100"]
-            ),
+        self.model_avg_metrics["Volumes/s"] = {
+            "Batch 1": through_vols_sec[0],
+            "Batch 30": through_vols_sec[29],
+            "Batch 100": through_vols_sec[99]
         }
         self.model_avg_metrics["GOPs/s/DSP"] = {
-            "Batch 1": (
-                self.model_avg_metrics["Througput (GOPs/s)"]["Batch 1"] / self.total_dsp
-            ),
-            "Batch 100": (
-                self.model_avg_metrics["Througput (GOPs/s)"]["Batch 100"]
-                / self.total_dsp
-            ),
+            "Batch 1": gops_sec_dsp[0],
+            "Batch 30": gops_sec_dsp[29],
+            "Batch 100": gops_sec_dsp[99]
         }
         self.model_avg_metrics["GOPs/s/DSP/cycle"] = {
-            "Batch 1": (
-                self.model_avg_metrics["GOPs/s/DSP"]["Batch 1"] / self.clock_frequency
-            )
-            * 1e3,
-            "Batch 100": (
-                self.model_avg_metrics["GOPs/s/DSP"]["Batch 100"] / self.clock_frequency
-            )
-            * 1e3,
+            "Batch 1": gops_sec_dsp_cycle[0],
+            "Batch 30": gops_sec_dsp_cycle[29],
+            "Batch 100": gops_sec_dsp_cycle[99]
         }
 
-        wandb.log(self.model_avg_metrics)
-        wandb.log({"Partition Results": wandb.Table(dataframe=self.df)})
+        del self.model_avg_metrics["latency(C)"]
+        del self.model_avg_metrics["latency(S)"]
+        del self.model_avg_metrics["GOP/s"]
+        del self.model_avg_metrics["vols/s"]
+        del self.model_avg_metrics["GOPs"]
+        del self.model_avg_metrics["DSP %"]
+        del self.model_avg_metrics["BRAM %"]
+        del self.model_avg_metrics["depth"]
+
+        if not self.wandb_config == None:
+            wandb.log(self.model_avg_metrics)
+            wandb.log({"Partition Results": wandb.Table(dataframe=self.df)})
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 
     def model_custom_partition(self):
         self.partition_model_file = os.path.join(
             os.getcwd(),
-            "fpga_modeling_reports",
+            "fpga_modeling_reports", self.model_name,
             self.model_name + "_custom_partitions.csv",
         )
 

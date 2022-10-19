@@ -166,6 +166,44 @@ class PartitionDescriptor(ModelLayerDescriptor):
                 if list(layer_queue_operations) == layer_type_2:
                     final_layers.append(list(layer_queue))
             return final_layers
+        elif self.model_name == "r2plus1d":
+            layer_type_1 = ["Conv", "Relu", "Conv", "Relu", "MaxPool", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
+            layer_type_2 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
+            layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Relu", "Conv", "Add"]
+            layer_type_4 = ["Relu", "GlobalAveragePool", "Gemm"]
+            layer_queue = deque(maxlen=13)
+            layer_queue_operations = deque(maxlen=13)
+            for k in layers.keys():
+                layer_queue_operations.append(layers[k]["operation"])
+                layer_queue.append(k)
+                if list(layer_queue_operations) == layer_type_1:
+                    final_layers.append(list(layer_queue))
+                elif list(layer_queue_operations)[4:] == layer_type_2:
+                    final_layers.append(list(layer_queue)[4:])
+                elif list(layer_queue_operations)[1:] == layer_type_3:
+                    final_layers.append(list(layer_queue)[1:])
+                elif list(layer_queue_operations)[10:] == layer_type_4:
+                    final_layers.append(list(layer_queue)[10:])
+            return final_layers
+        elif self.model_name == "slowonly":
+            layer_type_1 = ["Conv", "Relu", "MaxPool", "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Add"]
+            layer_type_2 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
+            layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Add"]
+            layer_type_4 = ["Relu", "GlobalAveragePool", "Gemm"]
+            layer_queue = deque(maxlen=10)
+            layer_queue_operations = deque(maxlen=10)
+            for k in layers.keys():
+                layer_queue_operations.append(layers[k]["operation"])
+                layer_queue.append(k)
+                if list(layer_queue_operations) == layer_type_1:
+                    final_layers.append(list(layer_queue))
+                elif list(layer_queue_operations)[3:] == layer_type_2:
+                    final_layers.append(list(layer_queue)[3:])
+                elif list(layer_queue_operations)[2:] == layer_type_3:
+                    final_layers.append(list(layer_queue)[2:])
+                elif list(layer_queue_operations)[7:] == layer_type_4:
+                    final_layers.append(list(layer_queue)[7:])
+            return final_layers
 
     def update_hw_pe(self, graph: nx.DiGraph, groupping: int = 1) -> None:
         nodes = utils.get_nodes_sorted(graph)

@@ -30,7 +30,7 @@ sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
 
-def get_factors(n, max_parallel=None, sec_passed=None) -> list:
+def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
     """
     Parameters
     ----------
@@ -50,11 +50,8 @@ def get_factors(n, max_parallel=None, sec_passed=None) -> list:
                 )
             )
         )
-        if not sec_passed == None:
-            # Apply cosine annealing to keep a percentage of the original number of results based on the time passed (we assume the max waiting time is 90 seconds)
-            keep_perc = 0.01 + 1 / 2 * (1.0 - 0.01) * (
-                1 + math.cos((sec_passed / 90.0) * math.pi)
-            )
+        if not keep_percentage == None:
+            keep_perc = 1 - keep_percentage
             threshold = max(int(max(result) * keep_perc), min(result))
             return [x for x in result if x <= threshold]
         else:
