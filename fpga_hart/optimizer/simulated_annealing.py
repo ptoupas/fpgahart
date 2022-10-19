@@ -532,7 +532,8 @@ class SimulatedAnnealing(BaseLayer):
                 #     wandb.log(log_dict)
 
                 num_iterations = 0
-                while num_iterations < self.iterationPerTemp:
+                timeout_tmr_start = time.time()
+                while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
                 # for _ in range(self.iterationPerTemp):
                     (
                         new_state,
