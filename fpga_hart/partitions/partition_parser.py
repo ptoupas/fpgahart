@@ -640,7 +640,6 @@ class PartitionParser(PartitionDescriptor):
                 part_name += "+".join([str(x) for x in duplicates_dict[i+name_offset]])
             times_called = 1 if i+name_offset not in duplicates_dict else 1 + len(duplicates_dict[i+name_offset])
             name_offset += times_called - 1
-            print("Partition: {} (i = {}). Called {} times".format(part_name, i, times_called))
             self.model_partition(partition, name=part_name)
 
         print("Total number of device reconfigurations: {}".format(num_dev_reconfig))
