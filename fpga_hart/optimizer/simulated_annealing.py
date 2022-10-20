@@ -1796,8 +1796,10 @@ class SimulatedAnnealing(BaseLayer):
                 log_dict["num_blocks"] = len(prev_state)
                 wandb.log(log_dict)
 
-            cont_fail = 0
-            for _ in range(self.iterationPerTemp):
+            num_iterations = 0
+            timeout_tmr_start = time.time()
+            while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
+            # for _ in range(self.iterationPerTemp):
                 if self.block_gen == 'post_while':
                     bblocks, lookuptable = self.generate_building_blocks()
 
@@ -1811,8 +1813,8 @@ class SimulatedAnnealing(BaseLayer):
                     )
 
                 if new_state is None:
-                    cont_fail += 1
                     continue
+                num_iterations += 1
 
                 (
                     new_cost,
@@ -1840,9 +1842,6 @@ class SimulatedAnnealing(BaseLayer):
                         prev_bw = copy.deepcopy(bw_util)
                         prev_scheduling = copy.deepcopy(new_scheduling)
 
-            if cont_fail/self.iterationPerTemp > 0.5:
-                _logger.warning(f'Failed to generate bblock\'s config {cont_fail}/{self.iterationPerTemp} ({(cont_fail/self.iterationPerTemp)*100:.2f}%) times')
-                continue
             current_temp *= self.cooling_rate
             print(
                 f"{current_temp:.5e}\t{prev_cost:.5e}",
