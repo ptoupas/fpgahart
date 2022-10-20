@@ -725,11 +725,7 @@ class PartitionParser(PartitionDescriptor):
 
         del self.model_avg_metrics["latency(C)"]
         del self.model_avg_metrics["latency(S)"]
-        del self.model_avg_metrics["GOP/s"]
-        del self.model_avg_metrics["vols/s"]
         del self.model_avg_metrics["GOPs"]
-        del self.model_avg_metrics["DSP %"]
-        del self.model_avg_metrics["BRAM %"]
         del self.model_avg_metrics["depth"]
 
         if not self.wandb_config == None:
