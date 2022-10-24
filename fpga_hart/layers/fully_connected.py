@@ -46,7 +46,7 @@ class FCLayer(BaseLayer):
         self.throughput_vols = 0
 
     def get_total_workload(self):
-        return int(np.prod(np.array(self.weights_shape)))
+        return int(np.prod(np.array(self.weights_shape))) + int(np.prod(np.array(self.input_shape)))
 
     def get_dp_info(self):
         dp_info = {}
@@ -261,7 +261,7 @@ class FCLayer(BaseLayer):
 
     def get_data_matrix(self, mem_bw_in, mem_bw_out):
         #TODO: We have to add here the mem_bw for streaming the weights in the IP as well mem_bw_weights
-        # OR we can just add the mem_bw_weights + mem_bw_in and assume it as a single mem_bw
+        # and create an updated version of gamma matrix balancing with multiple inputs/branches
         data_matrix = np.zeros(shape=(2, 3), dtype=float)
 
         data_matrix[0, 0] = mem_bw_in
@@ -276,7 +276,8 @@ class FCLayer(BaseLayer):
         return data_matrix
 
     def get_workload_matrix(self):
-        in_volume = self.dim_in * self.dim_out
+        # We assume that the workload is accumulated workload of the weights + the input data since we are streaming them both in the IP
+        in_volume = self.dim_in * self.dim_out + self.dim_in
         out_volume = self.dim_out
 
         workload_matrix = np.zeros(shape=(2, 3), dtype=float)
