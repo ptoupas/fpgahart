@@ -1183,7 +1183,7 @@ class SimulatedAnnealing(BaseLayer):
             coarse_in_factor = random.choice(coarse_in_feasible) / channels
             coarse_out_factor = random.choice(coarse_out_feasible) / filters
             fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
-            config = [coarse_in_factor, coarse_out_factor, fine_factor]
+            config = [fine_factor, coarse_in_factor, coarse_out_factor]
         elif isinstance(hw, Pooling3DLayer):
             channels = hw.channels
             kernel_size = hw.kernel_shape

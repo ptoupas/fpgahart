@@ -143,14 +143,11 @@ class FCLayer(BaseLayer):
             print("II:\n{}".format(ii_matrix))
 
         max_parallel_muls = math.ceil(
-            self.dim_out * coarse_out
-        )  # math.ceil(self.dim_in * coarse_in)
+            self.dim_in * coarse_in) * math.ceil(self.dim_out * coarse_out)
         max_parallel_adds = math.ceil(
-            self.dim_out * coarse_out
-        )  # math.ceil(self.dim_in * coarse_in)
-
+            self.dim_in * coarse_in) * math.ceil(self.dim_out * coarse_out)
         layer_fifos_arrays = {"fc_array": 0}
-        layer_fifos_arrays["fc_array"] = math.ceil(1 / coarse_out)
+        layer_fifos_arrays["fc_array"] = math.ceil(1 / coarse_out) + math.ceil(self.dim_out * coarse_out)
 
         depth = 2  # math.ceil(self.dim_in * coarse_in)
 
@@ -254,8 +251,8 @@ class FCLayer(BaseLayer):
 
         stream_matrix[0, 0] = 1
 
-        stream_matrix[0, 1] = math.ceil(self.dim_out * coarse_out)
-        stream_matrix[1, 1] = math.ceil(self.dim_out * coarse_out)
+        stream_matrix[0, 1] = math.ceil(self.dim_in * coarse_in) * math.ceil(self.dim_out * coarse_out)
+        stream_matrix[1, 1] = math.ceil(self.dim_in * coarse_in) * math.ceil(self.dim_out * coarse_out)
         stream_matrix[1, 2] = 1
 
         if DEBUG:
@@ -263,6 +260,8 @@ class FCLayer(BaseLayer):
         return stream_matrix
 
     def get_data_matrix(self, mem_bw_in, mem_bw_out):
+        #TODO: We have to add here the mem_bw for streaming the weights in the IP as well mem_bw_weights
+        # OR we can just add the mem_bw_weights + mem_bw_in and assume it as a single mem_bw
         data_matrix = np.zeros(shape=(2, 3), dtype=float)
 
         data_matrix[0, 0] = mem_bw_in

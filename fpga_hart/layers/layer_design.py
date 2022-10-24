@@ -1150,6 +1150,21 @@ def fc_design_points(
     singlethreaded: bool,
 ):
     fc = FCLayer(max_DSP_util, max_BRAM_util, description)
+    description_ = {
+        "operation": "Conv",
+        "shape_in": [[1, description["kernel"][0], 1, 1, 1]],
+        "shape_out": [1, description["kernel"][1], 1, 1, 1],
+        "node_in": description["node_in"],
+        "node_out": description["node_out"],
+        "branching": description["branching"],
+        "kernel": [description["kernel"][1], description["kernel"][0], 1, 1, 1],
+        "bias": description["bias"],
+        "padding": [0, 0, 0],
+        "stride": [1, 1, 1],
+        "groups": 1,
+        "dilation": [1, 1, 1],
+    }
+    fc_as_conv = Convolutional3DLayer(max_DSP_util, max_BRAM_util, description_)
 
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=fc)
