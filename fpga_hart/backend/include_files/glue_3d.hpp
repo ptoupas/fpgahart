@@ -71,6 +71,66 @@ void glue_3d(
 }
 
 
+/**
+ *  GLUE GEMM FUNCTION
+ */
+template<
+	unsigned int BATCH,
+	unsigned int IN_FEATURES,
+	unsigned int OUT_FEATURES,
+	unsigned int COARSE_IN,
+	unsigned int COARSE_OUT,
+    typename glue_acc_t,
+    typename glue_data_t
+>
+void glue_3d(
+		hls::stream<glue_acc_t> in[COARSE_IN][COARSE_OUT],
+		hls::stream<glue_data_t> out[COARSE_OUT]
+)
+{
+
+#pragma HLS INLINE OFF
+
+    // set all parameters as constants
+    const unsigned int batch    	= BATCH;
+    const unsigned int in_features  = IN_FEATURES;
+    const unsigned int out_features = OUT_FEATURES;
+    const unsigned int coarse_in 	= COARSE_IN;
+    const unsigned int coarse_out	= COARSE_OUT;
+
+    const unsigned int out_features_per_coarse = DIVIDE(out_features,coarse_out);
+
+    glue_acc_t acc[coarse_out];
+#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
+
+	filter_loop: for(unsigned int out_features_index=0;out_features_index<out_features_per_coarse;out_features_index++) {
+#pragma HLS LOOP_FLATTEN
+#pragma HLS PIPELINE II=1
+
+		coarse_out_loop: for(unsigned int out_index=0; out_index<coarse_out; out_index++) {
+			coarse_in_loop: for(unsigned int in_index=0; in_index<coarse_in; in_index++) {
+				// update accumulation cache
+				glue_acc_t prev = ( in_index == 0 ) ? glue_acc_t(0) : acc[out_index] ;
+#ifdef DEBUG_PRINTS_
+				glue_acc_t tmp = in[in_index][out_index].read();
+				acc[out_index] = prev + tmp ;
+				cout << "read in[" << in_index << "][" << out_index << "] = " << tmp << ". Previous val = " << prev << endl;
+				cout << "acc[" << out_index << "] = " << acc[out_index] << endl;
+#else
+				acc[out_index] = prev + in[in_index][out_index].read() ;
+#endif
+				// write to output stream
+				if( in_index == (coarse_in-1) ) {
+#ifdef DEBUG_PRINTS_
+					cout << "WRITE out[" << out_index << "] = " << acc[out_index] << endl;
+#endif
+					out[out_index].write( glue_data_t(acc[out_index]) ) ;
+				}
+			}
+		}
+	}
+}
+
 
 /**
  *  GLUE DEPTHWISE FUNCTION

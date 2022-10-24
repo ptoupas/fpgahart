@@ -62,6 +62,16 @@ int get_index(int size, int steam)
 	return index;
 }
 
+template <int SIZE, int STREAMS_IN, int STREAMS_OUT, typename T>
+int get_index(int size, int steam_in, int stream_out)
+{
+	int index = (STREAMS_IN * STREAMS_OUT * size) +
+			    (STREAMS_OUT * steam_in) +
+				stream_out;
+
+	return index;
+}
+
 template <int SIZE, int STREAMS, int K_H, int K_W, int K_D, typename T>
 int get_index(int size, int steam, int k1, int k2, int k3)
 {
@@ -117,6 +127,60 @@ void to_stream(T array[SIZE][STREAMS], hls::stream<T> out[STREAMS])
 #else
 			out[j].write(array[i][j]);
 #endif
+		}
+	}
+	return;
+}
+
+template <int SIZE, int STREAMS_IN, int STREAMS_OUT, typename T>
+#ifdef MALLOC_USAGE
+void load_data(string file_name, T *array)
+#else
+void load_data(string file_name, T array[STREAMS_OUT][STREAMS_IN])
+#endif
+{
+	float f;
+	ifstream input(file_name, ios::binary);
+	for (int j = 0; j < STREAMS_IN; j++)
+	{
+		for (int k = 0; k < STREAMS_OUT; k++)
+		{
+			for (int i = 0; i < SIZE; i++)
+			{
+				input.read(reinterpret_cast<char *>(&f), sizeof(float));
+	#ifdef MALLOC_USAGE
+				array[get_index<SIZE, STREAMS_IN, STREAMS_OUT, T>(i, j, k)] = T(f);
+	#else
+				array[i][j][k] = T(f);
+	#endif
+			}
+		}
+	}
+	if (!check_empty(input))
+		cout << "Input data was not read correctly!" << endl;
+	return;
+}
+
+template <int SIZE, int STREAMS_IN, int STREAMS_OUT, typename T>
+#ifdef MALLOC_USAGE
+void to_stream(T *array, hls::stream<T> out[STREAMS_IN][STREAMS_OUT])
+#else
+void to_stream(T array[SIZE][STREAMS_OUT][STREAMS_IN], hls::stream<T> out[STREAMS_OUT][STREAMS_IN])
+#endif
+{
+	std::cout << "Size: " << SIZE << ", Streams IN : " << STREAMS_IN << ", Streams OUT : " << STREAMS_OUT << std::endl;
+	for (int j = 0; j < STREAMS_IN; j++)
+	{
+		for (int k = 0; k < STREAMS_OUT; k++)
+		{
+			for (int i = 0; i < SIZE; i++)
+			{
+	#ifdef MALLOC_USAGE
+				out[j][k].write(array[get_index<SIZE, STREAMS_IN, STREAMS_OUT, T>(i, j, k)]);
+	#else
+				out[j][k].write(array[i][j][k]);
+	#endif
+			}
 		}
 	}
 	return;
