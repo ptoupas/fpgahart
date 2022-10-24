@@ -284,7 +284,7 @@ def transform_weights(
             kw_size,
             kd_size,
         ),
-        dtype=float,
+        dtype=np.float32,
         order="C",
     )
 
@@ -337,6 +337,55 @@ def transform_weights(
     return weights
 
 
+def transform_weights_fc(
+    weights_raw, coarse_in, coarse_out, wr_factor=1,):
+    # parameters
+    num_filters = int(weights_raw.shape[0] / (coarse_out * wr_factor))
+    num_channels = int(weights_raw.shape[1] / coarse_in)
+    print(
+        f"num_filters={num_filters}  |  num_channels={num_channels}"
+    )
+    # correct output shape for weights
+    weights = np.ndarray(
+        shape=(
+            wr_factor,
+            coarse_in,
+            coarse_out,
+            num_channels,
+            num_filters,
+        ),
+        dtype=np.float32,
+        order="C",
+    )
+
+    # transform weights raw shape
+    for index, _ in np.ndenumerate(weights):
+        weights[index] = weights_raw[
+            + index[4] * wr_factor * coarse_out
+            + index[0] * coarse_out
+            + index[2],
+            index[3] * coarse_in + index[1],
+        ]
+
+    # merge channel and filter dimensions
+    print("*" * 30)
+    print(weights.shape)
+
+    weights = np.reshape(
+        weights,
+        [
+            wr_factor,
+            coarse_in,
+            coarse_out,
+            num_channels,
+            num_filters,
+        ],
+    )
+    print(weights.shape)
+    print("*" * 30)
+    # return transformed weights
+    return weights
+
 def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_data"):
     if not os.path.exists(prefix + "/gap_3d"):
         os.makedirs(prefix + "/gap_3d")
@@ -372,6 +421,8 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_da
 def gemm(
     in_features: int,
     out_features: int,
+    coarse_in: int,
+    coarse_out: int,
     bias: bool = False,
     prefix: str = "generated_data",
     file_format: str = "bin",
@@ -393,11 +444,13 @@ def gemm(
     print(
         f"weights shape: {weights.shape}. Size in KB: {(weights.size * 2) / 1024:.4f}"
     )
+    weights = transform_weights_fc(weights, coarse_in, coarse_out)
+
     if file_format == "bin":
-        weights.transpose(1, 0).tofile(prefix + "/gemm/weights.dat")
+        weights.tofile(prefix + "/gemm/weights.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/gemm/weights.dat", weights.transpose(1, 0).flatten(), fmt="%.8f"
+            prefix + "/gemm/weights.dat", weights.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -1416,6 +1469,6 @@ if __name__ == "__main__":
     elif op_type == "3d_part":
         part_3d(args.format, args.config_file, "generated_data/" + args.prefix)
     elif op_type == "gemm":
-        gemm(args.in_features, args.out_features, args.bias)
+        gemm(args.in_features, args.out_features, args.coarse_in, args.coarse_out, bias=args.bias, file_format=args.format)
     else:
         print("Invalid op_type: %s" % op_type)
