@@ -25,7 +25,7 @@ def generate_gemm_cpp(name, config, partition_name):
     with cpp.block(
         f"void {layer_name_lower}_layer(\n\
         stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE_IN],\n\
-        stream_t({layer_name_lower}_data_t) weights[{layer_name_upper}_COARSE_OUT],\n\
+        stream_t({layer_name_lower}_data_t) weights[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT],\n\
         stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE_OUT])"
     ):
 
@@ -37,36 +37,58 @@ def generate_gemm_cpp(name, config, partition_name):
         cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
 
         cpp(
-            f"hls::stream<{layer_name_lower}_data_t> fork_in[{layer_name_upper}_COARSE_OUT];"
+            f"hls::stream<{layer_name_lower}_data_t> fork_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];"
         )
-        cpp("#pragma HLS STREAM variable=fork_in")
-        cpp("#pragma HLS ARRAY_PARTITION variable=fork_in  complete dim=0", newlines=2)
-
+        cpp("#pragma HLS STREAM variable=fork_out")
+        cpp("#pragma HLS ARRAY_PARTITION variable=fork_out  complete dim=0")
         cpp(
-            f"fork_3d<\n\
-                {layer_name_upper}_FORK_BATCH_SIZE,\n\
-                {layer_name_upper}_FORK_IN_FEATURES,\n\
-                {layer_name_upper}_FORK_COARSE_OUT,\n\
-                {layer_name_lower}_data_t\n\
-            >(in[0],fork_in);",
-            newlines=2,
+            f"hls::stream<accum_data_t> gemm_out[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT];"
         )
+        cpp("#pragma HLS STREAM variable=gemm_out")
+        cpp("#pragma HLS ARRAY_PARTITION variable=gemm_out  complete dim=0", newlines=2)
 
         with cpp.block(
-            f"for(int coarseOutdex=0; coarseOutdex<{layer_name_upper}_COARSE_OUT; coarseOutdex++)"
+            f"for(int coarseIndex=0; coarseIndex<{layer_name_upper}_COARSE_IN; coarseIndex++)"
         ):
             cpp("#pragma HLS unroll", newlines=2)
 
             cpp(
-                f"gemm<\n\
-                {layer_name_upper}_GEMM_BATCH_SIZE,\n\
-                {layer_name_upper}_GEMM_IN_FEATURES,\n\
-                {layer_name_upper}_GEMM_OUT_FEATURES,\n\
-                {layer_name_lower}_data_t\n\
-            >(fork_in[coarseOutdex],weights[coarseOutdex],out[coarseOutdex]);",
+                f"fork_3d<\n\
+                    {layer_name_upper}_FORK_BATCH_SIZE,\n\
+                    {layer_name_upper}_FORK_IN_FEATURES,\n\
+                    {layer_name_upper}_FORK_COARSE_OUT,\n\
+                    {layer_name_lower}_data_t\n\
+            >(in[coarseIndex],fork_out[coarseIndex]);",
                 newlines=2,
             )
 
+            with cpp.block(
+                f"for(int coarseOutdex=0; coarseOutdex<{layer_name_upper}_COARSE_OUT; coarseOutdex++)"
+            ):
+                cpp("#pragma HLS unroll", newlines=2)
+
+                cpp(
+                    f"gemm<\n\
+                    {layer_name_upper}_GEMM_BATCH_SIZE,\n\
+                    {layer_name_upper}_GEMM_IN_FEATURES,\n\
+                    {layer_name_upper}_GEMM_OUT_FEATURES,\n\
+                    {layer_name_lower}_data_t\n\
+                >(fork_out[coarseIndex][coarseOutdex],weights[coarseIndex][coarseOutdex],gemm_out[coarseIndex][coarseOutdex]);",
+                    newlines=2,
+                )
+
+        cpp(
+            f"glue_3d<\n\
+            {layer_name_upper}_GLUE_BATCH_SIZE,\n\
+            {layer_name_upper}_GLUE_IN_FEATURES,\n\
+            {layer_name_upper}_GLUE_OUT_FEATURES,\n\
+            {layer_name_upper}_GLUE_COARSE_IN,\n\
+            {layer_name_upper}_GLUE_COARSE_OUT,\n\
+            accum_data_t,\n\
+            {layer_name_lower}_data_t\n\
+        >(gemm_out,out);",
+            newlines=2,
+        )
     cpp.close()
 
 
@@ -90,7 +112,8 @@ def generate_gemm_hpp(name, config, partition_name):
     hpp("#pragma once", newlines=2)
     hpp('#include "common_.hpp"')
     hpp('#include "gemm_.hpp"')
-    hpp('#include "fork_3d_.hpp"', newlines=2)
+    hpp('#include "fork_3d_.hpp"')
+    hpp('#include "glue_3d_.hpp"', newlines=2)
 
     hpp(f"#define {layer_name_upper}_BATCH_SIZE {batch_size}")
     hpp(f"#define {layer_name_upper}_IN_FEATURES {in_features}")
@@ -99,14 +122,14 @@ def generate_gemm_hpp(name, config, partition_name):
     hpp(f"#define {layer_name_upper}_COARSE_OUT {coarse_out_factor}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_FORK_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
-    hpp(f"#define {layer_name_upper}_FORK_IN_FEATURES \t{layer_name_upper}_IN_FEATURES")
+    hpp(f"#define {layer_name_upper}_FORK_IN_FEATURES \tDIVIDE({layer_name_upper}_IN_FEATURES, {layer_name_upper}_COARSE_IN)")
     hpp(
         f"#define {layer_name_upper}_FORK_OUT_FEATURES \tDIVIDE({layer_name_upper}_OUT_FEATURES, {layer_name_upper}_COARSE_OUT)"
     )
     hpp(f"#define {layer_name_upper}_FORK_COARSE_OUT \t{layer_name_upper}_COARSE_OUT")
 
     hpp(f"#define {layer_name_upper}_GEMM_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
-    hpp(f"#define {layer_name_upper}_GEMM_IN_FEATURES \t{layer_name_upper}_IN_FEATURES")
+    hpp(f"#define {layer_name_upper}_GEMM_IN_FEATURES \tDIVIDE({layer_name_upper}_IN_FEATURES, {layer_name_upper}_COARSE_IN)")
     hpp(
         f"#define {layer_name_upper}_GEMM_OUT_FEATURES \tDIVIDE({layer_name_upper}_OUT_FEATURES, {layer_name_upper}_COARSE_OUT)"
     )
@@ -119,7 +142,7 @@ def generate_gemm_hpp(name, config, partition_name):
     hpp(
         f"void {layer_name_lower}_layer(\n\
         stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE_IN],\n\
-        stream_t({layer_name_lower}_data_t) weights[{layer_name_upper}_COARSE_OUT],\n\
+        stream_t({layer_name_lower}_data_t) weights[{layer_name_upper}_COARSE_IN][{layer_name_upper}_COARSE_OUT],\n\
         stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE_OUT]);"
     )
 
