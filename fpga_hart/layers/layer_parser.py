@@ -164,12 +164,12 @@ class LayerParser(ModelLayerDescriptor):
             name = "custom_gemm_layer"
             layer_descriptor = {
                 "operation": "Gemm",
-                "shape_in": [[1, 200]],
+                "shape_in": [[1, 50]],
                 "shape_out": [1, 100],
                 "node_in": ["960"],
                 "node_out": "970",
                 "branching": False,
-                "kernel": [200, 100],
+                "kernel": [50, 100],
                 "bias": [100],
             }
         elif layer_type == "GlobalAveragePool":

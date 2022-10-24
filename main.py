@@ -156,7 +156,7 @@ def optimizer() -> None:
         if args.target == "throughput":
             # layer_parser.parse()
             # ["Conv", "Pool", "GlobalAveragePool", "Gemm", "Mul", "Add", "Relu", "Sigmoid", "Swish"]
-            layer_parser.model_custom_layer("Mul")
+            layer_parser.model_custom_layer("Gemm")
         elif args.target == "latency":
             pass
     else:

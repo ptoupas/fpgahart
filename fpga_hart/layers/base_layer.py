@@ -180,7 +180,7 @@ class BaseLayer:
             weights_bram = self.bram_memory_resource_model(weights_depth, 8)
             if weights_depth < 100:
                 weights_bram = 0
-            # print("WEIGHTS:", weights_depth, weights_bram, weights_bram * fine * coarse_in * coarse_out)
+            # print(f"WEIGHTS: depth={weights_depth},\tbram={weights_bram},\tcoarse_factors={fine * coarse_in * coarse_out},\ttotal_bram={weights_bram * fine * coarse_in * coarse_out}\t{sw_brams * coarse_in}\t{(fifo_accumulator_brams + array_accumulator_brams) * coarse_in * coarse_out}")
 
             bram_raw += (
                 sw_brams * coarse_in

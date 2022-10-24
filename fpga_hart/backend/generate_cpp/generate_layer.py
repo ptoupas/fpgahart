@@ -2,15 +2,12 @@ import argparse
 import json
 
 import pandas as pd
-from fpga_hart.backend.python_prototyping.generate_data import (
-    conv_3d,
-    elemwise_3d,
-    gap_3d,
-    gemm,
-    relu_3d,
-    shish_3d,
-    sigmoid_3d,
-)
+from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
+                                                                elemwise_3d,
+                                                                gap_3d, gemm,
+                                                                relu_3d,
+                                                                shish_3d,
+                                                                sigmoid_3d)
 from fpga_hart.layers.layer_parser import LayerParser
 
 from generate_tb import generate_tb_files
@@ -25,20 +22,24 @@ from layers.generate_swish import generate_swish_files
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
-    parser.add_argument("--model_name", help="name of the HAR model", required=True)
     parser.add_argument(
-        "--hls_project_path",
-        help="path of the HLS project to be generated",
-        required=True,
-    )
-    parser.add_argument(
-        "--prefix",
-        help="the parent folder in which to store the model's partitions",
+        "model_name",
+        choices=["x3d_m", "slowonly", "r2plus1d", "c3d"],
         type=str,
-        required=True,
+        help="name of the HAR model",
     )
     parser.add_argument(
-        "--config_file", help="name of the model's configuration file", required=True
+        "hls_project_path",
+        type=str,
+        help="path of the HLS project to be generated",
+    )
+    parser.add_argument(
+        "prefix",
+        type=str,
+        help="the parent folder in which to store the model's partitions",
+    )
+    parser.add_argument(
+        "config_file", type=str, help="name of the model's configuration file"
     )
 
     args = parser.parse_args()
@@ -48,13 +49,11 @@ def parse_args():
 def get_layers_configurations(config_file):
     result = {}
 
-    configuration = pd.read_csv(config_file)
+    configuration = pd.read_json(config_file)
     layers = configuration["Layer"].to_list()
     for l in layers:
         layers_config = configuration[configuration["Layer"] == l]["config"].to_dict()
         layers_config = layers_config[[*layers_config][0]]
-        layers_config = layers_config.replace("'", '"')
-        layers_config = json.loads(layers_config)
         partition_branch_depth = configuration[configuration["Layer"] == l][
             "Branch Depth"
         ].values[0]
