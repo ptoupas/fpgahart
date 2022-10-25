@@ -53,9 +53,9 @@ def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
         if not keep_percentage == None:
             keep_perc = 1 - keep_percentage
             threshold = max(math.ceil(max(result) * keep_perc), min(result))
-            return [x for x in result if x <= threshold]
+            return sorted([x for x in result if x <= threshold])
         else:
-            return result
+            return sorted(result)
     else:
         factors = np.arange(n) + 1
         return (factors[factors <= max_parallel]).tolist()
@@ -390,8 +390,8 @@ def get_fine_feasible(kernel_size: list, keep_percentage: float = None):
     if not keep_percentage == None:
         keep_perc = 1 - keep_percentage
         threshold = max(math.ceil(max(fine_feasible) * keep_perc), min(fine_feasible))
-        return [x for x in fine_feasible if x <= threshold]
-    return fine_feasible
+        return sorted([x for x in fine_feasible if x <= threshold])
+    return sorted(fine_feasible)
 
 def find_pareto(scores, domination_type="MaxMin"):
     # Count number of items

@@ -85,7 +85,7 @@ class BaseLayer:
                 rest_depth = rest_depth - bram_depth
 
             if rest_depth > 0:
-                # get the depth for the bram
+                # get the width for the bram
                 bram_width = self.BRAM_CONF_DEPTH[bram_depth]
                 brams_total += math.ceil(width / bram_width)
 
