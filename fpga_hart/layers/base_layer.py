@@ -133,6 +133,7 @@ class BaseLayer:
         coarse_out=1,
         fine=1,
         coarse_inout=1,
+        wr_factor=1
     ):
         # mem_kb = (mem * self.word_bytes) / 1e3
         # mem_bram = math.ceil(mem_kb / self.bram_Kbytes) #* coarse_in * coarse_out
@@ -235,7 +236,8 @@ class BaseLayer:
         dsps_util = (muls / self.dsp) * 100
         dsp_raw = muls
 
-        latency_cycles = (np.max(np.abs(ii))) * batch + depth
+        # latency_cycles = (np.max(np.abs(ii))) * batch + depth
+        latency_cycles = ((np.max(np.abs(ii))) * batch + depth) * wr_factor + (wr_factor - 1) * np.prod(np.array(kernel_shape))
         latency_sec = latency_cycles / self.cycles_per_sec
 
         thr_in = (batch * workload_matrix[0, 0]) / latency_sec  # Input words per second

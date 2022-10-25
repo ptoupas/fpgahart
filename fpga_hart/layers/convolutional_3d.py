@@ -68,6 +68,8 @@ class Convolutional3DLayer(BaseLayer):
         self.cols_out = self.output_shape[4]
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
+        self.bias_shape = [self.filters]
+
         if groups is not None:
             self.groups = groups
         if padding is not None:
@@ -281,6 +283,7 @@ class Convolutional3DLayer(BaseLayer):
         f_coarseOut: np.float64,
         mem_bw_in: int,
         mem_bw_out: int,
+        wr_factor: int = 1,
     ) -> dict:
         self.update_layer()
 
@@ -467,6 +470,7 @@ class Convolutional3DLayer(BaseLayer):
                 coarse_in=math.ceil(self.channels * f_coarseIn),
                 coarse_out=math.ceil(self.filters * f_coarseOut),
                 fine=math.ceil(kernel_elems * f_fine),
+                wr_factor=wr_factor
             )
         else:
             (
@@ -496,6 +500,7 @@ class Convolutional3DLayer(BaseLayer):
                 coarse_in=math.ceil(self.channels * f_coarseIn),
                 coarse_out=1,
                 fine=math.ceil(kernel_elems * f_fine),
+                wr_factor=wr_factor
             )
 
         total_ops = self.get_total_workload()
@@ -533,6 +538,7 @@ class Convolutional3DLayer(BaseLayer):
                 f_fine * kernel_elems,
                 f_coarseIn * self.channels,
                 f_coarseOut * self.filters,
+                wr_factor,
             ]
             self.config = config
             self.memoryKB = memKBs

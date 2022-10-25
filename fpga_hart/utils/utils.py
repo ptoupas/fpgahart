@@ -574,6 +574,7 @@ def generate_layer_config(layer, config):
         fine_factor = int(config[0] * layer.kd * layer.kh * layer.kw)
         coarse_in_factor = int(config[1] * layer.channels)
         coarse_out_factor = int(config[2] * layer.filters)
+        wr_factor = config[8]
         layer_config["shape_in"] = input_shape
         layer_config["shape_out"] = output_shape
         layer_config["shape_kernel"] = kerner_shape
@@ -588,6 +589,7 @@ def generate_layer_config(layer, config):
         layer_config["coarse_out_factor"] = (
             coarse_out_factor if not depthwise else coarse_in_factor
         )
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, Pooling3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape

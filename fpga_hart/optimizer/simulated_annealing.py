@@ -477,7 +477,6 @@ class SimulatedAnnealing(BaseLayer):
             while time.time() - start_time < 90.0:
                 x = float(time.time() - start_time)
                 perc = 1/(1+math.exp(-0.1*(x-45)))
-                print("Ititialization time passed {:.2f}. Keep perc (folding factors): {:.4f}".format(x, perc), end="\r")
                 config, mem_bw, _, _ = self.generate_random_config(
                     keep_percentage=perc)
                 cost, dp_info = self.get_cost(config, mem_bw)
@@ -496,19 +495,18 @@ class SimulatedAnnealing(BaseLayer):
 
         return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
-    def initialize_optimizer_layer(self, layer):
+    def initialize_optimizer_layer(self, layer, wr_factor: int = 1):
         config, mem_bw = self.generate_random_config_layer(layer)
-        cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+        cost, dp_info = self.get_cost_layer(config, mem_bw, layer, wr_factor=wr_factor)
 
         if cost is None:
             start_time = time.time()
             while time.time() - start_time < 90.0:
                 x = float(time.time() - start_time)
                 perc = 1/(1+math.exp(-0.1*(x-45)))
-                print("Ititialization time passed {:.2f}. Keep perc (folding factors): {:.4f}".format(x, perc), end="\r")
                 config, mem_bw = self.generate_random_config_layer(layer,
                     keep_percentage=perc)
-                cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+                cost, dp_info = self.get_cost_layer(config, mem_bw, layer, wr_factor=wr_factor)
 
                 if cost is not None:
                     break
@@ -1052,10 +1050,38 @@ class SimulatedAnnealing(BaseLayer):
         return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
 
     def run_optimizer_layer(self, layer):
-        config, mem_bw = self.generate_random_config_layer(layer)
-        cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+        """Run the optimizer for a single layer."""
 
-        config, cost, dp_info = self.initialize_optimizer_layer(layer)
+        hw = self.graph.nodes[layer]["hw"]
+        wr_factor = 1
+        if isinstance(hw, Convolutional3DLayer):
+            initial_filters = deepcopy(hw.filters)
+            coarsein_min = 1 / np.int32(hw.channels)
+            coarseout_min = 1 / np.int32(hw.filters)
+            fine_min = 1 / np.prod(np.array(hw.kernel_shape))
+            _, bram_util = hw.get_resource_util(f_fine = fine_min,
+                                            f_coarseIn = coarsein_min,
+                                            f_coarseOut= coarseout_min)
+            print("Initial BRAM utilization: ", bram_util)
+            if bram_util > self.max_BRAM_util:
+                _logger.warning(f"Layer's ({layer}) minimum BRAM utilization is above the device's maximum on chip memory resources.\nSplit the layer execution into multiple instances (weights reloading).")
+                for f in utils.get_factors(initial_filters)[1:]:
+                    new_out_shape = deepcopy(hw.output_shape)
+                    new_out_shape[1] = int(initial_filters/f)
+                    hw.update_shapes(hw.input_shape, new_out_shape)
+                    coarsein_min = 1 / np.int32(hw.channels)
+                    coarseout_min = 1 / np.int32(hw.filters)
+                    fine_min = 1 / np.prod(np.array(hw.kernel_shape))
+                    _, bram_util = hw.get_resource_util(f_fine = fine_min,
+                                                    f_coarseIn = coarsein_min,
+                                                    f_coarseOut= coarseout_min)
+                    if bram_util < self.max_BRAM_util:
+                        wr_factor = f
+                        break
+                if wr_factor == 1:
+                    return None
+
+        config, cost, dp_info = self.initialize_optimizer_layer(layer, wr_factor=wr_factor)
         if config == None:
             return None
 
@@ -1071,7 +1097,7 @@ class SimulatedAnnealing(BaseLayer):
             for i in range(self.iterationPerTemp):
                 new_state, new_mem_bw = self.generate_random_config_layer(layer)
                 new_cost, new_dp_info = self.get_cost_layer(
-                    new_state, new_mem_bw, layer
+                    new_state, new_mem_bw, layer, wr_factor=wr_factor
                 )
 
                 if new_cost is None:
@@ -1127,7 +1153,7 @@ class SimulatedAnnealing(BaseLayer):
         print("*" * 60)
         return solution_dp
 
-    def get_cost_layer(self, config, mem_bw, layer):
+    def get_cost_layer(self, config, mem_bw, layer, wr_factor: int=1):
         hw = self.graph.nodes[layer]["hw"]
         if isinstance(hw, GAPLayer):
             dp_info = hw.get_design_point(
@@ -1142,6 +1168,7 @@ class SimulatedAnnealing(BaseLayer):
                 config[2],
                 hw.mem_words_per_cycle * mem_bw[0][0],
                 hw.mem_words_per_cycle * mem_bw[1][0],
+                wr_factor=wr_factor
             )
         elif isinstance(hw, Pooling3DLayer):
             dp_info = hw.get_design_point(
