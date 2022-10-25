@@ -476,7 +476,8 @@ class SimulatedAnnealing(BaseLayer):
             start_time = time.time()
             while time.time() - start_time < 90.0:
                 x = float(time.time() - start_time)
-                perc = 1/(1+math.exp(-0.15*(x-45)))
+                perc = 1/(1+math.exp(-0.1*(x-45)))
+                print("Ititialization time passed {:.2f}. Keep perc (folding factors): {:.4f}".format(x, perc), end="\r")
                 config, mem_bw, _, _ = self.generate_random_config(
                     keep_percentage=perc)
                 cost, dp_info = self.get_cost(config, mem_bw)
@@ -494,6 +495,28 @@ class SimulatedAnnealing(BaseLayer):
         solution_mem = mem_bw
 
         return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
+
+    def initialize_optimizer_layer(self, layer):
+        config, mem_bw = self.generate_random_config_layer(layer)
+        cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+
+        if cost is None:
+            start_time = time.time()
+            while time.time() - start_time < 90.0:
+                x = float(time.time() - start_time)
+                perc = 1/(1+math.exp(-0.1*(x-45)))
+                print("Ititialization time passed {:.2f}. Keep perc (folding factors): {:.4f}".format(x, perc), end="\r")
+                config, mem_bw = self.generate_random_config_layer(layer,
+                    keep_percentage=perc)
+                cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+
+                if cost is not None:
+                    break
+            if cost is None:
+                print("No configuration found after 90 seconds. Aborting...")
+                return None, None, None
+
+        return config, cost, dp_info
 
     def run_optimizer(self):
         if has_gap(self.graph) and self.branch_bram_util > self.max_BRAM_util:
@@ -1032,10 +1055,9 @@ class SimulatedAnnealing(BaseLayer):
         config, mem_bw = self.generate_random_config_layer(layer)
         cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
 
-        if cost is None:
-            while cost is None:
-                config, mem_bw = self.generate_random_config_layer(layer)
-                cost, dp_info = self.get_cost_layer(config, mem_bw, layer)
+        config, cost, dp_info = self.initialize_optimizer_layer(layer)
+        if config == None:
+            return None
 
         prev_state = config
         solution_dp = dp_info
@@ -1164,21 +1186,21 @@ class SimulatedAnnealing(BaseLayer):
             # return -dp_info['GOP/s'], dp_info
         return None, None
 
-    def generate_random_config_layer(self, l):
+    def generate_random_config_layer(self, l: str, keep_percentage: float = -1):
         config = []
         hw = self.graph.nodes[l]["hw"]
         if isinstance(hw, GAPLayer):
             channels = hw.channels
             filters = hw.filters
-            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             config = [coarse_inout_factor]
         elif isinstance(hw, Convolutional3DLayer):
             channels = hw.channels
             filters = hw.filters
             kernel_size = hw.kernel_shape
-            coarse_in_feasible = utils.get_factors(channels)
-            coarse_out_feasible = utils.get_factors(filters)
+            coarse_in_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
+            coarse_out_feasible = utils.get_factors(filters, keep_percentage=keep_percentage)
             fine_feasible = utils.get_fine_feasible(kernel_size)
             coarse_in_factor = random.choice(coarse_in_feasible) / channels
             coarse_out_factor = random.choice(coarse_out_feasible) / filters
@@ -1187,24 +1209,24 @@ class SimulatedAnnealing(BaseLayer):
         elif isinstance(hw, Pooling3DLayer):
             channels = hw.channels
             kernel_size = hw.kernel_shape
-            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             fine_feasible = utils.get_fine_feasible(kernel_size)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
             config = [coarse_inout_factor, fine_factor]
         elif isinstance(hw, ActivationLayer):
             channels = hw.channels
-            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             config = [coarse_inout_factor]
         elif isinstance(hw, ElementWiseLayer):
             channels = hw.channels_1
-            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             config = [coarse_inout_factor]
         elif isinstance(hw, BatchNorm3DLayer):
             channels = hw.channels
-            coarse_inout_feasible = utils.get_factors(channels)
+            coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             config = [coarse_inout_factor]
         elif isinstance(hw, SqueezeExcitationLayer):
@@ -1212,8 +1234,8 @@ class SimulatedAnnealing(BaseLayer):
         elif isinstance(hw, FCLayer):
             dim_in = hw.dim_in
             dim_out = hw.dim_out
-            coarse_in_feasible = utils.get_factors(dim_in)
-            coarse_out_feasible = utils.get_factors(dim_out)
+            coarse_in_feasible = utils.get_factors(dim_in, keep_percentage=keep_percentage)
+            coarse_out_feasible = utils.get_factors(dim_out, keep_percentage=keep_percentage)
             coarse_in_factor = random.choice(coarse_in_feasible) / dim_in
             coarse_out_factor = random.choice(coarse_out_feasible) / dim_out
             config = [coarse_in_factor, coarse_out_factor]

@@ -258,6 +258,8 @@ def conv_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 60)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], conv)
     utils.update_report_file(model_file, report_dict)
@@ -404,6 +406,8 @@ def pooling_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 60)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], pool)
     utils.update_report_file(model_file, report_dict)
@@ -537,6 +541,8 @@ def batchnorm_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], bn)
     utils.update_report_file(model_file, report_dict)
@@ -671,6 +677,8 @@ def gap_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], gap)
     utils.update_report_file(model_file, report_dict)
@@ -805,6 +813,8 @@ def activation_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], activ)
     utils.update_report_file(model_file, report_dict)
@@ -1136,6 +1146,8 @@ def elemwise_design_points(
 
     optimizer = SimulatedAnnealing(graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], elem)
     utils.update_report_file(model_file, report_dict)
@@ -1176,6 +1188,8 @@ def fc_design_points(
     )
     optimizer = SimulatedAnnealing(graph=graph)
     res = optimizer.run_optimizer_layer(name)
+    if res == None:
+        raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
     report_dict = utils.update_report_config(report_dict, res, name, description["operation"], fc)
     utils.update_report_file(model_file, report_dict)
