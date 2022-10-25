@@ -52,7 +52,7 @@ def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
         )
         if not keep_percentage == None:
             keep_perc = 1 - keep_percentage
-            threshold = max(int(max(result) * keep_perc), min(result))
+            threshold = max(math.ceil(max(result) * keep_perc), min(result))
             return [x for x in result if x <= threshold]
         else:
             return result
@@ -350,14 +350,15 @@ def generate_description_from_type(
     return bb_descriptor
 
 
-def get_fine_feasible(kernel_size):
+def get_fine_feasible(kernel_size: list, keep_percentage: float = None):
+    fine_feasible = []
     if kernel_size[0] != kernel_size[1] and kernel_size[1] == kernel_size[2]:
         if kernel_size[0] == 1:
-            return [1, kernel_size[1], kernel_size[1] * kernel_size[2]]
+            fine_feasible = [1, kernel_size[1], kernel_size[1] * kernel_size[2]]
         elif kernel_size[1] == 1:
-            return [1, kernel_size[0]]
+            fine_feasible = [1, kernel_size[0]]
         else:
-            return [
+            fine_feasible = [
                 1,
                 kernel_size[0],
                 kernel_size[1],
@@ -367,16 +368,16 @@ def get_fine_feasible(kernel_size):
             ]
     elif kernel_size[0] == kernel_size[1] and kernel_size[1] == kernel_size[2]:
         if kernel_size[0] == 1:
-            return [1]
+            fine_feasible = [1]
         else:
-            return [
+            fine_feasible = [
                 1,
                 kernel_size[0],
                 kernel_size[0] * kernel_size[1],
                 kernel_size[0] * kernel_size[1] * kernel_size[2],
             ]
     else:
-        return [
+        fine_feasible = [
             1,
             kernel_size[0],
             kernel_size[1],
@@ -386,7 +387,11 @@ def get_fine_feasible(kernel_size):
             kernel_size[1] * kernel_size[2],
             kernel_size[0] * kernel_size[1] * kernel_size[2],
         ]
-
+    if not keep_percentage == None:
+        keep_perc = 1 - keep_percentage
+        threshold = max(math.ceil(max(fine_feasible) * keep_perc), min(fine_feasible))
+        return [x for x in fine_feasible if x <= threshold]
+    return fine_feasible
 
 def find_pareto(scores, domination_type="MaxMin"):
     # Count number of items

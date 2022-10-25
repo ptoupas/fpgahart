@@ -916,7 +916,7 @@ class SimulatedAnnealing(BaseLayer):
                 coarse_out_feasible = utils.get_factors(
                     filters, keep_percentage=keep_percentage
                 )
-                fine_feasible = utils.get_fine_feasible(kernel_size)
+                fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
                 coarse_in_factor = random.choice(coarse_in_feasible) / channels
                 coarse_out_factor = random.choice(coarse_out_feasible) / filters
                 fine_factor = random.choice(fine_feasible) / np.prod(
@@ -945,7 +945,7 @@ class SimulatedAnnealing(BaseLayer):
                 coarse_inout_feasible = utils.get_factors(
                     channels, keep_percentage=keep_percentage
                 )
-                fine_feasible = utils.get_fine_feasible(kernel_size)
+                fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
                 coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
                 fine_factor = random.choice(fine_feasible) / np.prod(
                     np.array(kernel_size)
@@ -1201,7 +1201,7 @@ class SimulatedAnnealing(BaseLayer):
             kernel_size = hw.kernel_shape
             coarse_in_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
             coarse_out_feasible = utils.get_factors(filters, keep_percentage=keep_percentage)
-            fine_feasible = utils.get_fine_feasible(kernel_size)
+            fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
             coarse_in_factor = random.choice(coarse_in_feasible) / channels
             coarse_out_factor = random.choice(coarse_out_feasible) / filters
             fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
@@ -1210,7 +1210,7 @@ class SimulatedAnnealing(BaseLayer):
             channels = hw.channels
             kernel_size = hw.kernel_shape
             coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
-            fine_feasible = utils.get_fine_feasible(kernel_size)
+            fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
             coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
             fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
             config = [coarse_inout_factor, fine_factor]
