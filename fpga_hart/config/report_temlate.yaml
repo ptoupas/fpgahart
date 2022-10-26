@@ -23,13 +23,29 @@ DataSizeOut(MB): -1.0
 MemBoundIn: False
 MemBoundOut: False
 config:
-  shape_in: []
-  shape_out: []
-  shape_kernel: []
-  shape_weights: []
+  batch_size: -1
+  channels_in: -1
+  depth_in: -1
+  height_in: -1
+  width_in: -1
+  channels_out: -1
+  depth_out: -1
+  height_out: -1
+  width_out: -1
+  features_in: -1
+  features_out: -1
+  kernel_depth: -1
+  kernel_height: -1
+  kernel_width: -1
+  weights_rows: -1
+  weights_cols: -1
   shape_bias: -1
-  padding: []
-  stride: []
+  pad_depth: -1
+  pad_height: -1
+  pad_width: -1
+  stride_depth: -1
+  stride_height: -1
+  stride_width: -1
   groups: -1
   depthwise: -1
   pointwise: -1
