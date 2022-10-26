@@ -974,6 +974,48 @@ def generate_onnx(model, input_data, file_name):
 
     # torch.onnx.export(onnx_model, input_data, file_name, verbose=True)
 
+def pool_3d(input_shape,
+            kernel_shape,
+            padding,
+            stride,
+            coarse_in,
+            pool_op_type,
+            file_format,
+            prefix="generated_data"):
+    if not os.path.exists(prefix + "/pool_3d"):
+        os.makedirs(prefix + "/pool_3d")
+
+    x = torch.randn(input_shape)
+    print(x.numpy().shape)
+    write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
+    if file_format == "bin":
+        write_input_binary.tofile(prefix + "/pool_3d/input.dat")
+    elif file_format == "txt":
+        np.savetxt(
+            prefix + "/pool_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+        )
+    else:
+        raise Exception("Format not supported")
+
+    if pool_op_type == "max":
+        pool = nn.MaxPool3d(kernel_shape, stride=stride, padding=padding)
+    elif pool_op_type == "avg":
+        pool = nn.AvgPool3d(kernel_shape, stride=stride, padding=padding)
+    else:
+        raise Exception("Pool op type not supported")
+    out = pool(x)
+
+    print(out.detach().numpy().shape)
+
+    write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
+    if file_format == "bin":
+        write_out_binary.tofile(prefix + "/pool_3d/output.dat")
+    elif file_format == "txt":
+        np.savetxt(
+            prefix + "/pool_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+        )
+    else:
+        raise Exception("Format not supported")
 
 def conv_3d(
     input_shape,
@@ -1388,12 +1430,13 @@ def conv_3d(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="3D sliding window prototying script")
+    parser = argparse.ArgumentParser(description="Data generator for 3D operations")
     parser.add_argument(
         "op_type",
         type=str,
         choices=[
             "3d_conv",
+            "3d_pool",
             "3d_relu",
             "3d_swish",
             "3d_sigmoid",
@@ -1424,6 +1467,9 @@ def parse_args():
     parser.add_argument(
         "--elemwise_op_type", choices=["add", "mul"], default="add", type=str
     )
+    parser.add_argument(
+        "--pool_op_type", choices=["max", "avg"], default="max", type=str
+    )
     parser.add_argument("--format", choices=["txt", "bin"], default="bin", type=str)
     parser.add_argument("--config_file", default="", type=str)
 
@@ -1450,6 +1496,14 @@ if __name__ == "__main__":
             args.coarse_out,
             args.format,
         )
+    elif op_type == "3d_pool":
+        pool_3d(args.input_shape,
+                args.kernel_shape,
+                args.padding,
+                args.stride,
+                args.coarse_in,
+                args.pool_op_type,
+                args.format)
     elif op_type == "3d_relu":
         relu_3d(args.input_shape, args.coarse_in, args.format)
     elif op_type == "3d_swish":
