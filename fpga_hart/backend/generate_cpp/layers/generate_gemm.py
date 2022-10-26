@@ -4,10 +4,9 @@ from .codegen import *
 
 
 def generate_gemm_cpp(name, config, partition_name):
-    batch_size = 1
-    in_features = config["shape_in"]
-    out_features = config["shape_out"]
-    weights = config["weights"]
+    batch_size = config["batch_size"]
+    in_features = config["features_in"]
+    out_features = config["features_out"]
     coarse_in_factor = config["coarse_in_factor"]
     coarse_out_factor = config["coarse_out_factor"]
 
@@ -93,10 +92,9 @@ def generate_gemm_cpp(name, config, partition_name):
 
 
 def generate_gemm_hpp(name, config, partition_name):
-    batch_size = 1
-    in_features = config["shape_in"]
-    out_features = config["shape_out"]
-    weights = config["weights"]
+    batch_size = config["batch_size"]
+    in_features = config["features_in"]
+    out_features = config["features_out"]
     coarse_in_factor = config["coarse_in_factor"]
     coarse_out_factor = config["coarse_out_factor"]
 

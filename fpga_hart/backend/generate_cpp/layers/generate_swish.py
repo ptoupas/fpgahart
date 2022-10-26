@@ -4,11 +4,11 @@ from .codegen import *
 
 
 def generate_swish_cpp(name, config, partition_name):
-    batch_size = config["shape_in"][0]
-    channels = config["shape_in"][1]
-    depth = config["shape_in"][2]
-    height = config["shape_in"][3]
-    width = config["shape_in"][4]
+    batch_size = config["batch_size"]
+    channels = config["channels_in"]
+    depth = config["depth_in"]
+    height = config["height_in"]
+    width = config["width_in"]
     coarse_factor = config["coarse_factor"]
 
     layer_name_lower = name.lower()
@@ -55,11 +55,11 @@ def generate_swish_cpp(name, config, partition_name):
 
 
 def generate_swish_hpp(name, config, partition_name):
-    batch_size = config["shape_in"][0]
-    channels = config["shape_in"][1]
-    depth = config["shape_in"][2]
-    height = config["shape_in"][3]
-    width = config["shape_in"][4]
+    batch_size = config["batch_size"]
+    channels = config["channels_in"]
+    depth = config["depth_in"]
+    height = config["height_in"]
+    width = config["width_in"]
     coarse_factor = config["coarse_factor"]
 
     layer_name_lower = name.lower()

@@ -4,11 +4,11 @@ from .codegen import *
 
 
 def generate_sigmoid_cpp(name, config, partition_name):
-    batch_size = config['shape_in'][0]
-    channels = config['shape_in'][1]
-    depth = config['shape_in'][2]
-    height = config['shape_in'][3]
-    width = config['shape_in'][4]
+    batch_size = config["batch_size"]
+    channels = config["channels_in"]
+    depth = config["depth_in"]
+    height = config["height_in"]
+    width = config["width_in"]
     coarse_factor = config['coarse_factor']
 
     layer_name_lower = name.lower()
@@ -39,22 +39,22 @@ def generate_sigmoid_cpp(name, config, partition_name):
                 {layer_name_upper}_SIGMOID_DEPTH,\n\
                 {layer_name_lower}_data_t\n\
             >(in[coarseIndex],out[coarseIndex]);", newlines=2)
-    
+
     cpp.close()
 
 def generate_sigmoid_hpp(name, config, partition_name):
-    batch_size = config['shape_in'][0]
-    channels = config['shape_in'][1]
-    depth = config['shape_in'][2]
-    height = config['shape_in'][3]
-    width = config['shape_in'][4]
+    batch_size = config["batch_size"]
+    channels = config["channels_in"]
+    depth = config["depth_in"]
+    height = config["height_in"]
+    width = config["width_in"]
     coarse_factor = config['coarse_factor']
 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
     hpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.hpp"))
-    
+
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
     hpp("#include \"sigmoid_3d_.hpp\"", newlines=2)
@@ -66,7 +66,7 @@ def generate_sigmoid_hpp(name, config, partition_name):
     hpp(f"#define {layer_name_upper}_WIDTH {width}", newlines=2)
 
     hpp(f"#define {layer_name_upper}_COARSE {coarse_factor}", newlines=2)
-    
+
     hpp(f"#define {layer_name_upper}_SIGMOID_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(f"#define {layer_name_upper}_SIGMOID_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE)")
     hpp(f"#define {layer_name_upper}_SIGMOID_DEPTH \t{layer_name_upper}_DEPTH")
@@ -78,7 +78,7 @@ def generate_sigmoid_hpp(name, config, partition_name):
     hpp(f"void {layer_name_lower}_layer(\n\
         stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE],\n\
         stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE]);")
-    
+
     hpp.close()
 
 def generate_sigmoid_files(name, config, partition_name):
