@@ -557,9 +557,17 @@ def generate_layer_config(layer, config):
     if isinstance(layer, GAPLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
-        coarse_factor = int(config[0] * layer.channels)
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
+        coarse_factor = math.ceil(config[0] * layer.channels)
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, Convolutional3DLayer):
         input_shape = layer.input_shape
@@ -571,16 +579,30 @@ def generate_layer_config(layer, config):
         groups = layer.groups
         depthwise = 1 if layer.depthwise else 0
         pointwise = 1 if layer.pointwise else 0
-        fine_factor = int(config[0] * layer.kd * layer.kh * layer.kw)
-        coarse_in_factor = int(config[1] * layer.channels)
-        coarse_out_factor = int(config[2] * layer.filters)
+        fine_factor = math.ceil(config[0] * layer.kd * layer.kh * layer.kw)
+        coarse_in_factor = math.ceil(config[1] * layer.channels)
+        coarse_out_factor = math.ceil(config[2] * layer.filters)
         wr_factor = config[8]
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
-        layer_config["shape_kernel"] = kerner_shape
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
+        layer_config["kernel_depth"] = kerner_shape[0]
+        layer_config["kernel_height"] = kerner_shape[1]
+        layer_config["kernel_width"] = kerner_shape[2]
         layer_config["shape_bias"] = bias_shape
-        layer_config["padding"] = padding
-        layer_config["stride"] = stride
+        layer_config["pad_depth"] = padding[0]
+        layer_config["pad_height"] = padding[1]
+        layer_config["pad_width"] = padding[2]
+        layer_config["stride_depth"] = stride[0]
+        layer_config["stride_height"] = stride[1]
+        layer_config["stride_width"] = stride[2]
         layer_config["groups"] = groups
         layer_config["depthwise"] = depthwise
         layer_config["pointwise"] = pointwise
@@ -596,21 +618,43 @@ def generate_layer_config(layer, config):
         kerner_shape = layer.kernel_shape
         padding = layer.padding
         stride = layer.stride
-        fine_factor = int(config[0] * layer.kd * layer.kh * layer.kw)
-        coarse_factor = int(config[1] * layer.channels)
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
-        layer_config["shape_kernel"] = kerner_shape
-        layer_config["padding"] = padding
-        layer_config["stride"] = stride
+        fine_factor = math.ceil(config[0] * layer.kd * layer.kh * layer.kw)
+        coarse_factor = math.ceil(config[1] * layer.channels)
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
+        layer_config["kernel_depth"] = kerner_shape[0]
+        layer_config["kernel_height"] = kerner_shape[1]
+        layer_config["kernel_width"] = kerner_shape[2]
+        layer_config["pad_depth"] = padding[0]
+        layer_config["pad_height"] = padding[1]
+        layer_config["pad_width"] = padding[2]
+        layer_config["stride_depth"] = stride[0]
+        layer_config["stride_height"] = stride[1]
+        layer_config["stride_width"] = stride[2]
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, ActivationLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
-        coarse_factor = int(config[0] * layer.channels)
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
+        coarse_factor = math.ceil(config[0] * layer.channels)
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
         layer_config["op_type"] = layer.op_type
     elif isinstance(layer, ElementWiseLayer):
@@ -618,18 +662,34 @@ def generate_layer_config(layer, config):
         output_shape = layer.input_shape
         broadcasting = 1 if layer.broadcasting else 0
         op_type = layer.op_type
-        coarse_factor = int(config[0] * layer.input_shape[1])
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
+        coarse_factor = math.ceil(config[0] * layer.input_shape[1])
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
         layer_config["broadcasting"] = broadcasting
         layer_config["op_type"] = op_type
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, BatchNorm3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
-        coarse_factor = int(config[0] * layer.channels)
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
+        coarse_factor = math.ceil(config[0] * layer.channels)
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["channels_in"] = input_shape[1]
+        layer_config["depth_in"] = input_shape[2]
+        layer_config["height_in"] = input_shape[3]
+        layer_config["width_in"] = input_shape[4]
+        layer_config["channels_out"] = output_shape[1]
+        layer_config["depth_out"] = output_shape[2]
+        layer_config["height_out"] = output_shape[3]
+        layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, SqueezeExcitationLayer):
         pass
@@ -638,11 +698,14 @@ def generate_layer_config(layer, config):
         output_shape = layer.output_shape
         weights_shape = layer.weights_shape
         bias_shape = layer.bias_shape
-        coarse_in_factor = int(config[0] * layer.dim_in)
-        coarse_out_factor = int(config[1] * layer.dim_out)
-        layer_config["shape_in"] = input_shape
-        layer_config["shape_out"] = output_shape
-        layer_config["shape_weights"] = weights_shape
+        coarse_in_factor = math.ceil(config[0] * layer.dim_in)
+        coarse_out_factor = math.ceil(config[1] * layer.dim_out)
+        assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
+        layer_config["batch_size"] = input_shape[0]
+        layer_config["features_in"] = input_shape[1]
+        layer_config["features_out"] = output_shape[1]
+        layer_config["weights_rows"] = weights_shape[0]
+        layer_config["weights_cols"] = weights_shape[1]
         layer_config["shape_bias"] = bias_shape
         layer_config["coarse_in_factor"] = coarse_in_factor
         layer_config["coarse_out_factor"] = coarse_out_factor
