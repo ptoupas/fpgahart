@@ -47,13 +47,36 @@ def get_layers_configurations(config_file):
     result = {}
 
     configuration = pd.read_json(config_file)
-    layers = configuration["Layer"].to_list()
+    layers = configuration.columns.to_list()
     for l in layers:
-        layers_config = configuration[configuration["Layer"] == l]["config"].to_dict()
-        layers_config = layers_config[[*layers_config][0]]
+        layers_config = configuration[l]["config"]
+        if "Swish" in l:
+            layers_type = "Swish"
+        elif "Relu" in l:
+            layers_type = "Relu"
+        elif "Sigmoid" in l:
+            layers_type = "Sigmoid"
+        elif "Add" in l:
+            layers_type = "Add"
+        elif "Mul" in l:
+            layers_type = "Mul"
+        elif "Conv" in l:
+            layers_type = "Conv"
+        elif "Pooling" in l:
+            layers_type = "Pooling"
+        elif "GlobalAveragePool" in l:
+            layers_type = "GlobalAveragePool"
+        elif "Gemm" in l:
+            layers_type = "Gemm"
+        elif "Activation" in l:
+            layers_type = "Activation"
+        elif "ElementWise" in l:
+            layers_type = "ElementWise"
+        else:
+            raise Exception(f"Layer {l} not supported")
         result[l] = {
             "config": layers_config,
-            "type": configuration[configuration["Layer"] == l]["Type"].values[0],
+            "type": layers_type,
         }
 
     return result
@@ -75,10 +98,19 @@ def generate_layer_code(
         generate_conv_files(
             layer_name, layers_config, model_name, hls_project_path
         )
+    elif "Pooling" in layers_type:
+        # TODO: Implement pooling
+        pass
     elif "GlobalAveragePool" in layers_type:
         generate_gap_files(layer_name, layers_config, model_name)
     elif "Gemm" in layers_type:
         generate_gemm_files(layer_name, layers_config, model_name)
+    elif "Activation" in layers_type:
+        # TODO: Implement DYNAMIC reconfigurable activation
+        pass
+    elif "ElementWise" in layers_type:
+        # TODO: Implement DYNAMIC reconfigurable elementWise
+        pass
     else:
         raise Exception(f"Layer {layers_type} not supported")
 
@@ -233,6 +265,12 @@ def generate_layer_code(
             store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
             layer_name = layer_name.lower(),
         )
+    elif "Activation" in layers_type:
+        # TODO: Implement DYNAMIC reconfigurable activation
+        pass
+    elif "ElementWise" in layers_type:
+        # TODO: Implement DYNAMIC reconfigurable elementWise
+        pass
     else:
         raise Exception(f"Layer {layers_type} not supported")
 
@@ -253,6 +291,7 @@ if __name__ == "__main__":
         layer_configuration = get_layers_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_layers.json"))
 
     for k, v in layer_configuration.items():
+        print(f"Generating data for layer {k} of type {v['type']}")
         if args.config_file:
             generate_layer_code(
                 v["config"], v["type"], k, "custom_layers", args.hls_project_path

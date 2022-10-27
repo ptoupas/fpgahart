@@ -35,7 +35,7 @@ class LayerParser(ModelLayerDescriptor):
             os.getcwd(), "fpga_modeling_reports", self.model_name, f"{self.model_name}_layers.json"
         )
 
-        with open("fpga_hart/config/report_temlate.yaml", "r") as yaml_file:
+        with open("fpga_hart/config/report_template.yaml", "r") as yaml_file:
             self.report_dict = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
         self.pareto_results = False

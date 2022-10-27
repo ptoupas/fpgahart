@@ -773,7 +773,7 @@ def get_paretto_csv(
                     csv_writer_par.writerow(curr_df.iloc[p].to_list()[1:])
 
 def update_report_config(template_dict: dict, result_dict: dict, name: str, layer_type: str, layer_hw) -> dict:
-    template_dict["Layer"] = name
+    template_dict.pop("Layer", None)
     template_dict["Type"] = layer_type
     template_dict["Latency(C)-No-Depth"] = result_dict["latency(C)"] - result_dict["depth"],
     template_dict["Latency(C)"] = result_dict["latency(C)"],
@@ -819,7 +819,7 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
         if isinstance(template_dict[key], tuple):
             template_dict[key] = template_dict[key][0]
 
-    return template_dict
+    return {name :template_dict}
 
 def update_report_file(filename: str, final_dict: dict) -> None:
     if os.path.isfile(filename) is False:
@@ -827,15 +827,15 @@ def update_report_file(filename: str, final_dict: dict) -> None:
         open(filename, 'a').close()
 
     if os.path.getsize(filename) == 0:
-        listObj = []
+        dictObj = {}
     else:
         with open(filename, 'r') as fp:
-            listObj = json.load(fp)
+            dictObj = json.load(fp)
 
-    listObj.append(final_dict)
+    dictObj |= final_dict
 
     with open(filename, 'w') as json_file:
-        json.dump(listObj, json_file,
+        json.dump(dictObj, json_file,
                             indent=2)
 
 def check_configuration_validation(config, layers):
