@@ -4,7 +4,7 @@ EXECUTION_TYPE="layer"
 TARGET="throughput"
 MODEL_NAME="x3d_m"
 LAYER_NAME="custom_conv"
-CONFIG_FILE="fpga_modeling_reports/x3d_m_layers.csv"
+CONFIG_FILE=""
 HLS_PARENT_DIR="/home/ptoupas/Development/hls_single_layers"
 
 python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET

@@ -3,7 +3,7 @@ import os
 from .codegen import *
 
 
-def generate_elemwise_cpp(name, config, partition_name):
+def generate_elemwise_cpp(name: str, config: dict, model_name: str, partition_name: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -18,7 +18,7 @@ def generate_elemwise_cpp(name, config, partition_name):
 
     cpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.cpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.cpp"
         )
     )
 
@@ -101,7 +101,7 @@ def generate_elemwise_cpp(name, config, partition_name):
     cpp.close()
 
 
-def generate_elemwise_hpp(name, config, partition_name):
+def generate_elemwise_hpp(name: str, config: dict, model_name: str, partition_name: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -116,7 +116,7 @@ def generate_elemwise_hpp(name, config, partition_name):
 
     hpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.hpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.hpp"
         )
     )
 
@@ -160,9 +160,9 @@ def generate_elemwise_hpp(name, config, partition_name):
     hpp.close()
 
 
-def generate_elemwise_files(name, config, partition_name):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
+def generate_elemwise_files(name: str, config: dict, model_name: str, partition_name: str = ''):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
 
-    generate_elemwise_hpp(name, config, partition_name)
-    generate_elemwise_cpp(name, config, partition_name)
+    generate_elemwise_hpp(name, config, model_name, partition_name)
+    generate_elemwise_cpp(name, config, model_name, partition_name)

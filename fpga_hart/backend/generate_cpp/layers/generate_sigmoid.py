@@ -3,7 +3,7 @@ import os
 from .codegen import *
 
 
-def generate_sigmoid_cpp(name, config, partition_name):
+def generate_sigmoid_cpp(name: str, config: dict, model_name: str, partition_name: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -14,7 +14,7 @@ def generate_sigmoid_cpp(name, config, partition_name):
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.cpp"))
+    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.cpp"))
 
     cpp(f"#include \"{layer_name_lower}.hpp\"", newlines=2)
 
@@ -42,7 +42,7 @@ def generate_sigmoid_cpp(name, config, partition_name):
 
     cpp.close()
 
-def generate_sigmoid_hpp(name, config, partition_name):
+def generate_sigmoid_hpp(name: str, config: dict, model_name: str, partition_name: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -53,7 +53,7 @@ def generate_sigmoid_hpp(name, config, partition_name):
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.hpp"))
+    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.hpp"))
 
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
@@ -81,9 +81,9 @@ def generate_sigmoid_hpp(name, config, partition_name):
 
     hpp.close()
 
-def generate_sigmoid_files(name, config, partition_name):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
+def generate_sigmoid_files(name: str, config: dict, model_name: str, partition_name: str = ''):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
 
-    generate_sigmoid_hpp(name, config, partition_name)
-    generate_sigmoid_cpp(name, config, partition_name)
+    generate_sigmoid_hpp(name, config, model_name, partition_name)
+    generate_sigmoid_cpp(name, config, model_name, partition_name)

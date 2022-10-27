@@ -386,18 +386,18 @@ def transform_weights_fc(
     # return transformed weights
     return weights
 
-def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_data"):
-    if not os.path.exists(prefix + "/gap_3d"):
-        os.makedirs(prefix + "/gap_3d")
+def gap_3d(input_shape, coarse_in, file_format, store_path="generated_data/gap_3d"):
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/gap_3d/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/gap_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -409,60 +409,67 @@ def gap_3d(input_shape, coarse_in, coarse_out, file_format, prefix="generated_da
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/gap_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/gap_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
 
 
 def gemm(
-    in_features: int,
-    out_features: int,
+    input_shape: int,
+    output_shape: int,
     coarse_in: int,
     coarse_out: int,
     bias: bool = False,
-    prefix: str = "generated_data",
     file_format: str = "bin",
+    store_path: str = "generated_data/gemm",
+    layer_name: str = "gemm",
 ) -> None:
-    if not os.path.exists(prefix + "/gemm"):
-        os.makedirs(prefix + "/gemm")
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
-    x = torch.randn([1, in_features])
+    x = torch.randn(input_shape)
     write_input_binary = x.numpy()
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/gemm/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
-        np.savetxt(prefix + "/gemm/input.dat", write_input_binary.flatten(), fmt="%.8f")
+        np.savetxt(store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f")
     else:
         raise Exception("Format not supported")
 
-    gemm = torch.nn.Linear(in_features, out_features, bias=bias)
+    gemm = torch.nn.Linear(input_shape[1], output_shape[1], bias=bias)
     weights = gemm.weight.detach().numpy()
     print(
         f"weights shape: {weights.shape}. Size in KB: {(weights.size * 2) / 1024:.4f}"
     )
     weights = transform_weights_fc(weights, coarse_in, coarse_out)
 
-    if file_format == "bin":
-        weights.tofile(prefix + "/gemm/weights.dat")
-    elif file_format == "txt":
-        np.savetxt(
-            prefix + "/gemm/weights.dat", weights.flatten(), fmt="%.8f"
-        )
-    else:
-        raise Exception("Format not supported")
+    # if file_format == "bin":
+    #     weights.tofile(store_path + "/weights.dat")
+    # elif file_format == "txt":
+    #     np.savetxt(
+    #         store_path + "/weights.dat", weights.flatten(), fmt="%.8f"
+    #     )
+    # else:
+    #     raise Exception("Format not supported")
+    with open(
+        f"{store_path}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
+        "w",
+    ) as f:
+        f.write(array_init(weights[0]))
+
     if bias:
         bias = gemm.bias.detach().numpy()
     out = gemm(x)
 
     write_out_binary = out.detach().numpy()
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/gemm/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
-        np.savetxt(prefix + "/gemm/output.dat", write_out_binary.flatten(), fmt="%.8f")
+        np.savetxt(store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f")
     else:
         raise Exception("Format not supported")
 
@@ -473,10 +480,10 @@ def elemwise_3d(
     coarse_in,
     elemwise_op_type,
     file_format,
-    prefix="generated_data",
+    store_path="generated_data/elemwise_3d",
 ):
-    if not os.path.exists(prefix + "/elemwise_3d"):
-        os.makedirs(prefix + "/elemwise_3d")
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
     # print(x.numpy())
@@ -488,16 +495,16 @@ def elemwise_3d(
     write_input_binary_1 = x.numpy().transpose(0, 3, 4, 2, 1)
     write_input_binary_2 = y.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary_1.tofile(prefix + "/elemwise_3d/input_1.dat")
-        write_input_binary_2.tofile(prefix + "/elemwise_3d/input_2.dat")
+        write_input_binary_1.tofile(store_path + "/input_1.dat")
+        write_input_binary_2.tofile(store_path + "/input_2.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/elemwise_3d/input_1.dat",
+            store_path + "/input_1.dat",
             write_input_binary_1.flatten(),
             fmt="%.8f",
         )
         np.savetxt(
-            prefix + "/elemwise_3d/input_2.dat",
+            store_path + "/input_2.dat",
             write_input_binary_2.flatten(),
             fmt="%.8f",
         )
@@ -513,28 +520,28 @@ def elemwise_3d(
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/elemwise_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/elemwise_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
 
 
-def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
-    if not os.path.exists(prefix + "/shish_3d"):
-        os.makedirs(prefix + "/shish_3d")
+def shish_3d(input_shape, coarse_in, file_format, store_path="generated_data/shish_3d"):
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
-    print(x.numpy())
+    # print(x.numpy())
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/shish_3d/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/shish_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -543,33 +550,33 @@ def shish_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
     out = sigmoid(x)
     out = out * x
 
-    print(out.detach().numpy())
+    # print(out.detach().numpy())
     print(out.detach().numpy().shape)
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/shish_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/shish_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
 
 
-def sigmoid_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
-    if not os.path.exists(prefix + "/sigmoid_3d"):
-        os.makedirs(prefix + "/sigmoid_3d")
+def sigmoid_3d(input_shape, coarse_in, file_format, store_path="generated_data/sigmoid_3d"):
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
-    print(x.numpy())
+    # print(x.numpy())
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/sigmoid_3d/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/sigmoid_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -577,33 +584,33 @@ def sigmoid_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
     sigmoid = torch.nn.Sigmoid()
     out = sigmoid(torch.permute(x, (0, 3, 4, 2, 1)))
 
-    print(out.detach().numpy())
+    # print(out.detach().numpy())
     print(out.detach().numpy().shape)
 
     write_out_binary = out.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/sigmoid_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/sigmoid_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
 
 
-def relu_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
-    if not os.path.exists(prefix + "/relu_3d"):
-        os.makedirs(prefix + "/relu_3d")
+def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu_3d"):
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
-    print(x.numpy())
+    # print(x.numpy())
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/relu_3d/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/relu_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -611,15 +618,15 @@ def relu_3d(input_shape, coarse_in, file_format, prefix="generated_data"):
     relu = torch.nn.ReLU()
     out = relu(torch.permute(x, (0, 3, 4, 2, 1)))
 
-    print(out.detach().numpy())
+    # print(out.detach().numpy())
     print(out.detach().numpy().shape)
 
     write_out_binary = out.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/relu_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/relu_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -981,18 +988,18 @@ def pool_3d(input_shape,
             coarse_in,
             pool_op_type,
             file_format,
-            prefix="generated_data"):
-    if not os.path.exists(prefix + "/pool_3d"):
-        os.makedirs(prefix + "/pool_3d")
+            store_path="generated_data/pool_3d"):
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/pool_3d/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/pool_3d/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -1009,10 +1016,10 @@ def pool_3d(input_shape,
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/pool_3d/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/pool_3d/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -1029,7 +1036,7 @@ def conv_3d(
     coarse_in,
     coarse_out,
     file_format,
-    prefix="generated_data",
+    store_path="generated_data/conv_3d",
     layer_name="conv_3d",
 ):
     def get_sliding_window_output(data, kernel, padding, stride):
@@ -1105,8 +1112,8 @@ def conv_3d(
 
         return out
 
-    if not os.path.exists(prefix + "/" + layer_name):
-        os.makedirs(prefix + "/" + layer_name)
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
 
     x = torch.randn(input_shape)
     print(f"input shape: {x.numpy().shape}")
@@ -1116,10 +1123,10 @@ def conv_3d(
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(prefix + "/" + layer_name + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/" + layer_name + "/input.dat",
+            store_path + "/input.dat",
             write_input_binary.flatten(),
             fmt="%.8f",
         )
@@ -1142,9 +1149,9 @@ def conv_3d(
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     # if file_format == "bin":
-    # 	write_weights_binary.tofile(prefix + "/" + layer_name + "/weights.dat")
+    # 	write_weights_binary.tofile(store_path + "/weights.dat")
     # elif file_format == "txt":
-    # 	np.savetxt(prefix + "/" + layer_name + "/weights.dat", write_weights_binary.flatten(), fmt='%.8f')
+    # 	np.savetxt(store_path + "/weights.dat", write_weights_binary.flatten(), fmt='%.8f')
     # else:
     # 	raise Exception("Format not supported")
 
@@ -1167,7 +1174,7 @@ def conv_3d(
             groups=groups,
         )
     with open(
-        f"{prefix}/{layer_name}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
+        f"{store_path}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
         "w",
     ) as f:
         f.write(array_init(weights_transformed[0]))
@@ -1179,17 +1186,17 @@ def conv_3d(
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(prefix + "/" + layer_name + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.dat")
     elif file_format == "txt":
         np.savetxt(
-            prefix + "/" + layer_name + "/output.dat",
+            store_path + "/output.dat",
             write_out_binary.flatten(),
             fmt="%.8f",
         )
     else:
         raise Exception("Format not supported")
 
-    exit()
+    return
     stream = create_queue(x.numpy().transpose(0, 3, 4, 2, 1))
 
     batch = x.shape[0]
@@ -1376,7 +1383,7 @@ def conv_3d(
                                         curr = frame_cache[i][j][k]
                                         out_buffer[i][j][k].appendleft(curr)
                             print(count)
-                            exit()
+                            return
                             # print(frame_cache.transpose((2, 0, 1)))
 
                         print(
@@ -1446,7 +1453,7 @@ def parse_args():
             "gemm",
         ],
     )
-    parser.add_argument("--prefix", default="", type=str)
+    parser.add_argument("--store_path", default="", type=str)
     parser.add_argument(
         "--input_shape", nargs="+", default=[1, 24, 16, 32, 32], type=int
     )
@@ -1460,8 +1467,8 @@ def parse_args():
     parser.add_argument("--stride", nargs="+", default=[1, 1, 1], type=int)
     parser.add_argument("--depthwise", default=False, action="store_true")
     parser.add_argument("--bias", default=False, action="store_true")
-    parser.add_argument("--in_features", default=200, type=int)
-    parser.add_argument("--out_features", default=400, type=int)
+    parser.add_argument("--in_features", nargs="+", default=[1, 200], type=int)
+    parser.add_argument("--out_features", nargs="+", default=[1, 400], type=int)
     parser.add_argument("--coarse_in", default=1, type=int)
     parser.add_argument("--coarse_out", default=1, type=int)
     parser.add_argument(
@@ -1521,7 +1528,9 @@ if __name__ == "__main__":
     elif op_type == "3d_gap":
         gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
     elif op_type == "3d_part":
-        part_3d(args.format, args.config_file, "generated_data/" + args.prefix)
+        # TODO: prefix has been removed fix the part_3d input
+        prefix = 'FIXME_custom_partitions'
+        part_3d(args.format, args.config_file, "generated_data/" + prefix)
     elif op_type == "gemm":
         gemm(args.in_features, args.out_features, args.coarse_in, args.coarse_out, bias=args.bias, file_format=args.format)
     else:

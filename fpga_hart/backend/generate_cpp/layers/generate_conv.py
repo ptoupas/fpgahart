@@ -3,7 +3,7 @@ import os
 from .codegen import *
 
 
-def generate_conv_cpp(name, config, partition_name):
+def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -41,7 +41,7 @@ def generate_conv_cpp(name, config, partition_name):
 
     cpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.cpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.cpp"
         )
     )
 
@@ -316,7 +316,7 @@ def generate_conv_cpp(name, config, partition_name):
     cpp.close()
 
 
-def generate_conv_hpp(name, config, partition_name, hls_project_path):
+def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: str, hls_project_path: str):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -346,11 +346,11 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    weights_file_path = f"{hls_project_path}/{partition_name}/data/weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv"
+    weights_file_path = os.path.join(hls_project_path, model_name, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
 
     hpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", partition_name, f"{layer_name_lower}.hpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.hpp"
         )
     )
 
@@ -571,9 +571,10 @@ def generate_conv_hpp(name, config, partition_name, hls_project_path):
     hpp.close()
 
 
-def generate_conv_files(name, config, partition_name, hls_project_path):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
+def generate_conv_files(name: str, config: dict, model_name: str, hls_project_path: str, partition_name: str = ''):
 
-    generate_conv_hpp(name, config, partition_name, hls_project_path)
-    generate_conv_cpp(name, config, partition_name)
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
+
+    generate_conv_hpp(name, config, model_name, partition_name, hls_project_path)
+    generate_conv_cpp(name, config, model_name, partition_name)

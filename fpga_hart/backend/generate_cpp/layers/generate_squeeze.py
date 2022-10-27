@@ -5,7 +5,7 @@ import numpy as np
 from .codegen import *
 
 
-def get_node_coarse_factor(config, mode="in"):
+def get_node_coarse_factor(config: dict, mode: str="in"):
     if "coarse_factor" in config.keys():
         return config["coarse_factor"]
     if mode == "in":
@@ -15,7 +15,7 @@ def get_node_coarse_factor(config, mode="in"):
         return config["coarse_out_factor"]
 
 
-def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_name):
+def generate_squeeze_cpp(in_name: str, in_config: dict, out_name: srt, out_config: dict, model_name: str, partition_name: str):
     if "broadcasting" in in_config.keys() or "broadcasting" in out_config.keys():
         assert (
             in_config["channels_out"] == out_config["channels_in"]
@@ -42,7 +42,7 @@ def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_nam
         os.path.join(
             os.getcwd(),
             "generated_files",
-            partition_name,
+            model_name, partition_name, name,
             f"squeeze_{layer_in_name_lower}_{layer_out_name_lower}.cpp",
         )
     )
@@ -82,7 +82,7 @@ def generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_nam
     cpp.close()
 
 
-def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_name):
+def generate_squeeze_hpp(in_name: str, in_config: dict, out_name: srt, out_config: dict, model_name: str, partition_name: str):
     if "broadcasting" in in_config.keys() or "broadcasting" in out_config.keys():
         assert (
             in_config["channels_out"] == out_config["channels_in"]
@@ -111,7 +111,7 @@ def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_nam
         os.path.join(
             os.getcwd(),
             "generated_files",
-            partition_name,
+            model_name, partition_name, name,
             f"squeeze_{layer_in_name_lower}_{layer_out_name_lower}.hpp",
         )
     )
@@ -181,9 +181,9 @@ def generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_nam
     hpp.close()
 
 
-def generate_squeeze_files(in_name, in_config, out_name, out_config, partition_name):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", partition_name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", partition_name))
+def generate_squeeze_files(in_name: str, in_config: dict, out_name: str, out_config: dict, model_name: str, partition_name: str = ''):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
 
-    generate_squeeze_hpp(in_name, in_config, out_name, out_config, partition_name)
-    generate_squeeze_cpp(in_name, in_config, out_name, out_config, partition_name)
+    generate_squeeze_hpp(in_name, in_config, out_name, out_config, model_name, partition_name)
+    generate_squeeze_cpp(in_name, in_config, out_name, out_config, model_name, partition_name)

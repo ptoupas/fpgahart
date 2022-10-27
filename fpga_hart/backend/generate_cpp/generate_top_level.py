@@ -2,12 +2,9 @@ import os
 import re
 
 import numpy as np
-from fpga_hart.utils.utils import (
-    add_supportive_nodes_config,
-    get_branch_edges,
-    get_input_node,
-    get_output_node,
-)
+from fpga_hart.utils.utils import (add_supportive_nodes_config,
+                                   get_branch_edges, get_input_node,
+                                   get_output_node)
 
 from layers.codegen import *
 
@@ -100,8 +97,7 @@ def get_nodes_and_fifos(graph, config):
     return nodes_with_fifos, nodes_in_order, unique_fifos
 
 
-def generate_top_level_cpp(graph, layers_config, branch_depth, partition_name,
-                           prefix):
+def generate_top_level_cpp(graph, layers_config, branch_depth, partition_name, prefix):
     nodes_with_fifos, nodes_in_order, unique_fifos = get_nodes_and_fifos(
         graph, layers_config)
     branch_edges = get_branch_edges(graph)
@@ -167,19 +163,19 @@ def generate_top_level_cpp(graph, layers_config, branch_depth, partition_name,
 
 def generate_top_level_hpp(include_files, in_name, in_config, out_name,
                            out_config, partition_name, prefix):
-    batch_size = in_config["shape_in"][0]
+    batch_size = in_config["batch_size"]
 
-    channels_in = in_config["shape_in"][1]
-    depth_in = in_config["shape_in"][2]
-    height_in = in_config["shape_in"][3]
-    width_in = in_config["shape_in"][4]
+    channels_in = in_config["channels_in"]
+    depth_in = in_config["depth_in"]
+    height_in = in_config["height_in"]
+    width_in = in_config["width_in"]
     coarse_factor_in = (in_config["coarse_factor"] if "coarse_factor"
                         in in_config else in_config["coarse_in_factor"])
 
-    channels_out = out_config["shape_out"][1]
-    depth_out = out_config["shape_out"][2]
-    height_out = out_config["shape_out"][3]
-    width_out = out_config["shape_out"][4]
+    channels_out = out_config["channels_out"]
+    depth_out = out_config["depth_out"]
+    height_out = out_config["height_out"]
+    width_out = out_config["width_out"]
     coarse_factor_out = (out_config["coarse_factor"] if "coarse_factor"
                          in out_config else out_config["coarse_out_factor"])
 

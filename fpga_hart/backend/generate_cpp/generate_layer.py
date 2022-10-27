@@ -1,10 +1,12 @@
 import argparse
 import json
+import os
 
 import pandas as pd
 from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
                                                                 elemwise_3d,
                                                                 gap_3d, gemm,
+                                                                pool_3d,
                                                                 relu_3d,
                                                                 shish_3d,
                                                                 sigmoid_3d)
@@ -34,12 +36,7 @@ def parse_args():
         help="path of the HLS project to be generated",
     )
     parser.add_argument(
-        "prefix",
-        type=str,
-        help="the parent folder in which to store the model's partitions",
-    )
-    parser.add_argument(
-        "config_file", type=str, help="name of the model's configuration file"
+        "--config_file", type=str, help="path of the custom configuration file"
     )
 
     args = parser.parse_args()
@@ -54,9 +51,6 @@ def get_layers_configurations(config_file):
     for l in layers:
         layers_config = configuration[configuration["Layer"] == l]["config"].to_dict()
         layers_config = layers_config[[*layers_config][0]]
-        partition_branch_depth = configuration[configuration["Layer"] == l][
-            "Branch Depth"
-        ].values[0]
         result[l] = {
             "config": layers_config,
             "type": configuration[configuration["Layer"] == l]["Type"].values[0],
@@ -66,53 +60,103 @@ def get_layers_configurations(config_file):
 
 
 def generate_layer_code(
-    layers_config, layers_type, layer_name, parser, prefix, hls_project_path
+    layers_config, layers_type, layer_name, model_name, hls_project_path
 ):
     # Generate layers files
     if "Swish" in layers_type:
-        generate_swish_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_swish_files(layer_name, layers_config, model_name)
     elif "Relu" in layers_type:
-        generate_relu_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_relu_files(layer_name, layers_config, model_name)
     elif "Sigmoid" in layers_type:
-        generate_sigmoid_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_sigmoid_files(layer_name, layers_config, model_name)
     elif "Add" in layers_type or "Mul" in layers_type:
-        generate_elemwise_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_elemwise_files(layer_name, layers_config, model_name)
     elif "Conv" in layers_type:
         generate_conv_files(
-            layer_name, layers_config, f"{prefix}/{layer_name}", hls_project_path
+            layer_name, layers_config, model_name, hls_project_path
         )
     elif "GlobalAveragePool" in layers_type:
-        generate_gap_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_gap_files(layer_name, layers_config, model_name)
     elif "Gemm" in layers_type:
-        generate_gemm_files(layer_name, layers_config, f"{prefix}/{layer_name}")
+        generate_gemm_files(layer_name, layers_config, model_name)
     else:
         raise Exception(f"Layer {layers_type} not supported")
 
-    # Generate top level partition file
+    # Generate top level layer file
+    # TODO: Create a script to provide support for all the types of layers
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(layer_name, prefix, hls_project_path, is_layer=True)
+    generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True)
 
     # Generate testbench data
     if "Swish" in layers_type:
-        # to be implemented
-        shish_3d()
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        coarse_factor = layers_config["coarse_factor"]
+        shish_3d(input_shape=shape_in,
+                 coarse_in=coarse_factor,
+                 file_format="bin",
+                 store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
     elif "Relu" in layers_type:
-        # to be implemented
-        relu_3d()
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        coarse_factor = layers_config["coarse_factor"]
+        relu_3d(input_shape=shape_in,
+                 coarse_in=coarse_factor,
+                 file_format="bin",
+                 store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
     elif "Sigmoid" in layers_type:
-        # to be implemented
-        sigmoid_3d()
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        coarse_factor = layers_config["coarse_factor"]
+        sigmoid_3d(input_shape=shape_in,
+                    coarse_in=coarse_factor,
+                    file_format="bin",
+                    store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
     elif "Add" in layers_type or "Mul" in layers_type:
-        # to be implemented
-        elemwise_3d()
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        coarse_factor = layers_config["coarse_factor"]
+        op_type = layers_config["op_type"]
+        broadcasting = layers_config["broadcasting"]
+        shape_in_2 = shape_in
+        if broadcasting:
+            shape_in_2[2], shape_in_2[3], shape_in_2[4] = 1, 1, 1
+        elemwise_3d(input_shape=shape_in,
+                    input_shape_2=shape_in_2,
+                    coarse_in=coarse_factor,
+                    elemwise_op_type=op_type,
+                    file_format="bin",
+                    store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
     elif "Conv" in layers_type:
-        shape_in = layers_config["shape_in"]
-        shape_out = layers_config["shape_out"]
-        shape_kernel = layers_config["shape_kernel"]
-        padding = layers_config["padding"]
-        stride = layers_config["stride"]
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        filters = layers_config["channels_out"]
+        shape_kernel = [layers_config["kernel_depth"],
+                        layers_config["kernel_height"],
+                        layers_config["kernel_width"]]
+        padding = [layers_config["pad_depth"],
+                   layers_config["pad_height"],
+                     layers_config["pad_width"]]
+        stride = [layers_config["stride_depth"],
+                  layers_config["stride_height"],
+                    layers_config["stride_width"]]
         groups = layers_config["groups"]
         depthwise = layers_config["depthwise"]
         coarse_in_factor = layers_config["coarse_in_factor"]
@@ -121,7 +165,8 @@ def generate_layer_code(
         conv_3d(
             input_shape=shape_in,
             kernel_shape=shape_kernel,
-            filters=shape_out[1],
+            bias=False,
+            filters=filters,
             padding=padding,
             stride=stride,
             groups=groups,
@@ -129,26 +174,67 @@ def generate_layer_code(
             coarse_in=coarse_in_factor,
             coarse_out=coarse_out_factor,
             file_format="bin",
-            prefix="generated_data/" + prefix,
-            layer_name=layer_name,
+            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
+            layer_name = layer_name.lower(),
+        )
+    elif "Pooling" in layers_type:
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        shape_kernel = [layers_config["kernel_depth"],
+                        layers_config["kernel_height"],
+                        layers_config["kernel_width"]]
+        padding = [layers_config["pad_depth"],
+                   layers_config["pad_height"],
+                     layers_config["pad_width"]]
+        stride = [layers_config["stride_depth"],
+                  layers_config["stride_height"],
+                    layers_config["stride_width"]]
+        op_type = layers_config["op_type"]
+        coarse_factor = layers_config["coarse_factor"]
+
+        pool_3d(
+            input_shape=shape_in,
+            kernel_shape=shape_kernel,
+            padding=padding,
+            stride=stride,
+            coarse_in=coarse_factor,
+            pool_op_type=op_type,
+            file_format="bin",
+            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
         )
     elif "GlobalAveragePool" in layers_type:
-        # to be implemented
-        gap_3d()
+        shape_in = [layers_config["batch_size"],
+                    layers_config["channels_in"],
+                    layers_config["depth_in"],
+                    layers_config["height_in"],
+                    layers_config["width_in"]]
+        coarse_factor = layers_config["coarse_factor"]
+        gap_3d(input_shape=shape_in,
+               coarse_in=coarse_factor,
+               file_format="bin",
+               store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
     elif "Gemm" in layers_type:
-        shape_in = layers_config["shape_in"]
-        shape_out = layers_config["shape_out"]
-        shape_bias = layers_config["shape_bias"]
+        shape_in = [layers_config["batch_size"],
+                    layers_config["features_in"]]
+        shape_out = [layers_config["batch_size"],
+                     layers_config["features_out"]]
+        coarse_in_factor = layers_config["coarse_in_factor"]
+        coarse_out_factor = layers_config["coarse_out_factor"]
         gemm(
-            in_features=shape_in[1],
-            out_features=shape_out[1],
-            bias=True if shape_bias else False,
-            prefix="generated_data",
+            input_shape=shape_in,
+            output_shape=shape_out,
+            coarse_in=coarse_in_factor,
+            coarse_out=coarse_out_factor,
+            bias=False,
             file_format="bin",
+            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
+            layer_name = layer_name.lower(),
         )
     else:
         raise Exception(f"Layer {layers_type} not supported")
-
 
 if __name__ == "__main__":
     args = parse_args()
@@ -161,9 +247,17 @@ if __name__ == "__main__":
         wandb_config=None,
     )
 
-    layer_configuration = get_layers_configurations(args.config_file)
+    if args.config_file:
+        layer_configuration = get_layers_configurations(args.config_file)
+    else:
+        layer_configuration = get_layers_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_layers.json"))
 
     for k, v in layer_configuration.items():
-        generate_layer_code(
-            v["config"], v["type"], k, parser, args.prefix, args.hls_project_path
-        )
+        if args.config_file:
+            generate_layer_code(
+                v["config"], v["type"], k, "custom_layers", args.hls_project_path
+            )
+        else:
+            generate_layer_code(
+                v["config"], v["type"], k, args.model_name, args.hls_project_path
+            )

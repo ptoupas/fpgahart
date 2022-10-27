@@ -639,6 +639,7 @@ def generate_layer_config(layer, config):
         layer_config["stride_depth"] = stride[0]
         layer_config["stride_height"] = stride[1]
         layer_config["stride_width"] = stride[2]
+        layer_config["op_type"] = layer.op_type
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_factor"] = coarse_factor
     elif isinstance(layer, ActivationLayer):

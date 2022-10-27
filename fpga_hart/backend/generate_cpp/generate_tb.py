@@ -3,17 +3,25 @@ import os
 from layers.codegen import *
 
 
-def generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer):
-    partition_name_lower = partition_name.lower()
-    partition_name_upper = partition_name.upper()
+def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_project_path: str, is_layer: bool):
+    if is_layer:
+        partition_name_lower = layer_name.lower()
+        partition_name_upper = layer_name.upper()
+    else:
+        partition_name_lower = partition_name.lower()
+        partition_name_upper = partition_name.upper()
 
-    data_dir = f"{hls_project_path}/{prefix}/{partition_name}/data"
+    data_dir = os.path.join(hls_project_path, model_name, partition_name, layer_name, "data")
 
     cpp = CppFile(
         os.path.join(
             os.getcwd(),
             "generated_files",
-            f"{prefix}/{partition_name}/tb/{partition_name_lower}_tb.cpp",
+            model_name,
+            partition_name,
+            layer_name,
+            "tb",
+            f"{partition_name_lower}_tb.cpp"
         )
     )
 
@@ -24,6 +32,7 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer):
     cpp(f'#define DATA_DIR "{data_dir}"', newlines=2)
 
     if is_layer:
+        # TODO: Create different interfaces for different types of layers
         data_type_postfix_in = "data_t"
         data_type_postfix_out = "data_t"
         input_streams = "COARSE_IN"
@@ -36,6 +45,7 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer):
     with cpp.block("int main()"):
         cpp("int err = 0;", newlines=2)
 
+        # TODO: Create different interfaces for different types of layers
         cpp('std::string input_path  = std::string(DATA_DIR)+"/input.dat";')
         cpp(
             'std::string output_path  = std::string(DATA_DIR)+"/output.dat";',
@@ -125,14 +135,8 @@ def generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer):
         cpp("return err;")
 
 
-def generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False):
-    if not os.path.exists(
-        os.path.join(os.getcwd(), "generated_files", f"{prefix}/{partition_name}/tb")
-    ):
-        os.makedirs(
-            os.path.join(
-                os.getcwd(), "generated_files", f"{prefix}/{partition_name}/tb"
-            )
-        )
+def generate_tb_files(layer_name: str, model_name: str, hls_project_path: str, partition_name: str="", is_layer: bool=False):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb")):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb"))
 
-    generate_tb_cpp(partition_name, prefix, hls_project_path, is_layer)
+    generate_tb_cpp(layer_name, model_name, partition_name, hls_project_path, is_layer)

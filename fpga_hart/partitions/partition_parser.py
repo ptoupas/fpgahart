@@ -779,7 +779,7 @@ class PartitionParser(PartitionDescriptor):
         custom_partition = ["Swish_92", "Conv_94"]
 
         self.model_partition(custom_partition, name="Sequential")
-        exit()
+        return
 
         custom_partition = ["Custom_Conv_1"]
         # self.layers['Custom_Gap_1'] = {'operation': 'GlobalAveragePool',
@@ -815,7 +815,7 @@ class PartitionParser(PartitionDescriptor):
             "dilation": [1, 1, 1],
         }
         self.model_partition(custom_partition, name="Single_Layer")
-        exit()
+        return
 
         custom_partition = [
             "Custom_Relu",
@@ -876,7 +876,7 @@ class PartitionParser(PartitionDescriptor):
             "branching": False,
         }
         # self.model_partition(custom_partition, name="Single_Layer_Branch")
-        # exit()
+        # return
 
         custom_partition = [
             "Relu_22",
