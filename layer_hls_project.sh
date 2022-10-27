@@ -8,9 +8,9 @@ LAYER_NAME="custom_conv"
 CONFIG_FILE=""
 HLS_PARENT_DIR="/data/HLS_projects/fpga-hart-hls/$MODEL_NAME/layers"
 
-echo python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET
+python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET
 
-echo python fpga_hart/backend/generate_cpp/generate_layer.py $MODEL_NAME $HLS_PARENT_DIR --config_file $CONFIG_FILE
+python fpga_hart/backend/generate_cpp/generate_layer.py $MODEL_NAME $HLS_PARENT_DIR --config_file $CONFIG_FILE
 
 for layer in generated_files/$MODEL_NAME/*;
 do

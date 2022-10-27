@@ -40,16 +40,16 @@ csim_design -clean -O
 if {$hls_exec == 1} {
 	# Run Synthesis and Exit
 	csynth_design
-	
+
 } elseif {$hls_exec == 2} {
 	# Run Synthesis, RTL Simulation and Exit
 	csynth_design
-	
+
 	cosim_design -O -enable_dataflow_profiling
-} elseif {$hls_exec == 3} { 
+} elseif {$hls_exec == 3} {
 	# Run Synthesis, RTL Simulation, RTL implementation and Exit
 	csynth_design
-	
+
 	cosim_design -O -enable_dataflow_profiling
 
 	export_design -format ip_catalog
