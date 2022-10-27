@@ -16,7 +16,7 @@ def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: s
 
     cpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.cpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
         )
     )
 
@@ -68,7 +68,7 @@ def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: s
 
     hpp = CppFile(
         os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, f"{layer_name_lower}.hpp"
+            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
         )
     )
 
@@ -107,8 +107,8 @@ def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: s
 
 
 def generate_gap_files(name: str, config: dict, model_name: str, partition_name: str = ''):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
     generate_gap_hpp(name, config, model_name, partition_name)
     generate_gap_cpp(name, config, model_name, partition_name)

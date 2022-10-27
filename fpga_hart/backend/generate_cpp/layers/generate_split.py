@@ -15,7 +15,7 @@ def generate_split_cpp(name: str, config: dict, model_name: str, partition_name:
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
-    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, f"split_{layer_name_lower}.cpp"))
+    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"split_{layer_name_lower}.cpp"))
 
     cpp(f"#include \"split_{layer_name_lower}.hpp\"", newlines=2)
 
@@ -57,7 +57,7 @@ def generate_split_hpp(name: str, config: dict, model_name: str, partition_name:
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
-    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, f"split_{layer_name_lower}.hpp"))
+    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"split_{layer_name_lower}.hpp"))
 
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
@@ -87,8 +87,8 @@ def generate_split_hpp(name: str, config: dict, model_name: str, partition_name:
     hpp.close()
 
 def generate_split_files(name: str, config: dict, model_name: str, partition_name: str = ''):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name)):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name))
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
     generate_split_hpp(name, config, model_name, partition_name)
     generate_split_cpp(name, config, model_name, partition_name)
