@@ -43,13 +43,13 @@ class SimulatedAnnealing(BaseLayer):
         ml_flow_id=None,
         wandb_config=None,
         cnn_model_name="",
-        block_gen='post_while',
-        bblock_keep_percentage=0.5,
+        block_gen='pre_while',
+        bblock_keep_percentage=0.6,
         use_arbitrary_shape=False,
-        use_previous_config=False,
-        chan_dist_thresh=10,
-        depth_dist_thresh=10,
-        height_dist_thresh=10
+        use_previous_config=True,
+        chan_dist_thresh=60,
+        depth_dist_thresh=40,
+        height_dist_thresh=60
     ):
         self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
@@ -1471,8 +1471,7 @@ class SimulatedAnnealing(BaseLayer):
                             )
                             / channels_in_dim
                         )
-                    assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
-                    assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
+                    assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
                     # TODO: Add fine factor random generation for Pooling3D ops
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_fine=1, f_coarse_inout=coarse_inout
@@ -1517,7 +1516,8 @@ class SimulatedAnnealing(BaseLayer):
                             )
                             / channels_out_dim
                         )
-                    assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
+                    assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
+                    assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
                         f_coarseIn=coarse_in, f_coarseOut=coarse_out
                     )
@@ -1529,87 +1529,31 @@ class SimulatedAnnealing(BaseLayer):
                     return None
 
             if "Conv" in bb:
-                bb_setup[bb]["shape_in"] = [
-                    1,
-                    channels_in_dim,
-                    depth_in_dim,
-                    height_in_dim,
-                    width_in_dim,
-                ]
+                layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [1, coarse_in, coarse_out])
+                bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["f_coarseIn"] = coarse_in
-                bb_setup[bb]["coarse_in_factor"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
-                bb_setup[bb]["shape_out"] = [
-                    1,
-                    channels_out_dim,
-                    depth_out_dim,
-                    height_out_dim,
-                    width_out_dim,
-                ]
                 bb_setup[bb]["f_coarseOut"] = coarse_out
-                bb_setup[bb]["coarse_out_factor"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
-                bb_setup[bb]["fine_factor"] = int(
-                    1
-                    * bb_descriptor["kernel"][2]
-                    * bb_descriptor["kernel"][3]
-                    * bb_descriptor["kernel"][4]
-                )
-                bb_setup[bb]["shape_kernel"] = bb_descriptor["kernel"][2:]
-                bb_setup[bb]["shape_bias"] = bb_descriptor["bias"]
-                bb_setup[bb]["padding"] = bb_descriptor["padding"]
-                bb_setup[bb]["stride"] = bb_descriptor["stride"]
-                bb_setup[bb]["groups"] = int(bb_descriptor["groups"])
             elif "Pooling" in bb:
-                bb_setup[bb]["shape_in"] = [
-                    1,
-                    channels_in_dim,
-                    depth_in_dim,
-                    height_in_dim,
-                    width_in_dim,
-                ]
+                layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [1, coarse_inout])
+                bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["coarse_inout"] = coarse_inout
                 bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
-                bb_setup[bb]["shape_out"] = [
-                    1,
-                    channels_out_dim,
-                    depth_out_dim,
-                    height_out_dim,
-                    width_out_dim,
-                ]
-                bb_setup[bb]["fine_factor"] = int(
-                    1
-                    * bb_descriptor["kernel"][0]
-                    * bb_descriptor["kernel"][1]
-                    * bb_descriptor["kernel"][2]
-                )
-                bb_setup[bb]["shape_kernel"] = bb_descriptor["kernel"]
-                bb_setup[bb]["padding"] = bb_descriptor["padding"]
-                bb_setup[bb]["stride"] = bb_descriptor["stride"]
             elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
-                bb_setup[bb]["shape_in"] = [
-                    1,
-                    channels_in_dim,
-                    depth_in_dim,
-                    height_in_dim,
-                    width_in_dim,
-                ]
-                bb_setup[bb]["shape_out"] = bb_descriptor["shape_out"]
+                layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [coarse_inout])
+                bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["coarse_inout"] = coarse_inout
                 bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
             elif bb == "Gemm":
-                bb_setup[bb]["shape_in"] = [1, channels_in_dim]
+                layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [coarse_in, coarse_out])
+                bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["coarse_in"] = coarse_in
-                bb_setup[bb]["coarse_in_factor"] = math.ceil(coarse_in * channels_in_dim)
                 bb_setup[bb]["interleaving_in"] = math.ceil(1 / coarse_in)
-                bb_setup[bb]["shape_out"] = [1, channels_out_dim]
                 bb_setup[bb]["coarse_out"] = coarse_out
-                bb_setup[bb]["coarse_out_factor"] = math.ceil(coarse_out * channels_out_dim)
                 bb_setup[bb]["interleaving_out"] = math.ceil(1 / coarse_out)
-                bb_setup[bb]["shape_kernel"] = bb_descriptor["kernel"]
-                bb_setup[bb]["shape_bias"] = bb_descriptor["bias"]
 
             bb_setup[bb]["DSP_util"] = dsp_util
             bb_setup[bb]["BRAM_util"] = bram_util
@@ -1635,27 +1579,27 @@ class SimulatedAnnealing(BaseLayer):
             else:
                 # TODO: Search how to deal with cases where the output dimensions are also altered? Like in convolutional layers with stride > 1.
                 depth_calls = math.ceil(
-                    hw.input_shape[2] / bblocks_config[bb_type]["shape_in"][2]
+                    hw.input_shape[2] / bblocks_config[bb_type]["config"]["depth_in"]
                 )
                 height_calls = math.ceil(
-                    hw.input_shape[3] / bblocks_config[bb_type]["shape_in"][3]
+                    hw.input_shape[3] / bblocks_config[bb_type]["config"]["height_in"]
                 )
                 width_calls = math.ceil(
-                    hw.input_shape[4] / bblocks_config[bb_type]["shape_in"][4]
+                    hw.input_shape[4] / bblocks_config[bb_type]["config"]["width_in"]
                 )
 
             if "Conv" in bb_type or "Gemm" in bb_type:
                 in_calls = math.ceil(
                     hw.input_shape[1]
                     / (
-                        bblocks_config[bb_type]["coarse_in_factor"]
+                        bblocks_config[bb_type]["config"]["coarse_in_factor"]
                         * bblocks_config[bb_type]["interleaving_in"]
                     )
                 )
                 out_calls = math.ceil(
                     hw.output_shape[1]
                     / (
-                        bblocks_config[bb_type]["coarse_out_factor"]
+                        bblocks_config[bb_type]["config"]["coarse_out_factor"]
                         * bblocks_config[bb_type]["interleaving_out"]
                     )
                 )

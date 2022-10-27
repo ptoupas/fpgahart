@@ -582,7 +582,7 @@ def generate_layer_config(layer, config):
         fine_factor = math.ceil(config[0] * layer.kd * layer.kh * layer.kw)
         coarse_in_factor = math.ceil(config[1] * layer.channels)
         coarse_out_factor = math.ceil(config[2] * layer.filters)
-        wr_factor = config[8]
+        wr_factor = config[8] if len(config) >= 8 else 1
         assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
         layer_config["batch_size"] = input_shape[0]
         layer_config["channels_in"] = input_shape[1]
@@ -1225,9 +1225,9 @@ def get_random_arbitrary_shape(
     final_shape_out = []
     if len(in_shapes[0]) == 5:
         if previous_config is not None and bb_type in previous_config:
-            prev_c_in = previous_config[bb_type]["shape_in"][1]
-            prev_d_in = previous_config[bb_type]["shape_in"][2]
-            prev_h_in = previous_config[bb_type]["shape_in"][3]
+            prev_c_in = previous_config[bb_type]["config"]["channels_in"]
+            prev_d_in = previous_config[bb_type]["config"]["depth_in"]
+            prev_h_in = previous_config[bb_type]["config"]["height_in"]
 
             c_in_range = math.ceil(prev_c_in*chan_dist_thresh/100)
             d_in_range = math.ceil(prev_d_in*depth_dist_thresh/100)
@@ -1313,7 +1313,16 @@ def get_random_shape(
         shape_in = final_shapes[0]
         shape_out = final_shapes[1]
         if previous_config is not None and bb_type in previous_config:
-            prev_shape_in = previous_config[bb_type]["shape_in"]
+            if len(shape_in) >= 5:
+                prev_shape_in = [previous_config[bb_type]["config"]["batch_size"],
+                                previous_config[bb_type]["config"]["channels_in"],
+                                previous_config[bb_type]["config"]["depth_in"],
+                                previous_config[bb_type]["config"]["height_in"],
+                                previous_config[bb_type]["config"]["width_in"]]
+            else:
+                prev_shape_in = [previous_config[bb_type]["config"]["batch_size"],
+                                previous_config[bb_type]["config"]["features_in"]]
+
             mape_channels = calc_mape(prev_shape_in[1], shape_in[1])
             if len(prev_shape_in) >= 5:
                 mape_height = calc_mape(prev_shape_in[3], shape_in[3])
