@@ -3,7 +3,7 @@ import os
 from .codegen import *
 
 
-def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: str):
+def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: str, dynamic_reconfig: bool):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -14,11 +14,18 @@ def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: s
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    cpp = CppFile(
-        os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+    if dynamic_reconfig:
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src", f"{layer_name_lower}.cpp"
+            )
         )
-    )
+    else:
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+            )
+        )
 
     cpp(f'#include "{layer_name_lower}.hpp"', newlines=2)
 
@@ -55,7 +62,7 @@ def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: s
     cpp.close()
 
 
-def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: str):
+def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: str, dynamic_reconfig: bool):
     batch_size = config["batch_size"]
     channels = config["channels_in"]
     depth = config["depth_in"]
@@ -66,11 +73,18 @@ def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: s
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    hpp = CppFile(
-        os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+    if dynamic_reconfig:
+        hpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src", f"{layer_name_lower}.hpp"
+            )
         )
-    )
+    else:
+        hpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+            )
+        )
 
     hpp("#pragma once", newlines=2)
     hpp('#include "common_.hpp"')
@@ -106,9 +120,13 @@ def generate_gap_hpp(name: str, config: dict, model_name: str, partition_name: s
     hpp.close()
 
 
-def generate_gap_files(name: str, config: dict, model_name: str, partition_name: str = ''):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
+def generate_gap_files(name: str, config: dict, model_name: str, partition_name: str = '', dynamic_reconfig: bool=False):
+    if dynamic_reconfig:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src"))
+    else:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
-    generate_gap_hpp(name, config, model_name, partition_name)
-    generate_gap_cpp(name, config, model_name, partition_name)
+    generate_gap_hpp(name, config, model_name, partition_name, dynamic_reconfig)
+    generate_gap_cpp(name, config, model_name, partition_name, dynamic_reconfig)

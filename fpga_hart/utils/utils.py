@@ -596,7 +596,7 @@ def generate_layer_config(layer, config):
         layer_config["kernel_depth"] = kerner_shape[0]
         layer_config["kernel_height"] = kerner_shape[1]
         layer_config["kernel_width"] = kerner_shape[2]
-        layer_config["shape_bias"] = bias_shape
+        layer_config["shape_bias"] = bias_shape[0]
         layer_config["pad_depth"] = padding[0]
         layer_config["pad_height"] = padding[1]
         layer_config["pad_width"] = padding[2]
@@ -707,7 +707,7 @@ def generate_layer_config(layer, config):
         layer_config["features_out"] = output_shape[1]
         layer_config["weights_rows"] = weights_shape[0]
         layer_config["weights_cols"] = weights_shape[1]
-        layer_config["shape_bias"] = bias_shape
+        layer_config["shape_bias"] = bias_shape[0]
         layer_config["coarse_in_factor"] = coarse_in_factor
         layer_config["coarse_out_factor"] = coarse_out_factor
     else:
@@ -812,6 +812,7 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     else:
         raise ValueError("Layer type {} not supported".format(layer_type))
+    template_dict["config"] = {}
     for key in layer_config:
         template_dict["config"][key] = layer_config[key]
 

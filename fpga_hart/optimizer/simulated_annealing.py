@@ -1867,18 +1867,18 @@ class SimulatedAnnealing(BaseLayer):
             wandb.log_artifact(artifact)
         else:
             if not os.path.exists(
-                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results"
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven"
             ):
                 os.makedirs(
-                    "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results"
+                    "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven"
                 )
             with open(
-                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results/config.json",
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven/config.json",
                 "w",
             ) as f:
                 json.dump(final_config, f, indent=2)
             with open(
-                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven_results/scheduling.json",
+                "fpga_modeling_reports/" + self.cnn_model_name + "/latency_driven/scheduling.json",
                 "w",
             ) as f:
                 json.dump(prev_scheduling, f, indent=2)

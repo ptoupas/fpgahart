@@ -3,7 +3,7 @@ import os
 from layers.codegen import *
 
 
-def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_project_path: str, is_layer: bool):
+def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_project_path: str, is_layer: bool, dynamic_reconfig: bool):
     if is_layer:
         partition_name_lower = layer_name.lower()
         partition_name_upper = layer_name.upper()
@@ -11,19 +11,33 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
         partition_name_lower = partition_name.lower()
         partition_name_upper = partition_name.upper()
 
-    data_dir = os.path.join(hls_project_path, model_name, partition_name, layer_name, "data")
-
-    cpp = CppFile(
-        os.path.join(
-            os.getcwd(),
-            "generated_files",
-            model_name,
-            partition_name,
-            layer_name,
-            "tb",
-            f"{partition_name_lower}_tb.cpp"
+    if dynamic_reconfig:
+        data_dir = os.path.join(hls_project_path, model_name, partition_name, "latency_driven", layer_name, "data")
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(),
+                "generated_files",
+                model_name,
+                partition_name,
+                "latency_driven",
+                layer_name,
+                "tb",
+                f"{partition_name_lower}_tb.cpp"
+            )
         )
-    )
+    else:
+        data_dir = os.path.join(hls_project_path, model_name, partition_name, layer_name, "data")
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(),
+                "generated_files",
+                model_name,
+                partition_name,
+                layer_name,
+                "tb",
+                f"{partition_name_lower}_tb.cpp"
+            )
+        )
 
     cpp(f'#include "common_.hpp"')
     cpp(f'#include "common_tb_.hpp"')
@@ -135,8 +149,12 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
         cpp("return err;")
 
 
-def generate_tb_files(layer_name: str, model_name: str, hls_project_path: str, partition_name: str="", is_layer: bool=False):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb")):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb"))
+def generate_tb_files(layer_name: str, model_name: str, hls_project_path: str, partition_name: str="", is_layer: bool=False, dynamic_reconfig: bool=False):
+    if dynamic_reconfig:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", layer_name, "tb")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", layer_name, "tb"))
+    else:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "tb"))
 
-    generate_tb_cpp(layer_name, model_name, partition_name, hls_project_path, is_layer)
+    generate_tb_cpp(layer_name, model_name, partition_name, hls_project_path, is_layer, dynamic_reconfig)

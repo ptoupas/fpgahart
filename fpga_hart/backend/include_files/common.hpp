@@ -3,6 +3,7 @@
 #include "hls_stream.h"
 #include "hls_math.h"
 #include "ap_fixed.h"
+#include "ap_axi_sdata.h"
 #include <iostream>
 #include <fstream>
 
