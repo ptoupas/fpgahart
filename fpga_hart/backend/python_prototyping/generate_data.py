@@ -464,19 +464,19 @@ def gemm(
     )
     weights = transform_weights_fc(weights, coarse_in, coarse_out)
 
-    # if file_format == "bin":
-    #     weights.tofile(store_path + "/weights.bin")
-    # elif file_format == "txt":
-    #     np.savetxt(
-    #         store_path + "/weights.txt", weights.flatten(), fmt="%.8f"
-    #     )
-    # else:
-    #     raise Exception("Format not supported")
-    with open(
-        f"{store_path}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
-        "w",
-    ) as f:
-        f.write(array_init(weights[0]))
+    if file_format == "bin":
+        weights.tofile(store_path + "/weights.bin")
+    elif file_format == "txt":
+        np.savetxt(
+            store_path + "/weights.txt", weights.flatten(), fmt="%.8f"
+        )
+    else:
+        raise Exception("Format not supported")
+    # with open(
+    #     f"{store_path}/weights_{layer_name}_cin{coarse_in}_cout{coarse_out}.csv",
+    #     "w",
+    # ) as f:
+    #     f.write(array_init(weights[0]))
 
     if bias:
         bias = gemm.bias.detach().numpy()

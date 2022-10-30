@@ -12,9 +12,9 @@ template <
     typename gemm_t,
 	typename accum_data_t>
 void gemm(
-    stream_t(gemm_t) & in,
-    stream_t(gemm_t) & weights,
-    stream_t(accum_data_t) & out)
+    stream_t(gemm_t) &in,
+    stream_t(gemm_t) &weights,
+    stream_t(accum_data_t) &out)
 {
 
 #pragma HLS INLINE OFF

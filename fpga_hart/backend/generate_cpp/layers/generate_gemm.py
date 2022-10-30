@@ -138,13 +138,19 @@ def generate_gemm_hpp(name: str, config: dict, model_name: str, partition_name: 
     hpp(
         f"#define {layer_name_upper}_FORK_OUT_FEATURES \tDIVIDE({layer_name_upper}_OUT_FEATURES, {layer_name_upper}_COARSE_OUT)"
     )
-    hpp(f"#define {layer_name_upper}_FORK_COARSE_OUT \t{layer_name_upper}_COARSE_OUT")
+    hpp(f"#define {layer_name_upper}_FORK_COARSE_OUT \t{layer_name_upper}_COARSE_OUT", newlines=2)
 
     hpp(f"#define {layer_name_upper}_GEMM_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(f"#define {layer_name_upper}_GEMM_IN_FEATURES \tDIVIDE({layer_name_upper}_IN_FEATURES, {layer_name_upper}_COARSE_IN)")
     hpp(
-        f"#define {layer_name_upper}_GEMM_OUT_FEATURES \tDIVIDE({layer_name_upper}_OUT_FEATURES, {layer_name_upper}_COARSE_OUT)"
+        f"#define {layer_name_upper}_GEMM_OUT_FEATURES \tDIVIDE({layer_name_upper}_OUT_FEATURES, {layer_name_upper}_COARSE_OUT)", newlines=2
     )
+
+    hpp(f"#define {layer_name_upper}_GLUE_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
+    hpp(f"#define {layer_name_upper}_GLUE_IN_FEATURES \t{layer_name_upper}_IN_FEATURES")
+    hpp(f"#define {layer_name_upper}_GLUE_OUT_FEATURES \t{layer_name_upper}_OUT_FEATURES")
+    hpp(f"#define {layer_name_upper}_GLUE_COARSE_IN \t{layer_name_upper}_COARSE_IN")
+    hpp(f"#define {layer_name_upper}_GLUE_COARSE_OUT \t{layer_name_upper}_COARSE_OUT", newlines=2)
 
     hpp(
         f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \t{layer_name_lower}_data_t;",
