@@ -31,6 +31,12 @@ def parse_args():
         help="name of the HAR model",
     )
     parser.add_argument(
+        "target",
+        choices=["throughput", "latency"],
+        type=str,
+        help="target of the optimization",
+    )
+    parser.add_argument(
         "hls_project_path",
         type=str,
         help="path of the HLS project to be generated",
@@ -49,31 +55,25 @@ def get_layers_configurations(config_file):
     configuration = pd.read_json(config_file)
     layers = configuration.columns.to_list()
     for l in layers:
-        layers_config = configuration[l]["config"]
-        if "Swish" in l:
-            layers_type = "Swish"
-        elif "Relu" in l:
-            layers_type = "Relu"
-        elif "Sigmoid" in l:
-            layers_type = "Sigmoid"
-        elif "Add" in l:
-            layers_type = "Add"
-        elif "Mul" in l:
-            layers_type = "Mul"
-        elif "Conv" in l:
-            layers_type = "Conv"
-        elif "Pooling" in l:
-            layers_type = "Pooling"
-        elif "GlobalAveragePool" in l:
-            layers_type = "GlobalAveragePool"
-        elif "Gemm" in l:
-            layers_type = "Gemm"
-        elif "Activation" in l:
-            layers_type = "Activation"
-        elif "ElementWise" in l:
-            layers_type = "ElementWise"
+        if "Type" in configuration[l].index.to_list():
+            layers_type = configuration[l]["Type"]
         else:
-            raise Exception(f"Layer {l} not supported")
+            layers_type = "DR_"
+            if "Activation" in l:
+                layers_type += "Activation"
+            elif "GlobalAveragePool" in l:
+                layers_type += "GlobalAveragePool"
+            elif "Gemm" in l:
+                layers_type += "Gemm"
+            elif "Conv" in l:
+                layers_type += "Conv"
+            elif "ElementWise" in l:
+                layers_type += "ElementWise"
+            elif "Pooling" in l:
+                layers_type += "Pooling"
+            else:
+                raise ValueError(f"Layer type {l} not recognized")
+        layers_config = configuration[l]["config"]
         result[l] = {
             "config": layers_config,
             "type": layers_type,
@@ -85,32 +85,53 @@ def get_layers_configurations(config_file):
 def generate_layer_code(
     layers_config, layers_type, layer_name, model_name, hls_project_path
 ):
+    dynamic_reconfig = True if "DR_" in layers_type else False
     # Generate layers files
-    if "Swish" in layers_type:
+    if layers_type == "Swish":
         generate_swish_files(layer_name, layers_config, model_name)
-    elif "Relu" in layers_type:
+    elif layers_type == "Relu":
         generate_relu_files(layer_name, layers_config, model_name)
-    elif "Sigmoid" in layers_type:
+    elif layers_type == "Sigmoid":
         generate_sigmoid_files(layer_name, layers_config, model_name)
-    elif "Add" in layers_type or "Mul" in layers_type:
+    elif layers_type == "Add" or layers_type == "Mul":
         generate_elemwise_files(layer_name, layers_config, model_name)
-    elif "Conv" in layers_type:
+    elif layers_type == "Conv":
         generate_conv_files(
             layer_name, layers_config, model_name, hls_project_path
         )
-    elif "Pooling" in layers_type:
+    elif layers_type == "MaxPool" or layers_type == "AveragePool":
         # TODO: Implement pooling
+        # generate_pool_files(layer_name, layers_config, model_name)
+        print("MaxPool and AveragePool not implemented yet")
         pass
-    elif "GlobalAveragePool" in layers_type:
+    elif layers_type == "GlobalAveragePool":
         generate_gap_files(layer_name, layers_config, model_name)
-    elif "Gemm" in layers_type:
+    elif layers_type == "Gemm":
         generate_gemm_files(layer_name, layers_config, model_name)
-    elif "Activation" in layers_type:
+    elif layers_type == "DR_Activation":
         # TODO: Implement DYNAMIC reconfigurable activation
+        # generate_dr_activation_files(layer_name, layers_config, model_name)
+        print("DYNAMIC reconfigurable activation not implemented yet")
         pass
-    elif "ElementWise" in layers_type:
-        # TODO: Implement DYNAMIC reconfigurable elementWise
+    elif layers_type == "DR_Conv":
+        # TODO: Implement DYNAMIC reconfigurable conv
+        # generate_dr_conv_files(layer_name, layers_config, model_name, hls_project_path)
+        print("DYNAMIC reconfigurable conv not implemented yet")
         pass
+    elif layers_type == "DR_ElementWise":
+        # TODO: Implement DYNAMIC reconfigurable elementwise
+        # generate_dr_elemwise_files(layer_name, layers_config, model_name)
+        print("DYNAMIC reconfigurable elementwise not implemented yet")
+        pass
+    elif layers_type == "DR_Pooling":
+        # TODO: Implement DYNAMIC reconfigurable pool
+        # generate_dr_pool_files(layer_name, layers_config, model_name)
+        print("DYNAMIC reconfigurable pool not implemented yet")
+        pass
+    elif layers_type == "DR_GlobalAveragePool":
+        generate_gap_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
+    elif layers_type == "DR_Gemm":
+        generate_gemm_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
     else:
         raise Exception(f"Layer {layers_type} not supported")
 
@@ -119,10 +140,14 @@ def generate_layer_code(
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True)
+    generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True, dynamic_reconfig=dynamic_reconfig)
 
     # Generate testbench data
-    if "Swish" in layers_type:
+    if dynamic_reconfig:
+        store_path = os.path.join(os.getcwd(), "generated_files", model_name, "latency_driven", layer_name, "data")
+    else:
+        store_path = os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data")
+    if layers_type == "Swish":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -132,8 +157,8 @@ def generate_layer_code(
         shish_3d(input_shape=shape_in,
                  coarse_in=coarse_factor,
                  file_format="bin",
-                 store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
-    elif "Relu" in layers_type:
+                 store_path=store_path)
+    elif layers_type == "Relu":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -143,8 +168,8 @@ def generate_layer_code(
         relu_3d(input_shape=shape_in,
                  coarse_in=coarse_factor,
                  file_format="bin",
-                 store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
-    elif "Sigmoid" in layers_type:
+                 store_path=store_path)
+    elif layers_type == "Sigmoid":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -154,8 +179,8 @@ def generate_layer_code(
         sigmoid_3d(input_shape=shape_in,
                     coarse_in=coarse_factor,
                     file_format="bin",
-                    store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
-    elif "Add" in layers_type or "Mul" in layers_type:
+                    store_path=store_path)
+    elif layers_type == "Add" or layers_type == "Mul":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -172,8 +197,8 @@ def generate_layer_code(
                     coarse_in=coarse_factor,
                     elemwise_op_type=op_type,
                     file_format="bin",
-                    store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
-    elif "Conv" in layers_type:
+                    store_path=store_path)
+    elif layers_type == "Conv":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -206,10 +231,10 @@ def generate_layer_code(
             coarse_in=coarse_in_factor,
             coarse_out=coarse_out_factor,
             file_format="bin",
-            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
+            store_path=store_path,
             layer_name = layer_name.lower(),
         )
-    elif "Pooling" in layers_type:
+    elif layers_type == "MaxPool" or layers_type == "AvgPool":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -235,9 +260,9 @@ def generate_layer_code(
             coarse_in=coarse_factor,
             pool_op_type=op_type,
             file_format="bin",
-            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
+            store_path=store_path,
         )
-    elif "GlobalAveragePool" in layers_type:
+    elif layers_type == "GlobalAveragePool":
         shape_in = [layers_config["batch_size"],
                     layers_config["channels_in"],
                     layers_config["depth_in"],
@@ -247,8 +272,8 @@ def generate_layer_code(
         gap_3d(input_shape=shape_in,
                coarse_in=coarse_factor,
                file_format="bin",
-               store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"))
-    elif "Gemm" in layers_type:
+               store_path=store_path)
+    elif layers_type == "Gemm":
         shape_in = [layers_config["batch_size"],
                     layers_config["features_in"]]
         shape_out = [layers_config["batch_size"],
@@ -262,14 +287,26 @@ def generate_layer_code(
             coarse_out=coarse_out_factor,
             bias=False,
             file_format="bin",
-            store_path=os.path.join(os.getcwd(), "generated_files", model_name, layer_name, "data"),
+            store_path=store_path,
             layer_name = layer_name.lower(),
         )
-    elif "Activation" in layers_type:
+    elif layers_type == "DR_Activation":
         # TODO: Implement DYNAMIC reconfigurable activation
         pass
-    elif "ElementWise" in layers_type:
-        # TODO: Implement DYNAMIC reconfigurable elementWise
+    elif layers_type == "DR_Conv":
+        # TODO: Implement DYNAMIC reconfigurable conv
+        pass
+    elif layers_type == "DR_ElementWise":
+        # TODO: Implement DYNAMIC reconfigurable elementwise
+        pass
+    elif layers_type == "DR_Pooling":
+        # TODO: Implement DYNAMIC reconfigurable pool
+        pass
+    elif layers_type == "DR_GlobalAveragePool":
+        # TODO: Implement DYNAMIC reconfigurable GlobalAveragePool
+        pass
+    elif layers_type == "DR_Gemm":
+        # TODO: Implement DYNAMIC reconfigurable gemm
         pass
     else:
         raise Exception(f"Layer {layers_type} not supported")
@@ -288,7 +325,10 @@ if __name__ == "__main__":
     if args.config_file:
         layer_configuration = get_layers_configurations(args.config_file)
     else:
-        layer_configuration = get_layers_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_layers.json"))
+        if args.target == "throughput":
+            layer_configuration = get_layers_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_layers.json"))
+        elif args.target == "latency":
+            layer_configuration = get_layers_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, "latency_driven", "config.json"))
 
     for k, v in layer_configuration.items():
         print(f"Generating data for layer {k} of type {v['type']}")
