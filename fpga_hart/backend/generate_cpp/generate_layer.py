@@ -105,6 +105,7 @@ def generate_layer_code(
         print("MaxPool and AveragePool not implemented yet")
         pass
     elif layers_type == "GlobalAveragePool":
+        layer_name = "Gap_" + layer_name.split("_")[1]
         generate_gap_files(layer_name, layers_config, model_name)
     elif layers_type == "Gemm":
         generate_gemm_files(layer_name, layers_config, model_name)
@@ -129,6 +130,7 @@ def generate_layer_code(
         print("DYNAMIC reconfigurable pool not implemented yet")
         pass
     elif layers_type == "DR_GlobalAveragePool":
+        layer_name = "Gap"
         generate_gap_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
     elif layers_type == "DR_Gemm":
         generate_gemm_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
