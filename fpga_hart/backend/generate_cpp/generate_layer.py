@@ -86,6 +86,7 @@ def generate_layer_code(
     layers_config, layers_type, layer_name, model_name, hls_project_path
 ):
     dynamic_reconfig = True if "DR_" in layers_type else False
+    elem_bc = layers_config["broadcasting"] if "broadcasting" in layers_config else False
     # Generate layers files
     if layers_type == "Swish":
         generate_swish_files(layer_name, layers_config, model_name)
@@ -142,7 +143,7 @@ def generate_layer_code(
     # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
 
     # Generate testbench file
-    generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True, dynamic_reconfig=dynamic_reconfig)
+    generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True, dynamic_reconfig=dynamic_reconfig, elem_bc=elem_bc)
 
     # Generate testbench data
     if dynamic_reconfig:
