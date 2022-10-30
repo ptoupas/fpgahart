@@ -54,7 +54,7 @@ def generate_gap_cpp(name: str, config: dict, model_name: str, partition_name: s
                 {layer_name_upper}_GAP_WIDTH,\n\
                 {layer_name_upper}_GAP_DEPTH,\n\
                 {layer_name_lower}_data_t,\n\
-                gap_accum_data_t\n\
+                accum_data_t\n\
             >(in[coarseIndex],out[coarseIndex]);",
                 newlines=2,
             )

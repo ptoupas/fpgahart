@@ -1485,7 +1485,6 @@ def parse_args():
             "gemm",
         ],
     )
-    parser.add_argument("--store_path", default="", type=str)
     parser.add_argument(
         "--input_shape", nargs="+", default=[1, 24, 16, 32, 32], type=int
     )

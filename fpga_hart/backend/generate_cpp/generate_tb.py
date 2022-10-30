@@ -60,9 +60,9 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
         cpp("int err = 0;", newlines=2)
 
         # TODO: Create different interfaces for different types of layers
-        cpp('std::string input_path  = std::string(DATA_DIR)+"/input.dat";')
+        cpp('std::string input_path  = std::string(DATA_DIR)+"/input.bin";')
         cpp(
-            'std::string output_path  = std::string(DATA_DIR)+"/output.dat";',
+            'std::string output_path  = std::string(DATA_DIR)+"/output.bin";',
             newlines=2,
         )
 

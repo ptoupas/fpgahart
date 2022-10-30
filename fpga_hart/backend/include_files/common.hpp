@@ -29,12 +29,14 @@ using namespace std;
 #define DATA_WIDTH   	16
 #define INTEGER_BITS 	8
 
+typedef ap_axis<DATA_WIDTH, 1, 1, 1> axi_stream_t;
+
 #ifdef FLOAT_USAGE
+typedef float datamath_t;
 typedef float data_t;
 typedef float accum_data_t;
 #else
-typedef ap_fixed<16,8> datamath_t;
-typedef ap_fixed<16,8,AP_RND> data_t;
+typedef ap_fixed<DATA_WIDTH,INTEGER_BITS> datamath_t;
+typedef ap_fixed<DATA_WIDTH,INTEGER_BITS,AP_RND> data_t;
 typedef ap_fixed<30,15,AP_RND> accum_data_t;
-typedef ap_fixed<32,18,AP_RND> gap_accum_data_t;
 #endif
