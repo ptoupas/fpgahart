@@ -9,6 +9,7 @@ from collections import deque
 import numpy as np
 import pandas as pd
 import torch
+from fpbinary import FpBinary
 from torch import nn
 
 random.seed(0)
@@ -226,9 +227,9 @@ def showres(
     write_output_binary = np.array(results, dtype=np.float32)
     file_format = "txt"
     if file_format == "bin":
-        write_output_binary.tofile("sw_output.dat")
+        write_output_binary.tofile("sw_output.bin")
     elif file_format == "txt":
-        np.savetxt("sw_output.dat", write_output_binary, fmt="%.8f")
+        np.savetxt("sw_output.txt", write_output_binary, fmt="%.8f")
     else:
         raise Exception("Format not supported")
 
@@ -386,6 +387,22 @@ def transform_weights_fc(
     # return transformed weights
     return weights
 
+def create_host_binary(data, fp_int_part, fp_frac_part, coarse_factor, dma_width) -> list:
+    # create host binary
+    word_bytes = (fp_int_part + fp_frac_part) // 8
+    word_mask = ((2**(fp_int_part + fp_frac_part)) - 1)
+    fp_data = np.array(data.flatten()).reshape(-1, coarse_factor)
+
+    padding_offset = int(dma_width/(fp_int_part + fp_frac_part)) - coarse_factor
+
+    fp_data = np.pad(fp_data, ((0,0), (0, padding_offset)), 'constant', constant_values=0)
+
+    fp_data = [FpBinary(int_bits=fp_int_part, frac_bits=fp_frac_part, signed=True, value=v).bits_to_signed() for v in fp_data.flatten()]
+
+    fp_data = b"".join([(f & word_mask).to_bytes(word_bytes, byteorder='little') for f in fp_data])
+
+    return fp_data
+
 def gap_3d(input_shape, coarse_in, file_format, store_path="generated_data/gap_3d"):
     if not os.path.exists(store_path):
         os.makedirs(store_path)
@@ -394,10 +411,10 @@ def gap_3d(input_shape, coarse_in, file_format, store_path="generated_data/gap_3
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -409,10 +426,10 @@ def gap_3d(input_shape, coarse_in, file_format, store_path="generated_data/gap_3
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -434,9 +451,9 @@ def gemm(
     x = torch.randn(input_shape)
     write_input_binary = x.numpy()
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
-        np.savetxt(store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f")
+        np.savetxt(store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f")
     else:
         raise Exception("Format not supported")
 
@@ -448,10 +465,10 @@ def gemm(
     weights = transform_weights_fc(weights, coarse_in, coarse_out)
 
     # if file_format == "bin":
-    #     weights.tofile(store_path + "/weights.dat")
+    #     weights.tofile(store_path + "/weights.bin")
     # elif file_format == "txt":
     #     np.savetxt(
-    #         store_path + "/weights.dat", weights.flatten(), fmt="%.8f"
+    #         store_path + "/weights.txt", weights.flatten(), fmt="%.8f"
     #     )
     # else:
     #     raise Exception("Format not supported")
@@ -467,9 +484,9 @@ def gemm(
 
     write_out_binary = out.detach().numpy()
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
-        np.savetxt(store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f")
+        np.savetxt(store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f")
     else:
         raise Exception("Format not supported")
 
@@ -495,35 +512,44 @@ def elemwise_3d(
     write_input_binary_1 = x.numpy().transpose(0, 3, 4, 2, 1)
     write_input_binary_2 = y.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary_1.tofile(store_path + "/input_1.dat")
-        write_input_binary_2.tofile(store_path + "/input_2.dat")
+        write_input_binary_1.tofile(store_path + "/input_1.bin")
+        host_data = create_host_binary(write_input_binary_1, 8, 8, coarse_in, 16*coarse_in)
+        with open(store_path + "/ei1.bin", "wb") as f:
+            f.write(host_data)
+        write_input_binary_2.tofile(store_path + "/input_2.bin")
+        host_data = create_host_binary(write_input_binary_2, 8, 8, coarse_in, 16*coarse_in)
+        with open(store_path + "/ei2.bin", "wb") as f:
+            f.write(host_data)
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input_1.dat",
+            store_path + "/input_1.txt",
             write_input_binary_1.flatten(),
             fmt="%.8f",
         )
         np.savetxt(
-            store_path + "/input_2.dat",
+            store_path + "/input_2.txt",
             write_input_binary_2.flatten(),
             fmt="%.8f",
         )
     else:
         raise Exception("Format not supported")
 
-    if elemwise_op_type == "add":
+    if elemwise_op_type == "Add":
         out = torch.add(x, y)
-    elif elemwise_op_type == "mul":
+    elif elemwise_op_type == "Mul":
         out = torch.mul(x, y)
     # print(out.detach().numpy())
     print(out.detach().numpy().shape)
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
+        host_data = create_host_binary(write_out_binary, 8, 8, coarse_in, 16*coarse_in)
+        with open(store_path + "/eo.bin", "wb") as f:
+            f.write(host_data)
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -538,10 +564,10 @@ def shish_3d(input_shape, coarse_in, file_format, store_path="generated_data/shi
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -555,10 +581,10 @@ def shish_3d(input_shape, coarse_in, file_format, store_path="generated_data/shi
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -573,10 +599,13 @@ def sigmoid_3d(input_shape, coarse_in, file_format, store_path="generated_data/s
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
+        host_data = create_host_binary(write_input_binary, 8, 8, coarse_in, 16*coarse_in)
+        with open(store_path + "/si.bin", "wb") as f:
+            f.write(host_data)
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -589,10 +618,13 @@ def sigmoid_3d(input_shape, coarse_in, file_format, store_path="generated_data/s
 
     write_out_binary = out.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
+        host_data = create_host_binary(write_out_binary, 8, 8, coarse_in, 16*coarse_in)
+        with open(store_path + "/so.bin", "wb") as f:
+            f.write(host_data)
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -607,10 +639,10 @@ def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -623,10 +655,10 @@ def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu
 
     write_out_binary = out.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -926,11 +958,11 @@ def part_3d(file_format, config_file, prefix):
         write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
         if file_format == "bin":
             write_input_binary.tofile(
-                os.path.join(file_path, prefix, part) + "/input.dat"
+                os.path.join(file_path, prefix, part) + "/input.bin"
             )
         elif file_format == "txt":
             np.savetxt(
-                os.path.join(file_path, prefix, part) + "/input.dat",
+                os.path.join(file_path, prefix, part) + "/input.txt",
                 write_input_binary.flatten(),
                 fmt="%.8f",
             )
@@ -949,11 +981,11 @@ def part_3d(file_format, config_file, prefix):
         write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
         if file_format == "bin":
             write_out_binary.tofile(
-                os.path.join(file_path, prefix, part) + "/output.dat"
+                os.path.join(file_path, prefix, part) + "/output.bin"
             )
         elif file_format == "txt":
             np.savetxt(
-                os.path.join(file_path, prefix, part) + "/output.dat",
+                os.path.join(file_path, prefix, part) + "/output.txt",
                 write_out_binary.flatten(),
                 fmt="%.8f",
             )
@@ -996,10 +1028,10 @@ def pool_3d(input_shape,
     print(x.numpy().shape)
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat", write_input_binary.flatten(), fmt="%.8f"
+            store_path + "/input.txt", write_input_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -1016,10 +1048,10 @@ def pool_3d(input_shape,
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat", write_out_binary.flatten(), fmt="%.8f"
+            store_path + "/output.txt", write_out_binary.flatten(), fmt="%.8f"
         )
     else:
         raise Exception("Format not supported")
@@ -1123,10 +1155,10 @@ def conv_3d(
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary.tofile(store_path + "/input.dat")
+        write_input_binary.tofile(store_path + "/input.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input.dat",
+            store_path + "/input.txt",
             write_input_binary.flatten(),
             fmt="%.8f",
         )
@@ -1149,9 +1181,9 @@ def conv_3d(
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     # if file_format == "bin":
-    # 	write_weights_binary.tofile(store_path + "/weights.dat")
+    # 	write_weights_binary.tofile(store_path + "/weights.bin")
     # elif file_format == "txt":
-    # 	np.savetxt(store_path + "/weights.dat", write_weights_binary.flatten(), fmt='%.8f')
+    # 	np.savetxt(store_path + "/weights.txt", write_weights_binary.flatten(), fmt='%.8f')
     # else:
     # 	raise Exception("Format not supported")
 
@@ -1186,10 +1218,10 @@ def conv_3d(
 
     write_out_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_out_binary.tofile(store_path + "/output.dat")
+        write_out_binary.tofile(store_path + "/output.bin")
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/output.dat",
+            store_path + "/output.txt",
             write_out_binary.flatten(),
             fmt="%.8f",
         )
