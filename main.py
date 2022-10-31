@@ -119,6 +119,11 @@ def optimizer() -> None:
         if args.sweep:
             wandb.init()
             config = wandb.config
+            config.update({'device': fpga_device})
+            config.update({'clock_frequency': clock_freq})
+            config.update({'total_dsps': dsp})
+            config.update({'total_brams': bram})
+            config.update({'total_mem_bw': mem_bw})
         else:
             wandb.init(config=config_dictionary, project=project_name)
             config = wandb.config
