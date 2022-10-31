@@ -35,7 +35,7 @@ class SimulatedAnnealing(BaseLayer):
         branch_mem=0,
         t_min=1e-5,
         t_max=10,
-        iterationPerTemp=10,
+        iterationPerTemp=15,
         cooling_rate=0.985,
         best_of_iter=1,
         partition_name="",
@@ -43,13 +43,13 @@ class SimulatedAnnealing(BaseLayer):
         ml_flow_id=None,
         wandb_config=None,
         cnn_model_name="",
-        block_gen='pre_while',
-        bblock_keep_percentage=0.6,
-        use_arbitrary_shape=False,
+        block_gen='post_while',
+        bblock_keep_percentage=0.25,
+        use_arbitrary_shape=True,
         use_previous_config=True,
-        chan_dist_thresh=60,
-        depth_dist_thresh=40,
-        height_dist_thresh=60
+        chan_dist_thresh=50,
+        depth_dist_thresh=25,
+        height_dist_thresh=50
     ):
         self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
@@ -1356,13 +1356,6 @@ class SimulatedAnnealing(BaseLayer):
         Returns:
             dict: bb_setup
         """
-        if not initialization:
-            bb_choice = [bb for bb in bblocks]
-            bblocks = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))
-
-        bb_setup = dict()
-        total_dsp = 0
-        total_bram = 0
         if "Activation" in bblocks:
             activations_list = []
             for n in self.graph.nodes:
@@ -1375,6 +1368,19 @@ class SimulatedAnnealing(BaseLayer):
                 if self.graph.nodes[n]["hw_type"] == "ElementWise":
                     if self.graph.nodes[n]['hw'].op_type not in elementwise_list:
                         elementwise_list.append(self.graph.nodes[n]['hw'].op_type)
+
+        total_dsp = 0
+        total_bram = 0
+        if not initialization and bblocks == list(previous_config.keys()):
+            bb_setup = deepcopy(previous_config)
+            bb_choice = [bb for bb in bblocks]
+            bblocks = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))
+            for b in bb_setup:
+                total_dsp += bb_setup[b]["DSP_util"]
+                total_bram += bb_setup[b]["BRAM_util"]
+        else:
+            bb_setup = dict()
+
         for bb in bblocks:
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
@@ -1403,6 +1409,8 @@ class SimulatedAnnealing(BaseLayer):
                     ) = shape_out
                 else:
                     channels_in_dim, channels_out_dim = shape_in[1], shape_out[1]
+                    depth_in_dim, height_in_dim, width_in_dim = 1, 1, 1
+                    depth_out_dim, height_out_dim, width_out_dim = 1, 1, 1
 
                 bb_descriptor = utils.generate_description_from_type(
                     bb,
@@ -1568,7 +1576,6 @@ class SimulatedAnnealing(BaseLayer):
                     layer_config['supported_ops'] = deepcopy(activations_list)
                 elif bb == "ElementWise":
                     layer_config['supported_ops'] = deepcopy(elementwise_list)
-                print(layer_config)
                 bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["coarse_inout"] = coarse_inout
                 bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
