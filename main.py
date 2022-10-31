@@ -106,7 +106,7 @@ def optimizer() -> None:
 
     with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
         config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
-        config_dictionary['aligned_folding_factors'] = not args.nonalignedfactors
+        config_dictionary['alignedfactors'] = not args.nonalignedfactors
         fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
         config_dictionary['device'] = fpga_device
         config_dictionary['clock_frequency'] = clock_freq
@@ -154,9 +154,9 @@ def optimizer() -> None:
         )
 
         if args.target == "throughput":
-            # layer_parser.parse()
+            layer_parser.parse()
             # ["Conv", "Pool", "GlobalAveragePool", "Gemm", "Mul", "Add", "Relu", "Sigmoid", "Swish"]
-            layer_parser.model_custom_layer("Gemm")
+            # layer_parser.model_custom_layer("Conv")
         elif args.target == "latency":
             pass
     else:

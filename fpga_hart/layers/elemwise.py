@@ -102,6 +102,7 @@ class ElementWiseLayer(BaseLayer):
     def get_resource_util(
         self,
         f_coarse_inout: np.float64,
+        supported_ops: list
     ) -> Tuple[float, float]:
 
         final_channel = self.input_shape[1]
@@ -125,8 +126,14 @@ class ElementWiseLayer(BaseLayer):
                 final_channel * final_depth * f_coarse_inout
             )
 
-        muls = muls_addition + muls_multiplication
-        adds = adds_addition + adds_multiplication
+        muls = 0
+        adds = 0
+        if "Add" in supported_ops:
+            muls += muls_addition
+            adds += adds_addition
+        if "Mul" in supported_ops:
+            muls += muls_multiplication
+            adds += adds_multiplication
 
         layer_fifos_arrays = {}
         layer_fifos_arrays["elemwise_bc"] = math.ceil(1 / f_coarse_inout)

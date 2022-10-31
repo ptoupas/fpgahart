@@ -56,6 +56,7 @@ class GAPLayer(BaseLayer):
     def get_resource_util(
         self,
         f_coarse_inout: np.float64,
+        supported_ops: list
     ) -> Tuple[float, float]:
 
         muls = math.ceil(self.channels * f_coarse_inout * 2)

@@ -1346,7 +1346,8 @@ class SimulatedAnnealing(BaseLayer):
         bblocks: list,
         alignedfactors: bool,
         lookuptable: dict,
-        previous_config: dict = None
+        previous_config: dict = None,
+        initialization: bool = False,
     ) -> dict:
         """
         Generate a configuration for each building block based on the min and max channels and filters values
@@ -1355,12 +1356,25 @@ class SimulatedAnnealing(BaseLayer):
         Returns:
             dict: bb_setup
         """
-        bb_choice = [bb for bb in bblocks]
-        bb_choice = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))
+        if not initialization:
+            bb_choice = [bb for bb in bblocks]
+            bblocks = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))
 
         bb_setup = dict()
         total_dsp = 0
         total_bram = 0
+        if "Activation" in bblocks:
+            activations_list = []
+            for n in self.graph.nodes:
+                if self.graph.nodes[n]["hw_type"] == "Activation":
+                    if self.graph.nodes[n]['hw'].op_type not in activations_list:
+                        activations_list.append(self.graph.nodes[n]['hw'].op_type)
+        if "ElementWise" in bblocks:
+            elementwise_list = []
+            for n in self.graph.nodes:
+                if self.graph.nodes[n]["hw_type"] == "ElementWise":
+                    if self.graph.nodes[n]['hw'].op_type not in elementwise_list:
+                        elementwise_list.append(self.graph.nodes[n]['hw'].op_type)
         for bb in bblocks:
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
@@ -1490,8 +1504,15 @@ class SimulatedAnnealing(BaseLayer):
                             / channels_in_dim
                         )
                     assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
+                    if bb == "Activation":
+                        supported_ops = deepcopy(activations_list)
+                    elif bb == "ElementWise":
+                        supported_ops = deepcopy(elementwise_list)
+                    elif bb == "GlobalAveragePool":
+                        supported_ops = []
+
                     dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
-                        f_coarse_inout=coarse_inout
+                        f_coarse_inout=coarse_inout, supported_ops=supported_ops
                     )
                 elif bb == "Gemm":
                     if alignedfactors:
@@ -1543,6 +1564,11 @@ class SimulatedAnnealing(BaseLayer):
                 bb_setup[bb]["interleaving_inout"] = math.ceil(1 / coarse_inout)
             elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
                 layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [coarse_inout])
+                if bb == "Activation":
+                    layer_config['supported_ops'] = deepcopy(activations_list)
+                elif bb == "ElementWise":
+                    layer_config['supported_ops'] = deepcopy(elementwise_list)
+                print(layer_config)
                 bb_setup[bb]["config"] = layer_config
                 bb_setup[bb]["coarse_inout"] = coarse_inout
                 bb_setup[bb]["coarse_factor"] = math.ceil(coarse_inout * channels_in_dim)
@@ -1744,7 +1770,7 @@ class SimulatedAnnealing(BaseLayer):
 
         bblocks, lookuptable = self.generate_building_blocks()
         bblocks_config = self.generate_building_blocks_config(
-            bblocks, alignedfactors, lookuptable
+            bblocks, alignedfactors, lookuptable, initialization=True
         )
 
         cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
@@ -1755,7 +1781,7 @@ class SimulatedAnnealing(BaseLayer):
             for _ in range(100):
                 bblocks, lookuptable = self.generate_building_blocks()
                 bblocks_config = self.generate_building_blocks_config(
-                    bblocks, alignedfactors, lookuptable
+                    bblocks, alignedfactors, lookuptable, initialization=True
                 )
                 cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
                     bblocks_config, lookuptable

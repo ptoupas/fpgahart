@@ -72,6 +72,7 @@ class ActivationLayer(BaseLayer):
     def get_resource_util(
         self,
         f_coarse_inout: np.float64,
+        supported_ops: list
     ) -> Tuple[float, float]:
 
         muls_relu = 0
@@ -81,8 +82,17 @@ class ActivationLayer(BaseLayer):
         muls_swish = math.ceil(self.channels * f_coarse_inout * 4)
         adds_swish = math.ceil(self.channels * f_coarse_inout * 2)
 
-        muls = muls_relu + muls_sigmoid + muls_swish
-        adds = adds_relu + adds_sigmoid + adds_swish
+        muls = 0
+        adds = 0
+        if "Relu" in supported_ops:
+            muls += muls_relu
+            adds += adds_relu
+        if "Sigmoid" in supported_ops:
+            muls += muls_sigmoid
+            adds += adds_sigmoid
+        if "Swish" in supported_ops:
+            muls += muls_swish
+            adds += adds_swish
         # muls = max(muls_relu, muls_sigmoid, muls_swish)
         # adds = max(adds_relu, adds_sigmoid, adds_swish)
 
