@@ -36,7 +36,7 @@ name: fpga_hart_optimization_sweep
 #     value: 20
 #   height_dist_thresh:
 #     values: [20, 60]
-method: bayes # bayes or random or grid
+method: random # bayes or random or grid
 metric:
   goal: minimize
   name: latency
@@ -94,5 +94,5 @@ parameters:
     max: 90
 early_terminate:
   type: hyperband
-  max_iter: 300 # ~ 300 for tmin=1e-6, tmax=10, cooling_rate=0.985
+  max_iter: 100
   s: 2
