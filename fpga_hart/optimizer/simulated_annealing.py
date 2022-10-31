@@ -43,13 +43,13 @@ class SimulatedAnnealing(BaseLayer):
         ml_flow_id=None,
         wandb_config=None,
         cnn_model_name="",
-        block_gen='post_while',
-        bblock_keep_percentage=0.25,
+        block_gen='pre_while',
+        bblock_keep_percentage=0.4,
         use_arbitrary_shape=True,
         use_previous_config=True,
-        chan_dist_thresh=50,
-        depth_dist_thresh=25,
-        height_dist_thresh=50
+        chan_dist_thresh=70,
+        depth_dist_thresh=35,
+        height_dist_thresh=70
     ):
         self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
