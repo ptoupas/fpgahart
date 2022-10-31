@@ -44,12 +44,12 @@ class SimulatedAnnealing(BaseLayer):
         wandb_config=None,
         cnn_model_name="",
         block_gen='pre_while',
-        bblock_keep_percentage=0.4,
+        bblock_keep_percentage=0.2,
         use_arbitrary_shape=True,
         use_previous_config=True,
-        chan_dist_thresh=70,
-        depth_dist_thresh=35,
-        height_dist_thresh=70
+        chan_dist_thresh=60,
+        depth_dist_thresh=30,
+        height_dist_thresh=60
     ):
         self.cnn_model_name = cnn_model_name
         self.wandb_config = wandb_config
