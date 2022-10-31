@@ -106,7 +106,6 @@ def optimizer() -> None:
 
     with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
         config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
-        config_dictionary['alignedfactors'] = not args.nonalignedfactors
         fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
         config_dictionary['device'] = fpga_device
         config_dictionary['clock_frequency'] = clock_freq
@@ -141,7 +140,7 @@ def optimizer() -> None:
             # partition_parser.find_common_layers(groupping=3)
             partition_parser.latency_driven_design(
                 plot_summaries=False,
-                alignedfactors=not args.nonalignedfactors,
+                alignedfactors=config_dictionary['alignedfactors'] if args.enable_wandb else not args.nonalignedfactors,
                 wandb_config=config,
             )
     elif args.type == "layer":

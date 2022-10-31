@@ -1371,7 +1371,7 @@ class SimulatedAnnealing(BaseLayer):
 
         total_dsp = 0
         total_bram = 0
-        if not initialization and bblocks == list(previous_config.keys()):
+        if (not initialization) and (not previous_config == None) and (bblocks == list(previous_config.keys())):
             bb_setup = deepcopy(previous_config)
             bb_choice = [bb for bb in bblocks]
             bblocks = random.choices(bb_choice, k=int(len(bb_choice)*self.bblock_keep_percentage))

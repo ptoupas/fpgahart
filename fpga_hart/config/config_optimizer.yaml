@@ -1,16 +1,16 @@
 simulatedAnnealing:
-  t_min: 0.00001 #1e-5
+  t_min: 0.000001 #1e-6
   t_max: 10
   iterationPerTemp: 10
-  cooling_rate: 0.985
+  cooling_rate: 0.98
   best_of_iter: 1
 max_dsp_util: 95
 max_bram_util: 95
-alignedfactors: False
+alignedfactors: True
 bblock_generation: 'pre_while' # pre_while or post_while
-bblock_keep_percentage: 0.6
-use_arbitrary_shape: False
+bblock_keep_percentage: 0.5
+use_arbitrary_shape: True
 use_previous_config: True
 chan_dist_thresh: 60
-depth_dist_thresh: 40
+depth_dist_thresh: 30
 height_dist_thresh: 60

@@ -1,42 +1,5 @@
 name: fpga_hart_optimization_sweep
-method: grid # bayes or random or grid
-metric:
-  goal: minimize
-  name: latency
-parameters:
-  simulatedAnnealing:
-    parameters:
-      t_min:
-        value: 1e-5
-      t_max:
-        value: 10
-      iterationPerTemp:
-        values: [10, 20]
-      cooling_rate:
-        value: 0.985
-      best_of_iter:
-        value: 3
-  max_dsp_util:
-    value: 95
-  max_bram_util:
-    value: 95
-  alignedfactors:
-    values: [True, False]
-  bblock_generation:
-    values: ['pre_while', 'post_while'] # pre_while or post_while
-  bblock_keep_percentage:
-    values: [0.25, 0.6, 1.0]
-  use_arbitrary_shape:
-    values: [True, False]
-  use_previous_config:
-    values: [True, False]
-  chan_dist_thresh:
-    values: [20, 60]
-  depth_dist_thresh:
-    value: 15
-  height_dist_thresh:
-    values: [20, 60]
-# method: bayes # bayes or random or grid
+# method: grid # bayes or random or grid
 # metric:
 #   goal: minimize
 #   name: latency
@@ -44,56 +7,92 @@ parameters:
 #   simulatedAnnealing:
 #     parameters:
 #       t_min:
-#         distribution: constant
-#         value: 1e-5
+#         value: 1e-6
 #       t_max:
-#         distribution: constant
 #         value: 10
 #       iterationPerTemp:
-#         distribution: int_uniform
-#         min: 10
-#         max: 20
+#         values: [10, 13]
 #       cooling_rate:
-#         distribution: constant
-#         value: 0.985
+#         values: [0.95, 0.97, 0.99]
 #       best_of_iter:
-#         distribution: constant
-#         value: 3
+#         value: 1
 #   max_dsp_util:
-#     distribution: constant
 #     value: 95
 #   max_bram_util:
-#     distribution: constant
 #     value: 95
 #   alignedfactors:
-#     distribution: categorical
-#     values: [True, False]
+#     value: True
 #   bblock_generation:
-#     distribution: categorical
 #     values: ['pre_while', 'post_while'] # pre_while or post_while
 #   bblock_keep_percentage:
-#     distribution: uniform
-#     min: 0.10
-#     max: 1.0
+#     values: [0.25, 0.5, 1.0]
 #   use_arbitrary_shape:
-#     distribution: categorical
 #     values: [True, False]
 #   use_previous_config:
-#     distribution: categorical
 #     values: [True, False]
 #   chan_dist_thresh:
-#     distribution: int_uniform
-#     min: 20
-#     max: 80
+#     values: [20, 60]
 #   depth_dist_thresh:
-#     distribution: int_uniform
-#     min: 10
-#     max: 40
+#     value: 20
 #   height_dist_thresh:
-#     distribution: int_uniform
-#     min: 20
-#     max: 80
+#     values: [20, 60]
+method: bayes # bayes or random or grid
+metric:
+  goal: minimize
+  name: latency
+parameters:
+  simulatedAnnealing:
+    parameters:
+      t_min:
+        distribution: constant
+        value: 1e-6
+      t_max:
+        distribution: constant
+        value: 10
+      iterationPerTemp:
+        values: [10, 13]
+      cooling_rate:
+        distribution: uniform
+        min: 0.95
+        max: 0.99
+      best_of_iter:
+        distribution: constant
+        value: 1
+  max_dsp_util:
+    distribution: constant
+    value: 95
+  max_bram_util:
+    distribution: constant
+    value: 95
+  alignedfactors:
+    distribution: constant
+    value: True
+  bblock_generation:
+    distribution: categorical
+    values: ['pre_while', 'post_while'] # pre_while or post_while
+  bblock_keep_percentage:
+    distribution: uniform
+    min: 0.10
+    max: 1.0
+  use_arbitrary_shape:
+    distribution: categorical
+    values: [True, False]
+  use_previous_config:
+    distribution: categorical
+    values: [True, False]
+  chan_dist_thresh:
+    distribution: int_uniform
+    min: 10
+    max: 90
+  depth_dist_thresh:
+    distribution: int_uniform
+    min: 10
+    max: 50
+  height_dist_thresh:
+    distribution: int_uniform
+    min: 10
+    max: 90
 early_terminate:
   type: hyperband
-  max_iter: 300 # ~ 300 for tmin=1e-5, tmax=10, cooling_rate=0.985
+  max_iter: 300 # ~ 300 for tmin=1e-6, tmax=10, cooling_rate=0.985
   s: 2
