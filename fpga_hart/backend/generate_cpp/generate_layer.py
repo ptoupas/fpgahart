@@ -193,7 +193,7 @@ def generate_layer_code(
         coarse_factor = layers_config["coarse_factor"]
         op_type = layers_config["op_type"]
         broadcasting = layers_config["broadcasting"]
-        shape_in_2 = shape_in
+        shape_in_2 = shape_in.copy()
         if broadcasting:
             shape_in_2[2], shape_in_2[3], shape_in_2[4] = 1, 1, 1
         elemwise_3d(input_shape=shape_in,
