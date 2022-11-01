@@ -160,6 +160,7 @@ class ActivationLayer(BaseLayer):
         total_bw_util = (
             (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
         ) * 100
+        assert total_bw_util <= 100, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)

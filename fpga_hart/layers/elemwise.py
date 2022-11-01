@@ -232,16 +232,27 @@ class ElementWiseLayer(BaseLayer):
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
 
-        layer_mem_bw_in = (
-            abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
-            + abs(gamma_matrix_balanced[1, 1]) * self.cycles_per_sec * self.word_length
-        )
+        if self.broadcasting:
+            layer_mem_bw_in_1 = (
+                abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+            )
+            layer_mem_bw_in_2 = (
+                mem_bw_in_2 * self.cycles_per_sec * self.word_length
+            )
+        else:
+            layer_mem_bw_in_1 = (
+                abs(gamma_matrix_balanced[0, 0]) * self.cycles_per_sec * self.word_length
+            )
+            layer_mem_bw_in_2 = (
+                abs(gamma_matrix_balanced[1, 1]) * self.cycles_per_sec * self.word_length
+            )
         layer_mem_bw_out = (
             abs(gamma_matrix_balanced[-1, -1]) * self.cycles_per_sec * self.word_length
         )
         total_bw_util = (
-            (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
+            (layer_mem_bw_in_1 + layer_mem_bw_in_2 + layer_mem_bw_out) / self.mem_bandwidth
         ) * 100
+        assert total_bw_util <= 100 + 1e-5, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
