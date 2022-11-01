@@ -13,7 +13,6 @@ Create a python environment with python version >=3.7 and install the dependenci
 
 ### Additional arguments
 - `--gap_approx`: Whether to use historical data as approximation for GlobalAveragePooling (GAP) layers or not during the optimization process.
-- `--nonalignedfactors`: Whether to allow the use of folding factors not perfectly divisible by channels/filters or not.
 - `--enable_wandb`: Whether to enable wandb support or not (enabled by default).
 
 

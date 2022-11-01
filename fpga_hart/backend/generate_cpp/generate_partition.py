@@ -1,8 +1,12 @@
 import argparse
+import configparser
 import json
 import os
+from typing import Tuple
 
 import pandas as pd
+import yaml
+from dotmap import DotMap
 from fpga_hart.partitions.partition_parser import PartitionParser
 from fpga_hart.utils import utils
 
@@ -142,11 +146,35 @@ def identify_streams_mismatches(layers_config, connections):
             squeeze_layers.append([in_node, out_node])
     return squeeze_layers
 
+def get_fpga_specs() -> Tuple[str, int, int, int, float]:
+    config = configparser.ConfigParser()
+    config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
+
+    word_length = int(config.get("FPGA Specifications", "word_length"))
+    clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
+    bram = int(config.get("FPGA Specifications", "bram"))
+    bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
+    dsp = int(config.get("FPGA Specifications", "dsp"))
+    mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
+    fpga_device = config.get("FPGA Specifications", "fpga_device")
+
+    return fpga_device, clock_freq, dsp, bram, mem_bw
 
 if __name__ == "__main__":
     args = parse_args()
 
-    parser = PartitionParser(args.model_name, False, False, False, False)
+    with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
+        config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
+        config_dictionary['device'] = fpga_device
+        config_dictionary['clock_frequency'] = clock_freq
+        config_dictionary['total_dsps'] = dsp
+        config_dictionary['total_brams'] = bram
+        config_dictionary['total_mem_bw'] = mem_bw
+
+    config = DotMap(config_dictionary)
+
+    parser = PartitionParser(args.model_name, False, False, False, config, False)
 
     partition_configuration = get_partitions_configurations(args.config_file)
 

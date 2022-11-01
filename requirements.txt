@@ -8,4 +8,5 @@ onnx
 onnxsim
 pydot
 plotly
+dotmap
 onnxoptimizer<=0.2.7

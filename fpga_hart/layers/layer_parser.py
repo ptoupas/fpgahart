@@ -20,9 +20,10 @@ def multithreaded_modeling(operation, input, pool):
 
 @dataclass
 class LayerParser(ModelLayerDescriptor):
-    wandb_config: wandb.Config
+    config: wandb.Config
     singlethreaded: bool = False
     per_layer_plot: bool = False
+    enable_wandb: bool = False
 
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
@@ -51,8 +52,7 @@ class LayerParser(ModelLayerDescriptor):
         layer_design_points(
             layer,
             layer_description,
-            95.0 if self.wandb_config == None else self.wandb_config.max_dsp_util,
-            95.0 if self.wandb_config == None else self.wandb_config.max_bram_util,
+            self.config,
             self.layer_model_file,
             self.report_dict,
             self.singlethreaded,
@@ -118,15 +118,15 @@ class LayerParser(ModelLayerDescriptor):
             name = "custom_conv_layer"
             layer_descriptor = {
                 "operation": "Conv",
-                "shape_in": [[1, 3, 8, 16, 16]],
-                "shape_out": [1, 6, 8, 8, 8],
+                "shape_in": [[1, 256, 2, 16, 16]],
+                "shape_out": [1, 576, 2, 16, 16],
                 "node_in": ["575"],
                 "node_out": "576",
                 "branching": False,
-                "kernel": [6, 3, 3, 3, 3],
-                "bias": [6],
-                "padding": [1, 1, 1],
-                "stride": [1, 2, 2],
+                "kernel": [576, 256, 1, 3, 3],
+                "bias": [576],
+                "padding": [0, 1, 1],
+                "stride": [1, 1, 1],
                 "groups": 1,
                 "dilation": [1, 1, 1],
             }

@@ -38,7 +38,8 @@ class PartitionParser(PartitionDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
-    wandb_config: wandb.Config
+    config: wandb.Config
+    enable_wandb: bool
 
     def __post_init__(self) -> None:
         PartitionDescriptor.__post_init__(self)  # Initialize the parent class
@@ -118,7 +119,7 @@ class PartitionParser(PartitionDescriptor):
     def visualize_graph(self, graph, path, run_id=None):
         PG = nx.nx_pydot.to_pydot(graph)
         PG.write_png(path + ".png")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"graph": wandb.Image(path + ".png")})
 
     def update_shapes(
@@ -188,34 +189,22 @@ class PartitionParser(PartitionDescriptor):
             #     self.update_shapes(layer, channels_reduction_rate=4, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1)
             if self.layers[layer]["operation"] == "GlobalAveragePool":
                 hw_layer = GAPLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
                 hw_layer = Convolutional3DLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "MaxPool" or self.layers[layer]["operation"] == "AveragePool":
                 hw_layer = Pooling3DLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
                 layer_type = "Pooling"
@@ -225,12 +214,8 @@ class PartitionParser(PartitionDescriptor):
                 or self.layers[layer]["operation"] == "Swish"
             ):
                 hw_layer = ActivationLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
                 layer_type = "Activation"
@@ -239,12 +224,8 @@ class PartitionParser(PartitionDescriptor):
                 or self.layers[layer]["operation"] == "Add"
             ):
                 hw_layer = ElementWiseLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
                 layer_type = "ElementWise"
@@ -254,34 +235,22 @@ class PartitionParser(PartitionDescriptor):
             ):
                 layer_type = self.layers[layer]["operation"]
                 hw_layer = FCLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
             elif self.layers[layer]["operation"] == "SqueezeExcitation":
                 layer_type = self.layers[layer]["operation"]
                 hw_layer = SqueezeExcitationLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
             elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
                 hw_layer = BatchNorm3DLayer(
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_dsp_util,
-                    95.0
-                    if self.wandb_config == None
-                    else self.wandb_config.max_bram_util,
+                    self.config.max_dsp_util,
+                    self.config.max_bram_util,
                     self.layers[layer],
                 )
             else:
@@ -359,12 +328,13 @@ class PartitionParser(PartitionDescriptor):
         )
 
         _logger.info("Partition: {}: ".format(name))
-        # optimizer = SimulatedAnnealing(graph, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx)
+        # optimizer = SimulatedAnnealing(graph, config=self.config, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx, enable_wandb=self.enable_wandb)
         optimizer = SimulatedAnnealing(
             graph,
+            config=self.config,
             partition_name=name,
             gap_approx=self.gap_approx,
-            wandb_config=self.wandb_config,
+            enable_wandb=self.enable_wandb,
         )
 
         mwpc, solution_mem, solution_dp = optimizer.run_optimizer()
@@ -404,7 +374,7 @@ class PartitionParser(PartitionDescriptor):
             partition_results["dataSizeOut"],
         ]
 
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             artifact = wandb.Artifact("partitions", type="json")
             with artifact.new_file("partition_config.json") as f:
                 json.dump(partition_results["config"], f)
@@ -657,7 +627,7 @@ class PartitionParser(PartitionDescriptor):
         plt.xlabel("Batch Size")
         plt.ylabel("Seconds")
         plt.title("Latency vs Batch Size")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"Latency vs Batch Size": plt})
         through_gops_sec = (self.model_avg_metrics["GOPs Sum"] * batch_size) / lat_sec
         plt.cla()
@@ -666,7 +636,7 @@ class PartitionParser(PartitionDescriptor):
         plt.xlabel("Batch Size")
         plt.ylabel("GOPs/s")
         plt.title("Throughput (GOPs/s) vs Batch Size")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s) vs Batch Size": plt})
         through_vols_sec = batch_size / lat_sec
         plt.cla()
@@ -675,7 +645,7 @@ class PartitionParser(PartitionDescriptor):
         plt.xlabel("Batch Size")
         plt.ylabel("Volumes/s")
         plt.title("Throughput (Volumes/s) vs Batch Size")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"Throughput (Volumes/s) vs Batch Size": plt})
         gops_sec_dsp = through_gops_sec / self.total_dsp
         plt.cla()
@@ -684,7 +654,7 @@ class PartitionParser(PartitionDescriptor):
         plt.xlabel("Batch Size")
         plt.ylabel("GOPs/s/DSP")
         plt.title("Throughput (GOPs/s/DSP) vs Batch Size")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s/DSP) vs Batch Size": plt})
         gops_sec_dsp_cycle = (gops_sec_dsp / self.clock_frequency) * 1e3
         plt.cla()
@@ -693,7 +663,7 @@ class PartitionParser(PartitionDescriptor):
         plt.xlabel("Batch Size")
         plt.ylabel("GOPs/s/DSP/Cycle")
         plt.title("Throughput (GOPs/s/DSP/Cycle) vs Batch Size")
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s/DSP/Cycle) vs Batch Size": plt})
 
         self.model_avg_metrics["latency(S)-reconfig"] = {
@@ -728,7 +698,7 @@ class PartitionParser(PartitionDescriptor):
         del self.model_avg_metrics["GOPs"]
         del self.model_avg_metrics["depth"]
 
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             wandb.log(self.model_avg_metrics)
             wandb.log({"Partition Results": wandb.Table(dataframe=self.df)})
         end = time.time()

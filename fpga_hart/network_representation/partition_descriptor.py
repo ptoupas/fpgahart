@@ -292,8 +292,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
     def latency_driven_design(
         self,
         plot_summaries: bool = False,
-        alignedfactors: bool = False,
-        wandb_config: wandb.Config = None,
     ) -> None:
         """
         Try to find the best configurations to be used for a hardware
@@ -317,12 +315,14 @@ class PartitionDescriptor(ModelLayerDescriptor):
             + "/latency_driven_graph",
             run_id=None,
         )
+
         optimizer = SimulatedAnnealing(
             graph,
-            wandb_config=wandb_config,
+            config=self.config,
             cnn_model_name=self.model_name,
+            enable_wandb=self.enable_wandb,
         )
-        optimizer.run_optimizer_latency(alignedfactors=alignedfactors)
+        optimizer.run_optimizer_latency(alignedfactors=self.config.alignedfactors)
         return
 
         conv_types = []
@@ -368,8 +368,7 @@ class PartitionDescriptor(ModelLayerDescriptor):
                 cin, cout = layer_design_points(
                     name=layer,
                     description=config,
-                    max_DSP_util=wandb_config.max_dsp_util,
-                    max_BRAM_util=wandb_config.max_bram_util,
+                    config=self.config,
                     model_file="random_file.csv",
                     singlethreaded=True,
                 )

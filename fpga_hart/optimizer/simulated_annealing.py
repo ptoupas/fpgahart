@@ -32,39 +32,23 @@ class SimulatedAnnealing(BaseLayer):
     def __init__(
         self,
         graph,
+        config,
         branch_mem=0,
-        t_min=1e-6,
-        t_max=10,
-        iterationPerTemp=13,
-        cooling_rate=0.985,
-        best_of_iter=1,
         partition_name="",
         gap_approx=False,
-        ml_flow_id=None,
-        wandb_config=None,
         cnn_model_name="",
-        block_gen='pre_while',
-        bblock_keep_percentage=0.2,
-        use_arbitrary_shape=True,
-        use_previous_config=True,
-        chan_dist_thresh=60,
-        depth_dist_thresh=30,
-        height_dist_thresh=60
+        enable_wandb=False,
     ):
         self.cnn_model_name = cnn_model_name
-        self.wandb_config = wandb_config
+        self.config = config
+        self.enable_wandb = enable_wandb
         super().__init__(
-            max_DSP_util=95.0
-            if self.wandb_config == None
-            else self.wandb_config.max_dsp_util,
-            max_BRAM_util=95.0
-            if self.wandb_config == None
-            else self.wandb_config.max_bram_util,
+            max_DSP_util = self.config.max_dsp_util,
+            max_BRAM_util = self.config.max_bram_util,
         )
         # _logger.setLevel(level=logging.DEBUG)
 
         self.gap_approx = gap_approx
-        self.ml_flow_id = ml_flow_id
         self.part_name = partition_name
 
         self.graph = graph
@@ -76,66 +60,18 @@ class SimulatedAnnealing(BaseLayer):
 
         # Simulate Annealing Variables
         self.k = sc.Boltzmann
-        self.t_min = (
-            t_min
-            if self.wandb_config == None
-            else self.wandb_config.simulatedAnnealing["t_min"]
-        )
-        self.t_max = (
-            t_max
-            if self.wandb_config == None
-            else self.wandb_config.simulatedAnnealing["t_max"]
-        )
-        self.cooling_rate = (
-            cooling_rate
-            if self.wandb_config == None
-            else self.wandb_config.simulatedAnnealing["cooling_rate"]
-        )
-        self.iterationPerTemp = (
-            iterationPerTemp
-            if self.wandb_config == None
-            else self.wandb_config.simulatedAnnealing["iterationPerTemp"]
-        )
-        self.best_of_iter = (
-            best_of_iter
-            if self.wandb_config == None
-            else self.wandb_config.simulatedAnnealing["best_of_iter"]
-        )
-        self.block_gen = (
-            block_gen
-            if self.wandb_config == None
-            else self.wandb_config["bblock_generation"]
-        )
-        self.bblock_keep_percentage = (
-            bblock_keep_percentage
-            if self.wandb_config == None
-            else self.wandb_config["bblock_keep_percentage"]
-        )
-        self.use_arbitrary_shape = (
-            use_arbitrary_shape
-            if self.wandb_config == None
-            else self.wandb_config["use_arbitrary_shape"]
-        )
-        self.use_previous_config = (
-            use_previous_config
-            if self.wandb_config == None
-            else self.wandb_config["use_previous_config"]
-        )
-        self.chan_dist_thresh = (
-            chan_dist_thresh
-            if self.wandb_config == None
-            else self.wandb_config["chan_dist_thresh"]
-        )
-        self.depth_dist_thresh = (
-            depth_dist_thresh
-            if self.wandb_config == None
-            else self.wandb_config["depth_dist_thresh"]
-        )
-        self.height_dist_thresh = (
-            height_dist_thresh
-            if self.wandb_config == None
-            else self.wandb_config["height_dist_thresh"]
-        )
+        self.t_min = self.config.simulatedAnnealing.t_min
+        self.t_max = self.config.simulatedAnnealing.t_max
+        self.cooling_rate = self.config.simulatedAnnealing.cooling_rate
+        self.iterationPerTemp = self.config.simulatedAnnealing.iterationPerTemp
+        self.best_of_iter = self.config.simulatedAnnealing.best_of_iter
+        self.block_gen = self.config.bblock_generation
+        self.bblock_keep_percentage = self.config.bblock_keep_percentage
+        self.use_arbitrary_shape = self.config.use_arbitrary_shape
+        self.use_previous_config = self.config.use_previous_config
+        self.chan_dist_thresh = self.config.chan_dist_thresh
+        self.depth_dist_thresh = self.config.depth_dist_thresh
+        self.height_dist_thresh = self.config.height_dist_thresh
 
         self.param_changes = 0
         self.freeze_param = False
@@ -546,7 +482,7 @@ class SimulatedAnnealing(BaseLayer):
             print(f"Temperature  |  Latency     |   Count")
             while current_temp > self.t_min:
 
-                # if not self.wandb_config == None:
+                # if self.enable_wandb:
                 #     log_dict = {}
                 #     log_dict["temperature"] = current_temp
                 #     log_dict["latency"] = prev_cost
@@ -1812,7 +1748,7 @@ class SimulatedAnnealing(BaseLayer):
             if self.block_gen == 'pre_while':
                 bblocks, lookuptable = self.generate_building_blocks()
 
-            if not self.wandb_config == None:
+            if self.enable_wandb:
                 log_dict = {}
                 log_dict["temperature"] = current_temp
                 log_dict["latency"] = prev_cost
@@ -1889,7 +1825,7 @@ class SimulatedAnnealing(BaseLayer):
         print(
             f"DSP Utilization: {final_DSP_util:.3f} - BRAM Utilization: {final_BRAM_util:.3f} - MemBw Utilization: {final_avg_MemBw_util:.3f}"
         )
-        if not self.wandb_config == None:
+        if self.enable_wandb:
             artifact = wandb.Artifact("config", type="json")
             with artifact.new_file("config.json") as f:
                 json.dump(final_config, f, indent=2)

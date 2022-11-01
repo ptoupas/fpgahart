@@ -5,6 +5,7 @@ from multiprocessing import Pool
 
 import networkx as nx
 import numpy as np
+from dotmap import DotMap
 from fpga_hart import _logger
 from fpga_hart.layers.activation import ActivationLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
@@ -26,27 +27,26 @@ def multithreaded_modeling(operation, input, pool):
 def layer_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ) -> None:
     if description["operation"] == "Conv":
         conv_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "MaxPool" or description["operation"] == "AveragePool":
         pooling_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "BatchNormalization":
         batchnorm_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "GlobalAveragePool":
         gap_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif (
         description["operation"] == "Relu"
@@ -54,19 +54,19 @@ def layer_design_points(
         or description["operation"] == "Swish"
     ):
         activation_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "SqueezeExcitation":
         se_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Add" or description["operation"] == "Mul":
         elemwise_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
         fc_design_points(
-            name, description, max_DSP_util, max_BRAM_util, model_file, report_dict, singlethreaded
+            name, description, config, model_file, report_dict, singlethreaded
         )
     else:
         assert False, "{} operation in layer {} is not supported".format(
@@ -90,13 +90,12 @@ def contains_list(part, whole):
 def conv_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    conv = Convolutional3DLayer(max_DSP_util, max_BRAM_util, description)
+    conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     if conv.depthwise:
         convtype = "DepthWise"
@@ -175,12 +174,12 @@ def conv_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -203,12 +202,12 @@ def conv_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -256,7 +255,7 @@ def conv_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=conv)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -267,13 +266,12 @@ def conv_design_points(
 def pooling_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    pool = Pooling3DLayer(max_DSP_util, max_BRAM_util, description)
+    pool = Pooling3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     op_type = pool.op_type
 
@@ -326,12 +324,12 @@ def pooling_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -353,12 +351,12 @@ def pooling_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -404,7 +402,7 @@ def pooling_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=pool)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -415,13 +413,12 @@ def pooling_design_points(
 def batchnorm_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    bn = BatchNorm3DLayer(max_DSP_util, max_BRAM_util, description)
+    bn = BatchNorm3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     coarse_inout = utils.get_factors(bn.channels) / np.int32(bn.channels)
 
@@ -470,12 +467,12 @@ def batchnorm_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -496,12 +493,12 @@ def batchnorm_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -539,7 +536,7 @@ def batchnorm_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=bn)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -551,13 +548,12 @@ def batchnorm_design_points(
 def gap_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    gap = GAPLayer(max_DSP_util, max_BRAM_util, description)
+    gap = GAPLayer(config.max_dsp_util, config.max_bram_util, description)
 
     coarse_inout = utils.get_factors(gap.channels) / np.int32(gap.channels)
 
@@ -606,12 +602,12 @@ def gap_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -632,12 +628,12 @@ def gap_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -675,7 +671,7 @@ def gap_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=gap)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -687,13 +683,12 @@ def gap_design_points(
 def activation_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    activ = ActivationLayer(max_DSP_util, max_BRAM_util, description)
+    activ = ActivationLayer(config.max_dsp_util, config.max_bram_util, description)
 
     coarse_inout = utils.get_factors(activ.channels) / np.int32(activ.channels)
 
@@ -742,12 +737,12 @@ def activation_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -768,12 +763,12 @@ def activation_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -811,7 +806,7 @@ def activation_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=activ)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -823,13 +818,12 @@ def activation_design_points(
 def se_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    se = SqueezeExcitationLayer(max_DSP_util, max_BRAM_util, description)
+    se = SqueezeExcitationLayer(config.max_dsp_util, config.max_bram_util, description)
 
     # layers_in_shape = []
     # layers_out_shape = []
@@ -923,12 +917,12 @@ def se_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -963,12 +957,12 @@ def se_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -1015,13 +1009,12 @@ def se_design_points(
 def elemwise_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    elem = ElementWiseLayer(max_DSP_util, max_BRAM_util, description)
+    elem = ElementWiseLayer(config.max_dsp_util, config.max_bram_util, description)
 
     coarse_inout = utils.get_factors(elem.channels_1) / np.int32(elem.channels_1)
 
@@ -1071,12 +1064,12 @@ def elemwise_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -1098,12 +1091,12 @@ def elemwise_design_points(
                 bram_util.append(r["BRAM"])
 
                 if r["latency(C)"] < min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     min_latency = r["latency(C)"]
                     best = r
                 elif r["latency(C)"] == min_latency and (
-                    r["DSP"] < max_DSP_util and r["BRAM"] < max_BRAM_util
+                    r["DSP"] < config.max_dsp_util and r["BRAM"] < config.max_bram_util
                 ):
                     if r["DSP"] < best["DSP"]:
                         min_latency = r["latency(C)"]
@@ -1144,7 +1137,7 @@ def elemwise_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=elem)
 
-    optimizer = SimulatedAnnealing(graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -1155,13 +1148,12 @@ def elemwise_design_points(
 def fc_design_points(
     name: str,
     description: dict,
-    max_DSP_util: float,
-    max_BRAM_util: float,
+    config: DotMap,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ):
-    fc = FCLayer(max_DSP_util, max_BRAM_util, description)
+    fc = FCLayer(config.max_dsp_util, config.max_bram_util, description)
     description_ = {
         "operation": "Conv",
         "shape_in": [[1, description["kernel"][0], 1, 1, 1]],
@@ -1176,7 +1168,7 @@ def fc_design_points(
         "groups": 1,
         "dilation": [1, 1, 1],
     }
-    fc_as_conv = Convolutional3DLayer(max_DSP_util, max_BRAM_util, description_)
+    fc_as_conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description_)
 
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=fc)
@@ -1186,7 +1178,7 @@ def fc_design_points(
             name
         )
     )
-    optimizer = SimulatedAnnealing(graph=graph)
+    optimizer = SimulatedAnnealing(graph, config)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))

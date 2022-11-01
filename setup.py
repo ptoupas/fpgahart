@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="fpga_hart",
-    version="0.1.0",
+    version="0.2.0",
     description="FPGA toolflow for Human Action Recognition",
     author="Petros Toupas",
     author_email="ptoupas@gmail.com",

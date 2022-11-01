@@ -596,7 +596,7 @@ def generate_layer_config(layer, config):
         layer_config["kernel_depth"] = kerner_shape[0]
         layer_config["kernel_height"] = kerner_shape[1]
         layer_config["kernel_width"] = kerner_shape[2]
-        layer_config["shape_bias"] = bias_shape[0]
+        layer_config["shape_bias"] = bias_shape[0] if bias_shape else 0
         layer_config["pad_depth"] = padding[0]
         layer_config["pad_height"] = padding[1]
         layer_config["pad_width"] = padding[2]
@@ -707,7 +707,7 @@ def generate_layer_config(layer, config):
         layer_config["features_out"] = output_shape[1]
         layer_config["weights_rows"] = weights_shape[0]
         layer_config["weights_cols"] = weights_shape[1]
-        layer_config["shape_bias"] = bias_shape[0]
+        layer_config["shape_bias"] = bias_shape[0] if bias_shape else 0
         layer_config["coarse_in_factor"] = coarse_in_factor
         layer_config["coarse_out_factor"] = coarse_out_factor
     else:
@@ -871,7 +871,7 @@ def check_configuration_validation(config, layers):
             streams_out = math.ceil(streams_out * config[i][0])
             input_streams.append(streams_in)
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
-            print("config for layer {} -> {}".format(name, comb[i]))
+            print("config for layer (not supported) {} -> {}".format(layer, config))
         elif isinstance(layer["layer"], ElementWiseLayer):
             streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
             streams_in1 = math.ceil(streams_in1 * config[i][0])
@@ -880,7 +880,7 @@ def check_configuration_validation(config, layers):
             input_streams.append(streams_in1)
             input_streams.append(streams_in2)
         else:
-            assert False, "Layer {} is not yet supported".format(name)
+            assert False, "Layer {} is not yet supported".format(layer)
 
         if i not in layer_graph.keys():
             layer_graph[i] = {}

@@ -10,7 +10,6 @@ from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
                                                                 relu_3d,
                                                                 shish_3d,
                                                                 sigmoid_3d)
-from fpga_hart.layers.layer_parser import LayerParser
 
 from generate_tb import generate_tb_files
 from generate_top_level_layer import generate_top_level_layer_files
@@ -317,14 +316,6 @@ def generate_layer_code(
 
 if __name__ == "__main__":
     args = parse_args()
-
-    parser = LayerParser(
-        model_name=args.model_name,
-        se_block=False,
-        singlethreaded=False,
-        per_layer_plot=False,
-        wandb_config=None,
-    )
 
     if args.config_file:
         layer_configuration = get_layers_configurations(args.config_file)

@@ -9,6 +9,7 @@ from typing import Tuple
 
 import seaborn as sns
 import yaml
+from dotmap import DotMap
 
 import wandb
 from fpga_hart import _logger
@@ -63,11 +64,6 @@ def parse_args():
         help="whether to use historical data as approximation for GAP layers or not",
     )
     parser.add_argument(
-        "--nonalignedfactors",
-        action="store_true",
-        help="whether to allow the use of folding factors not perfectly divisible by channels/filters or not",
-    )
-    parser.add_argument(
         "--sweep",
         action="store_true",
         help="whether to run a (wandb) sweep of the design space or not",
@@ -113,8 +109,6 @@ def optimizer() -> None:
         config_dictionary['total_brams'] = bram
         config_dictionary['total_mem_bw'] = mem_bw
 
-
-    config = None
     if args.enable_wandb:
         if args.sweep:
             wandb.init()
@@ -127,6 +121,8 @@ def optimizer() -> None:
         else:
             wandb.init(config=config_dictionary, project=project_name)
             config = wandb.config
+    else:
+        config = DotMap(config_dictionary)
 
     if args.type == "partition":
         partition_parser = PartitionParser(
@@ -135,7 +131,8 @@ def optimizer() -> None:
             gap_approx=args.gap_approx,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
-            wandb_config=config,
+            config=config,
+            enable_wandb=args.enable_wandb,
         )
 
         if args.target == "throughput":
@@ -143,18 +140,15 @@ def optimizer() -> None:
             # partition_parser.model_custom_partition()
         elif args.target == "latency":
             # partition_parser.find_common_layers(groupping=3)
-            partition_parser.latency_driven_design(
-                plot_summaries=False,
-                alignedfactors=config_dictionary['alignedfactors'] if args.enable_wandb else not args.nonalignedfactors,
-                wandb_config=config,
-            )
+            partition_parser.latency_driven_design()
     elif args.type == "layer":
         layer_parser = LayerParser(
             model_name=args.model_name,
             se_block=args.se_block,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
-            wandb_config=config,
+            config=config,
+            enable_wandb=args.enable_wandb,
         )
 
         if args.target == "throughput":
