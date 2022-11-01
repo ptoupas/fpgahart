@@ -512,22 +512,22 @@ def elemwise_3d(
     write_input_binary_1 = x.numpy().transpose(0, 3, 4, 2, 1)
     write_input_binary_2 = y.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":
-        write_input_binary_1.tofile(store_path + "/input_1.bin")
+        write_input_binary_1.tofile(store_path + "/input1.bin")
         host_data = create_host_binary(write_input_binary_1, 8, 8, coarse_in, 16*coarse_in)
         with open(store_path + "/ei1.bin", "wb") as f:
             f.write(host_data)
-        write_input_binary_2.tofile(store_path + "/input_2.bin")
+        write_input_binary_2.tofile(store_path + "/input2.bin")
         host_data = create_host_binary(write_input_binary_2, 8, 8, coarse_in, 16*coarse_in)
         with open(store_path + "/ei2.bin", "wb") as f:
             f.write(host_data)
     elif file_format == "txt":
         np.savetxt(
-            store_path + "/input_1.txt",
+            store_path + "/input1.txt",
             write_input_binary_1.flatten(),
             fmt="%.8f",
         )
         np.savetxt(
-            store_path + "/input_2.txt",
+            store_path + "/input2.txt",
             write_input_binary_2.flatten(),
             fmt="%.8f",
         )
