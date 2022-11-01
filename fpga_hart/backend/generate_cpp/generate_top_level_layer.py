@@ -52,7 +52,25 @@ def generate_top_level_layer_cpp(layer_name: str, model_name: str, partition_nam
                 cpp("T tmp;")
                 cpp("tmp.range() = in[coarseIndex].read().data;")
                 cpp("out[coarseIndex].write(tmp);")
+    if "Gemm" in layer_name:
+        with cpp.block(
+            "template <int PIXEL_LOOP, int COARSE_IN, int COARSE_OUT, typename T, typename T_AXIS>\n\
+            void axis_to_stream(\n\
+                    stream_t(T_AXIS) in[COARSE_IN][COARSE_OUT],\n\
+                    stream_t(T) out[COARSE_IN][COARSE_OUT])"
+        ):
+            cpp("#pragma HLS INLINE OFF", newlines=2)
 
+            cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
+            cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
+
+            with cpp.block("for(int coarseInIndex=0; coarseInIndex<COARSE_IN; coarseInIndex++)"):
+                with cpp.block("for(int coarseOutIndex=0; coarseOutIndex<COARSE_OUT; coarseOutIndex++)"):
+                    cpp("#pragma HLS PIPELINE II=1")
+                    with cpp.block("for(int pixelIndex=0; pixelIndex<PIXEL_LOOP; pixelIndex++)"):
+                        cpp("T tmp;")
+                        cpp("tmp.range() = in[coarseInIndex][coarseOutIndex].read().data;")
+                        cpp("out[coarseInIndex][coarseOutIndex].write(tmp);")
     with cpp.block(
         "template <int PIXEL_LOOP, int COARSE, typename T, typename T_AXIS>\n\
          void stream_to_axis(\n\
