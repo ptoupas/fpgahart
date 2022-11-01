@@ -60,11 +60,11 @@ class SimulatedAnnealing(BaseLayer):
 
         # Simulate Annealing Variables
         self.k = sc.Boltzmann
-        self.t_min = self.config.simulatedAnnealing.t_min
-        self.t_max = self.config.simulatedAnnealing.t_max
-        self.cooling_rate = self.config.simulatedAnnealing.cooling_rate
-        self.iterationPerTemp = self.config.simulatedAnnealing.iterationPerTemp
-        self.best_of_iter = self.config.simulatedAnnealing.best_of_iter
+        self.t_min = self.config.simulatedAnnealing["t_min"]
+        self.t_max = self.config.simulatedAnnealing["t_max"]
+        self.cooling_rate = self.config.simulatedAnnealing["cooling_rate"]
+        self.iterationPerTemp = self.config.simulatedAnnealing["iterationPerTemp"]
+        self.best_of_iter = self.config.simulatedAnnealing["best_of_iter"]
         self.block_gen = self.config.bblock_generation
         self.bblock_keep_percentage = self.config.bblock_keep_percentage
         self.use_arbitrary_shape = self.config.use_arbitrary_shape
@@ -1493,6 +1493,21 @@ class SimulatedAnnealing(BaseLayer):
                     )
                     return None
 
+            mem_bw = bb_setup[bb]["hw"].mem_words_per_cycle
+            if "ElementWise" in bb:
+                bw_in, bw_out = self.get_mem_bw_feasible(n_in=2, n_out=1)
+                bw_in_1 = bw_in[0] * mem_bw
+                bw_in_2 = bw_in[1] * mem_bw
+                bw_out = bw_out[0] * mem_bw
+                bb_setup[bb]["bw_in"] = [bw_in_1, bw_in_2]
+                bb_setup[bb]["bw_out"] = [bw_out]
+            else:
+                bw_in, bw_out = self.get_mem_bw_feasible(n_in=1, n_out=1)
+                bw_in = bw_in[0] * mem_bw
+                bw_out = bw_out[0] * mem_bw
+                bb_setup[bb]["bw_in"] = [bw_in]
+                bb_setup[bb]["bw_out"] = [bw_out]
+
             if "Conv" in bb:
                 layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [1, coarse_in, coarse_out])
                 bb_setup[bb]["config"] = layer_config
@@ -1574,8 +1589,8 @@ class SimulatedAnnealing(BaseLayer):
                 )
                 if bb_type == "Gemm":
                     total_block_calls = (
-                        out_calls * depth_calls * height_calls * width_calls
-                    )  # in_calls
+                        in_calls * out_calls * depth_calls * height_calls * width_calls
+                    )
                 else:
                     total_block_calls = (
                         in_calls * out_calls * depth_calls * height_calls * width_calls
@@ -1603,8 +1618,8 @@ class SimulatedAnnealing(BaseLayer):
                     f_fine=1,
                     f_coarseIn=bblocks_config[bb_type]["f_coarseIn"],
                     f_coarseOut=bblocks_config[bb_type]["f_coarseOut"],
-                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_in=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
                 bblocks_config[bb_type]["hw"].padding = bblock_padding
                 bblocks_config[bb_type]["hw"].stride = bblock_stride
@@ -1617,8 +1632,8 @@ class SimulatedAnnealing(BaseLayer):
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     f_fine=1,
                     f_coarse_inout=bblocks_config[bb_type]["coarse_inout"],
-                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_in=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
                 bblocks_config[bb_type]["hw"].padding = bblock_padding
                 bblocks_config[bb_type]["hw"].stride = bblock_stride
@@ -1626,15 +1641,15 @@ class SimulatedAnnealing(BaseLayer):
                 bblocks_config[bb_type]["hw"].op_type = hw.op_type
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
-                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_in=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
                 bblocks_config[bb_type]["hw"].op_type = "Activation"
             elif bb_type == "GlobalAveragePool":
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
-                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_in=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
             elif bb_type == "ElementWise":
                 bblocks_config[bb_type]["hw"].op_type = hw.op_type
@@ -1650,9 +1665,9 @@ class SimulatedAnnealing(BaseLayer):
 
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_inout=bblocks_config[bb_type]["coarse_inout"],
-                    mem_bw_in_1=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
-                    mem_bw_in_2=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 3,
+                    mem_bw_in_1=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_in_2=bblocks_config[bb_type]["bw_in"][1],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
                 bblocks_config[bb_type]["hw"].op_type = "ElementWise"
                 bblocks_config[bb_type]["hw"].input_shape_2 = bblock_input_shape_2
@@ -1660,8 +1675,8 @@ class SimulatedAnnealing(BaseLayer):
                 performance_modeling = bblocks_config[bb_type]["hw"].get_design_point(
                     coarse_in=bblocks_config[bb_type]["coarse_in"],
                     coarse_out=bblocks_config[bb_type]["coarse_out"],
-                    mem_bw_in=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
-                    mem_bw_out=bblocks_config[bb_type]["hw"].mem_words_per_cycle / 2,
+                    mem_bw_in=bblocks_config[bb_type]["bw_in"][0],
+                    mem_bw_out=bblocks_config[bb_type]["bw_out"][0],
                 )
 
             # TODO: Revert back the shapes of the bblocks_config[bb_type]["hw"]
