@@ -3,7 +3,7 @@ import os
 from layers.codegen import *
 
 
-def generate_top_level_layer_cpp(layer_name: str, model_name: str, partition_name: str, hls_project_path: str, dynamic_reconfig: bool):
+def generate_top_level_layer_cpp(layer_name: str, model_name: str, partition_name: str, dynamic_reconfig: bool):
     layer_name_lower = layer_name.lower()
     layer_name_upper = layer_name.upper()
 
@@ -202,7 +202,7 @@ def generate_top_level_layer_cpp(layer_name: str, model_name: str, partition_nam
 
     cpp.close()
 
-def generate_top_level_layer_hpp(layer_name: str, model_name: str, partition_name: str, hls_project_path: str, dynamic_reconfig: bool):
+def generate_top_level_layer_hpp(layer_name: str, model_name: str, partition_name: str, dynamic_reconfig: bool):
 
     layer_name_lower = layer_name.lower()
     layer_name_upper = layer_name.upper()
@@ -266,7 +266,7 @@ def generate_top_level_layer_hpp(layer_name: str, model_name: str, partition_nam
 
     hpp.close()
 
-def generate_top_level_layer_files(layer_name: str, model_name: str, hls_project_path: str, partition_name: str="", dynamic_reconfig: bool=False):
+def generate_top_level_layer_files(layer_name: str, model_name: str, partition_name: str="", dynamic_reconfig: bool=False):
     if dynamic_reconfig:
         if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", layer_name, "src")):
             os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", layer_name, "src"))
@@ -274,5 +274,5 @@ def generate_top_level_layer_files(layer_name: str, model_name: str, hls_project
         if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "src")):
             os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, layer_name, "src"))
 
-    generate_top_level_layer_hpp(layer_name, model_name, partition_name, hls_project_path, dynamic_reconfig)
-    generate_top_level_layer_cpp(layer_name, model_name, partition_name, hls_project_path, dynamic_reconfig)
+    generate_top_level_layer_hpp(layer_name, model_name, partition_name, dynamic_reconfig)
+    generate_top_level_layer_cpp(layer_name, model_name, partition_name, dynamic_reconfig)

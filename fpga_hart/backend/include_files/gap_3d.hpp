@@ -49,7 +49,7 @@ void gap_3d(
 	average_loop_channel: for(unsigned int channel_index=0 ; channel_index < channels ; channel_index++) {
 #pragma HLS PIPELINE II=1 rewind
 		avg_gap_t tmp = reader[channel_index];
-		gap_t result = gap_t(tmp) / gap_t(feature_map_dimensions);
+		avg_gap_t result = tmp / avg_gap_t(feature_map_dimensions);
 		out.write(gap_t(result));
 	}
 

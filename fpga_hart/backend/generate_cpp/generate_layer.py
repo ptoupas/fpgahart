@@ -141,7 +141,7 @@ def generate_layer_code(
 
     # Generate top level layer file
     # TODO: Create a script to provide support for all the types of layers
-    generate_top_level_layer_files(layer_name, model_name, hls_project_path, dynamic_reconfig=dynamic_reconfig)
+    generate_top_level_layer_files(layer_name, model_name, dynamic_reconfig=dynamic_reconfig)
 
     # Generate testbench file
     generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True, dynamic_reconfig=dynamic_reconfig, elem_bc=elem_bc)

@@ -346,7 +346,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    weights_file_path = os.path.join(hls_project_path, model_name, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
+    weights_file_path = os.path.join(hls_project_path, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
 
     hpp = CppFile(
         os.path.join(

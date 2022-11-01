@@ -12,7 +12,7 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
         partition_name_upper = partition_name.upper()
 
     if dynamic_reconfig:
-        data_dir = os.path.join(hls_project_path, model_name, partition_name, "latency_driven", layer_name, "data")
+        data_dir = os.path.join(hls_project_path, partition_name, "latency_driven", layer_name, "data")
         cpp = CppFile(
             os.path.join(
                 os.getcwd(),
@@ -26,7 +26,7 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
             )
         )
     else:
-        data_dir = os.path.join(hls_project_path, model_name, partition_name, layer_name, "data")
+        data_dir = os.path.join(hls_project_path, partition_name, layer_name, "data")
         cpp = CppFile(
             os.path.join(
                 os.getcwd(),
