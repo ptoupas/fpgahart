@@ -49,7 +49,7 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
         # TODO: Create different interfaces for different types of layers
         data_type_postfix_in = "data_t"
         data_type_postfix_out = "data_t"
-        if "Sigmoid" in layer_name or "Swish" in layer_name or "Relu" in layer_name or "Gap" in layer_name or "Mul" in layer_name or "Add" in layer_name:
+        if "Sigmoid" in layer_name or "Swish" in layer_name or "Relu" in layer_name or "Gap" in layer_name or "Mul" in layer_name or "Add" in layer_name or "ElementWise" in layer_name or "Activation" in layer_name:
             input_streams = "COARSE"
             output_streams = "COARSE"
             cin_dim = f"{partition_name_upper}_CHANNELS"
@@ -57,9 +57,9 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
             win_dim = f"{partition_name_upper}_WIDTH"
             din_dim = f"{partition_name_upper}_DEPTH"
             cout_dim = f"{partition_name_upper}_CHANNELS"
-            hout_dim = f"{partition_name_upper}_HEIGHT"
-            wout_dim = f"{partition_name_upper}_WIDTH"
-            dout_dim = f"{partition_name_upper}_DEPTH"
+            hout_dim = f"{partition_name_upper}_HEIGHT" if not "Gap" in layer_name else "1"
+            wout_dim = f"{partition_name_upper}_WIDTH" if not "Gap" in layer_name else "1"
+            dout_dim = f"{partition_name_upper}_DEPTH" if not "Gap" in layer_name else "1"
         else:
             input_streams = "COARSE_IN"
             output_streams = "COARSE_OUT"
@@ -371,6 +371,7 @@ def generate_tb_cpp(layer_name: str, model_name: str, partition_name: str, hls_p
 
         cpp("return err;")
 
+    cpp.close()
 
 def generate_tb_files(layer_name: str, model_name: str, hls_project_path: str, partition_name: str="", is_layer: bool=False, dynamic_reconfig: bool=False, elem_bc: bool = False):
     if dynamic_reconfig:

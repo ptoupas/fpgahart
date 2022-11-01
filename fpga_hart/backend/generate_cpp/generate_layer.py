@@ -13,6 +13,7 @@ from fpga_hart.backend.python_prototyping.generate_data import (conv_3d,
 from fpga_hart.layers.layer_parser import LayerParser
 
 from generate_tb import generate_tb_files
+from generate_top_level_layer import generate_top_level_layer_files
 from layers.generate_conv import generate_conv_files
 from layers.generate_elemwise import generate_elemwise_files
 from layers.generate_gap import generate_gap_files
@@ -140,7 +141,7 @@ def generate_layer_code(
 
     # Generate top level layer file
     # TODO: Create a script to provide support for all the types of layers
-    # generate_top_level_files(graph, branch_depth, layers_config, layer_name, prefix)
+    generate_top_level_layer_files(layer_name, model_name, hls_project_path, dynamic_reconfig=dynamic_reconfig)
 
     # Generate testbench file
     generate_tb_files(layer_name, model_name, hls_project_path, is_layer=True, dynamic_reconfig=dynamic_reconfig, elem_bc=elem_bc)
