@@ -33,7 +33,6 @@ void fork_3d(hls::stream<T> in[K_H][K_W][K_D], hls::stream<T> out[COARSE_OUT][K_
 
     T local_cache[kh][kw][kd];
 #pragma HLS ARRAY_PARTITION variable = local_cache complete dim = 0
-#pragma HLS DEPENDENCE variable = local_cache RAW intra true
 
 pixel_loop:
     for (unsigned long pixel_index = 0; pixel_index < batch * height * width * depth * channels; pixel_index++)
@@ -51,6 +50,7 @@ pixel_loop:
                 coarse_loop:
                     for (unsigned int coarse_index = 0; coarse_index < coarse_out; coarse_index++)
                     {
+                        #pragma HLS DEPENDENCE variable = local_cache RAW intra true
                         if (coarse_index == 0)
                         {
                             DO_PRAGMA(HLS OCCURRENCE cycle = occurrence_coarse_distance)

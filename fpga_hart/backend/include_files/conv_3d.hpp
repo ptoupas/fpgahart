@@ -45,7 +45,7 @@ void conv_3d_intr(
 	const unsigned int filters_per_group  = DIVIDE(filters, groups);
 
     const unsigned int interval = DIVIDE(kh*kw*kd,fine);
-	
+
 	const unsigned int window_cache_dependence_distance = batch*height*width*depth*channels;
 
     const unsigned int weights_partition_factor_k1 = MIN(fine,kh);
@@ -356,7 +356,7 @@ void conv_3d(
     const unsigned int channels = CHANNELS;
     const unsigned int filters  = FILTERS;
     const unsigned int groups   = GROUPS;
-	
+
 	const unsigned int occurrence_filter_distance = batch*height*width*depth*channels;
 
 	const unsigned int channels_per_group = channels; //DIVIDE(channels,groups);
@@ -369,7 +369,7 @@ void conv_3d(
             filter_loop: for(unsigned int filter_index=0;filter_index<filters_per_group;filter_index++) {
 #pragma HLS LOOP_FLATTEN
 #pragma HLS PIPELINE II=1
-//#pragma HLS DEPENDENCE variable=windowCache RAW intra true
+#pragma HLS DEPENDENCE variable=windowCache RAW intra true
                 if(filter_index%filters_per_group == 0) {
                 	DO_PRAGMA(HLS OCCURRENCE cycle=occurrence_filter_distance)
                     window_cache = in.read();

@@ -36,13 +36,13 @@ void accum_3d(
 #pragma HLS STREAM variable=out depth=filters_per_group*2+1
 
     T acc[filters_per_group];
-#pragma HLS DEPENDENCE variable=acc WAR intra true
 //#pragma HLS BIND_STORAGE variable=acc type=ram_2p
 
     stream_pixel_loop: for(unsigned long pixel_index=0;pixel_index<batch*height*width*depth*groups;pixel_index++) {
         stream_channel_loop: for(unsigned int channel_index=0;channel_index<channels_per_group;channel_index++) {
             stream_filter_loop: for(unsigned int filter_index=0;filter_index<filters_per_group;filter_index++) {
                 #pragma HLS PIPELINE II=1 rewind
+                #pragma HLS DEPENDENCE variable=acc WAR intra true
                 T prev = ( channel_index == 0 ) ? T(0) : acc[filter_index] ;
                 T curr =  prev + in.read();
                 acc[filter_index] = curr;
@@ -81,6 +81,7 @@ void accum_accumulate_inner_3d(
     channel_loop: for(unsigned int channel_index=0; channel_index<channels_per_group; channel_index++) {
         #pragma HLS loop_flatten
         #pragma HLS pipeline II=1 rewind
+        #pragma HLS dependence variable=acc WAR intra false
         accum_t cache = in[filter_index].read();
         acc = ( channel_index == 0 ) ?  cache : accum_t(cache + acc);
         if( channel_index == (channels_per_group-1) ) {
@@ -119,8 +120,8 @@ void accum_accumulate_3d(
 
     // accumulation cache
     accum_t acc = 0;
-    #pragma HLS dependence variable=acc WAR intra false
-    #pragma HLS dependence variable=acc RAW intra true
+    // #pragma HLS dependence variable=acc WAR intra false
+    // #pragma HLS dependence variable=acc RAW intra true
 
     pixel_loop: for(unsigned int pixel_index=0; pixel_index<batch*height*width*depth*groups; pixel_index++) {
         filter_loop: for(unsigned int filter_index=0; filter_index<filters_per_group; filter_index++) {
