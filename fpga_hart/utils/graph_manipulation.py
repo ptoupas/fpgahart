@@ -5,6 +5,7 @@ from typing import Tuple
 
 import networkx as nx
 import numpy as np
+
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.utils import utils
@@ -255,49 +256,58 @@ def add_off_chip_connections(
 
     mem_in_count = 1
     mem_out_count = 1
-    for n in graph.nodes():
+    input_nodes = []
+    output_nodes = []
+    for n in nx.topological_sort(graph):
         edges_in = graph.in_edges(n)
         edges_out = graph.out_edges(n)
         if not edges_in:
-            input_node = n
+            input_nodes.append(n)
         if not edges_out:
-            output_node = n
+            output_nodes.append(n)
 
-    if not in_connections and not out_connections:
-        read_points.append(input_node)
-        add_node_to_position(
-            G=graph,
-            new_node="Mem_in{}".format(mem_in_count),
-            connect_node=input_node,
-            connect_pos="pre",
-        )
+    # if not in_connections and not out_connections:
+    for in_n in input_nodes:
+        read_points.append(in_n)
+        if not 'mem_in' in in_n.lower():
+            add_node_to_position(
+                G=graph,
+                new_node="Mem_in{}".format(mem_in_count),
+                connect_node=in_n,
+                connect_pos="pre",
+            )
         mem_in_count += 1
-        write_points.append(output_node)
-        add_node_to_position(
-            G=graph,
-            new_node="Mem_out{}".format(mem_out_count),
-            connect_node=output_node,
-            connect_pos="post",
-        )
+
+    for out_n in output_nodes:
+        write_points.append(out_n)
+        if not 'mem_out' in out_n.lower():
+            add_node_to_position(
+                G=graph,
+                new_node="Mem_out{}".format(mem_out_count),
+                connect_node=out_n,
+                connect_pos="post",
+            )
         mem_out_count += 1
 
     for con_in in in_connections:
-        add_node_to_position(
-            G=graph,
-            new_node="Mem_in{}".format(mem_in_count),
-            connect_node=con_in,
-            connect_pos="pre",
-        )
+        if not 'mem_in' in con_in.lower():
+            add_node_to_position(
+                G=graph,
+                new_node="Mem_in{}".format(mem_in_count),
+                connect_node=con_in,
+                connect_pos="pre",
+            )
         read_points.append(con_in)
         mem_in_count += 1
 
     for con_out in out_connections:
-        add_node_to_position(
-            G=graph,
-            new_node="Mem_out{}".format(mem_out_count),
-            connect_node=con_out,
-            connect_pos="post",
-        )
+        if not 'mem_out' in con_out.lower():
+            add_node_to_position(
+                G=graph,
+                new_node="Mem_out{}".format(mem_out_count),
+                connect_node=con_out,
+                connect_pos="post",
+            )
         write_points.append(con_out)
         mem_out_count += 1
 
@@ -324,3 +334,18 @@ def add_off_chip_connections(
 def visualize_graph(graph: nx.DiGraph, path: str) -> None:
     PG = nx.nx_pydot.to_pydot(graph)
     PG.write_png(path + ".png")
+
+
+def get_input_nodes(graph):
+    input_nodes = []
+    for node in graph.nodes():
+        if graph.in_degree[node] == 0:
+            input_nodes.append(node)
+    return input_nodes
+
+def get_output_nodes(graph):
+    output_nodes = []
+    for node in graph.nodes():
+        if graph.out_degree[node] == 0:
+            output_nodes.append(node)
+    return output_nodes

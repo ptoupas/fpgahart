@@ -13,6 +13,10 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib import pyplot as plt
+from scipy.spatial.distance import cdist
+from sklearn.cluster import KMeans
+
 from fpga_hart import _logger
 from fpga_hart.layers.activation import ActivationLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
@@ -22,9 +26,6 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from matplotlib import pyplot as plt
-from scipy.spatial.distance import cdist
-from sklearn.cluster import KMeans
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
@@ -967,6 +968,8 @@ def get_branch_start_end_points(graph):
             elif graph.out_degree[next_node] > 1:
                 extra_split_points += 1
                 next_node = list(graph.successors(next_node))[0]
+            else:
+                break
 
             if graph.in_degree[next_node] > 1:
                 extra_split_points -= 1
