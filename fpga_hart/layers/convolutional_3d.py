@@ -3,6 +3,7 @@ import math
 from typing import Tuple
 
 import numpy as np
+
 from fpga_hart import _logger
 from fpga_hart.layers.base_layer import BaseLayer
 
@@ -69,6 +70,9 @@ class Convolutional3DLayer(BaseLayer):
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
         self.bias_shape = [self.filters]
+        if self.depthwise:
+            self.channels = self.filters
+            self.groups = self.filters
 
         if groups is not None:
             self.groups = groups
@@ -284,6 +288,7 @@ class Convolutional3DLayer(BaseLayer):
         mem_bw_in: int,
         mem_bw_out: int,
         wr_factor: int = 1,
+        ignore_bw_util: bool = False
     ) -> dict:
         self.update_layer()
 
@@ -443,7 +448,7 @@ class Convolutional3DLayer(BaseLayer):
         total_bw_util = (
             (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
         ) * 100
-        assert total_bw_util <= 100, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
+        assert total_bw_util <= 100 or ignore_bw_util, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix)

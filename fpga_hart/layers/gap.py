@@ -29,6 +29,21 @@ class GAPLayer(BaseLayer):
         self.data_size_in = np.prod(np.array(self.input_shape[1:]))
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
+    def update_shapes(self, input_shape, output_shape):
+        self.input_shape = input_shape
+        self.channels = self.input_shape[1]
+        self.depth_in = self.input_shape[2]
+        self.rows_in = self.input_shape[3]
+        self.cols_in = self.input_shape[4]
+        self.data_size_in = np.prod(np.array(self.input_shape[1:]))
+
+        self.output_shape = output_shape
+        self.filters = self.output_shape[1]
+        self.depth_out = self.output_shape[2]
+        self.rows_out = self.output_shape[3]
+        self.cols_out = self.output_shape[4]
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
+        
     def update_layer(self):
         self.full_rate_in = []
         self.full_rate_out = []
@@ -111,7 +126,7 @@ class GAPLayer(BaseLayer):
         self.max_streams_out = self.filters
         return self.max_streams_in, self.max_streams_out
 
-    def get_design_point(self, coarse_inout, mem_bw_in, mem_bw_out, gap_approx=False):
+    def get_design_point(self, coarse_inout, mem_bw_in, mem_bw_out, gap_approx=False, ignore_bw_util=False):
         self.gap_approx = gap_approx
         self.update_layer()
 
@@ -137,7 +152,7 @@ class GAPLayer(BaseLayer):
         total_bw_util = (
             (layer_mem_bw_in + layer_mem_bw_out) / self.mem_bandwidth
         ) * 100
-        assert total_bw_util <= 100, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
+        assert total_bw_util <= 100 or ignore_bw_util, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)

@@ -2,6 +2,7 @@ import math
 from typing import Tuple
 
 import numpy as np
+
 from fpga_hart.layers.base_layer import BaseLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
@@ -40,6 +41,57 @@ class ElementWiseLayer(BaseLayer):
             """
             Works only in case where the broadcasting is done in the channels dimension i.e. multiplication between 2 tensors of shape c X h X w X d * c X 1 X 1 X 1 resulting in a tensor of shape c X h X w X d
             """
+            self.input_shape = (
+                self.input_shape_1
+                if int(np.prod(np.array(self.input_shape_1[1:])))
+                > int(np.prod(np.array(self.input_shape_2[1:])))
+                else self.input_shape_2
+            )
+            self.input_shape_red = (
+                self.input_shape_1
+                if int(np.prod(np.array(self.input_shape_1[1:])))
+                < int(np.prod(np.array(self.input_shape_2[1:])))
+                else self.input_shape_2
+            )
+            assert (
+                self.output_shape == self.input_shape
+            ), "Elementwise layer ({}) input {} and output {} shapes does not match.".format(
+                self.op_type, self.input_shape, self.output_shape
+            )
+        else:
+            self.input_shape = self.input_shape_1
+            self.input_shape_red = self.input_shape_2
+            assert (
+                self.output_shape == self.input_shape_1
+                and self.output_shape == self.input_shape_2
+            ), "Elementwise layer ({}) input 1 {}, input 2 {} and output {} shapes does not match.".format(
+                self.op_type, self.input_shape_1, self.input_shape_2, self.output_shape
+            )
+
+        self.data_size_in = np.prod(np.array(self.input_shape[1:])) + np.prod(np.array(self.input_shape_red[1:]))
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
+
+    def update_shapes(self, input_shape_1, input_shape_2, output_shape):
+        self.input_shape_1 = input_shape_1
+        self.channels_1 = self.input_shape_1[1]
+        self.depth_in_1 = self.input_shape_1[2]
+        self.rows_in_1 = self.input_shape_1[3]
+        self.cols_in_1 = self.input_shape_1[4]
+
+        self.input_shape_2 = input_shape_2
+        self.channels_2 = self.input_shape_2[1]
+        self.depth_in_2 = self.input_shape_2[2]
+        self.rows_in_2 = self.input_shape_2[3]
+        self.cols_in_2 = self.input_shape_2[4]
+
+        self.output_shape = output_shape
+        self.filters = self.output_shape[1]
+        self.depth_out = self.output_shape[2]
+        self.rows_out = self.output_shape[3]
+        self.cols_out = self.output_shape[4]
+        self.data_size_out = np.prod(np.array(self.output_shape[1:]))
+
+        if self.broadcasting:
             self.input_shape = (
                 self.input_shape_1
                 if int(np.prod(np.array(self.input_shape_1[1:])))
@@ -199,7 +251,7 @@ class ElementWiseLayer(BaseLayer):
             self.max_streams_out = self.filters * self.depth_out
         return self.max_streams_in_1, self.max_streams_in_2, self.max_streams_out
 
-    def get_design_point(self, coarse_inout, mem_bw_in_1, mem_bw_in_2, mem_bw_out):
+    def get_design_point(self, coarse_inout, mem_bw_in_1, mem_bw_in_2, mem_bw_out, ignore_bw_util=False):
         self.update_layer()
 
         gamma_matrix = (
@@ -252,7 +304,7 @@ class ElementWiseLayer(BaseLayer):
         total_bw_util = (
             (layer_mem_bw_in_1 + layer_mem_bw_in_2 + layer_mem_bw_out) / self.mem_bandwidth
         ) * 100
-        assert total_bw_util <= 100 + 1e-5, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
+        assert total_bw_util <= 100 + 1e-5 or ignore_bw_util, f"Total BW utilization ({total_bw_util:.2f}) is greater than 100%"
 
         workload_matrix = self.get_workload_matrix()
         ii_matrix = np.nan_to_num(workload_matrix / gamma_matrix_balanced)
