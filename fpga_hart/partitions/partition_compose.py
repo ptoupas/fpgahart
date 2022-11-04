@@ -3,6 +3,7 @@ from collections import deque
 
 import networkx as nx
 import numpy as np
+
 from fpga_hart.layers.activation import ActivationLayer
 from fpga_hart.layers.base_layer import BaseLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
@@ -94,6 +95,8 @@ class PartitionComposer(BaseLayer):
     def calculate_branch_buffering_new(graph):
         branch_buffering = {}
         branch_edges = utils.get_branch_start_end_points(graph)
+        if branch_edges and (branch_edges[0][0] == None or branch_edges[0][1] == None):
+            return branch_buffering
         for (in_point, end_point) in branch_edges:
             num_paths = len(
                 list(nx.all_simple_paths(graph, source=in_point, target=end_point))
@@ -198,6 +201,7 @@ class PartitionComposer(BaseLayer):
         write_mem_points: list,
         gap_approx=False,
         branch_mem=0,
+        wr_factor: int = 1,
     ):
         assert len(mem_bw_in) == len(
             read_mem_points
@@ -220,12 +224,12 @@ class PartitionComposer(BaseLayer):
         gamma_matrix = np.zeros(shape=(num_layers - 1, num_layers), dtype=float)
 
         graph_idx = {}
-        for i, n in enumerate(graph.nodes()):
+        for i, n in enumerate(nx.topological_sort(graph)):
             graph_idx[n] = i
 
         graph_layers = {}
         reduce_factor = 0
-        for i, n in enumerate(graph.nodes()):
+        for i, n in enumerate(nx.topological_sort(graph)):
             if not (
                 graph.nodes[n]["type"] == "mem_in"
                 or graph.nodes[n]["type"] == "mem_out"
@@ -245,7 +249,7 @@ class PartitionComposer(BaseLayer):
         total_brams = 0
         config = {}
         layers_ii = []
-        for n, node in enumerate(graph.nodes()):
+        for n, node in enumerate(nx.topological_sort(graph)):
             if DEBUG:
                 print("*" * 50)
                 print("Processing node: {}".format(node))
@@ -299,6 +303,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
                     gap_approx=gap_approx,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, Convolutional3DLayer):
@@ -308,6 +313,7 @@ class PartitionComposer(BaseLayer):
                     f_coarseOut=c[2],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, Pooling3DLayer):
@@ -316,6 +322,7 @@ class PartitionComposer(BaseLayer):
                     f_coarse_inout=c[1],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, ActivationLayer):
@@ -323,6 +330,7 @@ class PartitionComposer(BaseLayer):
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, ElementWiseLayer):
@@ -344,6 +352,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_in_1=curr_layer_rate,
                     mem_bw_in_2=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, BatchNorm3DLayer):
@@ -351,6 +360,7 @@ class PartitionComposer(BaseLayer):
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             elif isinstance(hw, SqueezeExcitationLayer):
@@ -378,6 +388,7 @@ class PartitionComposer(BaseLayer):
                     coarse_out=c[1],
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
+                    ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c)
             else:
@@ -525,7 +536,7 @@ class PartitionComposer(BaseLayer):
         shapes_out = []
         rates_in = []
         rates_out = []
-        for n, node in enumerate(graph.nodes()):
+        for n, node in enumerate(nx.topological_sort(graph)):
             if graph.nodes[node]["type"] == "mem_in":
                 nn = graph_idx[list(graph.successors(node))[0]]
                 if gamma_matrix_balanced[n, n] < abs(gamma_matrix_balanced[n, nn]):
@@ -588,6 +599,7 @@ class PartitionComposer(BaseLayer):
             config,
             batch=batch_size,
             per_layer_ii=layers_ii,
+            wr_factor=wr_factor,
         )
         slowest_nodes_idxs = np.array(layers_ii).argsort()[::-1][:n].tolist()[:3]
         slowest_nodes_names = [graph_layers[n] for n in slowest_nodes_idxs[:3]]
@@ -653,12 +665,12 @@ class PartitionComposer(BaseLayer):
 
     def get_workload_matrix(self, graph, num_layers):
         graph_idx = {}
-        for i, n in enumerate(graph.nodes()):
+        for i, n in enumerate(nx.topological_sort(graph)):
             graph_idx[n] = i
 
         workload_matrix = np.zeros(shape=(num_layers - 1, num_layers), dtype=float)
 
-        for n, node in enumerate(graph.nodes):
+        for n, node in enumerate(nx.topological_sort(graph)):
 
             op_type = graph.nodes[node]["type"]
             hw = graph.nodes[node]["hw"]
@@ -697,7 +709,19 @@ class PartitionComposer(BaseLayer):
         config,
         batch=1,
         per_layer_ii=None,
+        wr_factor=1
     ):
+        if wr_factor > 1:
+            conv_nodes_count = 0
+            for n, node in enumerate(nx.topological_sort(graph)):
+                hw = graph.nodes[node]["hw"]
+                if isinstance(hw, Convolutional3DLayer):
+                    wr_kernel_shape = hw.kernel_shape
+                    conv_nodes_count += 1
+            if conv_nodes_count > 1:
+                raise ValueError(f"Partition with weights reloading should not have more than 1 Conv layers. Currently {conv_nodes_count}.")
+        else:
+            wr_kernel_shape = [1, 1, 1]
 
         mem_kb_total = 0
         bram_raw_out = layer_brams
@@ -716,9 +740,9 @@ class PartitionComposer(BaseLayer):
         dsps_raw_out = muls
 
         if per_layer_ii is not None:
-            latency_cycles = int(max(per_layer_ii)) * batch + depth
+            latency_cycles = int(max(per_layer_ii)) * batch + depth * wr_factor + (wr_factor - 1) * np.prod(np.array(wr_kernel_shape))
         else:
-            latency_cycles = int(np.max(np.abs(ii))) * batch + depth
+            latency_cycles = int(np.max(np.abs(ii))) * batch + depth * wr_factor + (wr_factor - 1) * np.prod(np.array(wr_kernel_shape))
         latency_sec = latency_cycles / self.cycles_per_sec
         if DEBUG:
             print(
