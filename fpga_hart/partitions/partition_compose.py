@@ -255,6 +255,8 @@ class PartitionComposer(BaseLayer):
                 print("Processing node: {}".format(node))
             op_type = graph.nodes[node]["type"]
             hw = graph.nodes[node]["hw"]
+            node_predecessors = list(graph.predecessors(node))
+            # node_successors = list(graph.successors(node))
 
             if op_type == "mem_in":
                 assert (
@@ -268,9 +270,9 @@ class PartitionComposer(BaseLayer):
                 assert (
                     not node in comb.keys()
                 ), f"Memory OUT node: {node} cannot have configuration."
-                gamma_matrix[n - 1, n] = -off_chip_mem_out.pop()
-                curr_layer_rate = gamma_matrix[n - 1, n]
-                graph.nodes[node]["cons_rate"] = gamma_matrix[n - 1, n]
+                gamma_matrix[graph_idx[node_predecessors[0]], n] = -off_chip_mem_out.pop()
+                curr_layer_rate = gamma_matrix[graph_idx[node_predecessors[0]], n]
+                graph.nodes[node]["cons_rate"] = gamma_matrix[graph_idx[node_predecessors[0]], n]
                 continue
 
             assert (
@@ -279,7 +281,6 @@ class PartitionComposer(BaseLayer):
             c = comb[node]
 
             curr_layer_rate = 1000000
-            node_predecessors = list(graph.predecessors(node))
             if graph.in_degree(node) == 1:
                 assert (
                     len(node_predecessors) == 1
@@ -305,7 +306,7 @@ class PartitionComposer(BaseLayer):
                     gap_approx=gap_approx,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, Convolutional3DLayer):
                 dp_info = hw.get_design_point(
                     f_fine=c[0],
@@ -315,7 +316,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, Pooling3DLayer):
                 dp_info = hw.get_design_point(
                     f_fine=c[0],
@@ -324,7 +325,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, ActivationLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
@@ -332,7 +333,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, ElementWiseLayer):
                 if hw.broadcasting:
                     prev_nodes = [pn for pn in graph.predecessors(node)]
@@ -354,7 +355,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, BatchNorm3DLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
@@ -362,7 +363,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, SqueezeExcitationLayer):
                 dp_info = hw.get_design_point(
                     f_gap_coarsein=c[0],
@@ -381,7 +382,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_in=curr_layer_rate,
                     mem_bw_out=curr_layer_rate,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             elif isinstance(hw, FCLayer):
                 dp_info = hw.get_design_point(
                     coarse_in=c[0],
@@ -390,7 +391,7 @@ class PartitionComposer(BaseLayer):
                     mem_bw_out=curr_layer_rate,
                     ignore_bw_util=True,
                 )
-                config[node] = utils.generate_layer_config(hw, c)
+                config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
             else:
                 assert False, "Not supported layer"
 
