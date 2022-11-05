@@ -94,6 +94,7 @@ class Convolutional3DLayer(BaseLayer):
         self.mem_bw_out = []
         self.total_bw_util = 0
         self.config = []
+        self.wr_factor = 1
         self.dsps_util = 0
         self.dsp_raw = 0
         self.bram_util = 0
@@ -152,6 +153,7 @@ class Convolutional3DLayer(BaseLayer):
         dp_info["memBoundedOut"] = self.mem_bw_out
         dp_info["memBwUtil"] = self.total_bw_util
         dp_info["config"] = self.config
+        dp_info["wr_factor"] = self.wr_factor
 
         return dp_info
 
@@ -539,14 +541,10 @@ class Convolutional3DLayer(BaseLayer):
                 f_fine,
                 f_coarseIn,
                 f_coarseOut,
-                mem_bw_in,
-                mem_bw_out,
-                f_fine * kernel_elems,
-                f_coarseIn * self.channels,
-                f_coarseOut * self.filters,
-                wr_factor,
+                # wr_factor,
             ]
             self.config = config
+            self.wr_factor = wr_factor
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
             self.dsp_raw = dsp_raw

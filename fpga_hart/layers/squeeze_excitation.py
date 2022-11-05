@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+
 from fpga_hart.layers.activation import ActivationLayer
 from fpga_hart.layers.base_layer import BaseLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
@@ -335,8 +336,6 @@ class SqueezeExcitationLayer(BaseLayer):
                 f_mul_coarsein1,
                 f_mul_coarsein2,
                 f_mul_coarseout,
-                mem_bw_in,
-                mem_bw_out,
             ]
             self.config = config
             self.memoryKB = memKBs

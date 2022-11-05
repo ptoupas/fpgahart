@@ -3,6 +3,8 @@ from collections import Counter, deque
 from dataclasses import dataclass
 
 import networkx as nx
+from matplotlib import pyplot as plt
+
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
@@ -10,7 +12,7 @@ from fpga_hart.network_representation.model_descriptor import \
     ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
-from matplotlib import pyplot as plt
+from fpga_hart.utils.graph_manipulation import visualize_graph
 
 
 @dataclass
@@ -307,13 +309,14 @@ class PartitionDescriptor(ModelLayerDescriptor):
             os.makedirs(
                 os.getcwd() + "/fpga_modeling_reports/graphs/" + self.model_name + "/"
             )
-        self.visualize_graph(
+        visualize_graph(
             graph,
             os.getcwd()
             + "/fpga_modeling_reports/graphs/"
             + self.model_name
             + "/latency_driven_graph",
-            run_id=None,
+            True,
+            "latency_driven_graph"
         )
 
         optimizer = SimulatedAnnealing(
@@ -460,11 +463,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
         for i in range(1, 4):
             self.update_hw_pe(graph=graph, groupping=i)
             self.schedule_ops(graph=graph, groupping=i, plot_pe=True)
-
-        # self.visualize_graph(
-        #     graph,
-        #     os.getcwd() + "/fpga_modeling_reports/layer_grouppings/graph_complete",
-        # )
 
         # blacklist_combinations = []
         # group_type_count = 0
@@ -629,13 +627,6 @@ class PartitionDescriptor(ModelLayerDescriptor):
 
         #     if frequent_comb in blacklist_combinations:
         #         continue
-        #     _logger.debug(
-        #         f"visualizing graph: graph_groups_{group_type_count}_{count}")
-        #     self.visualize_graph(
-        #         graph,
-        #         os.getcwd()
-        #         + f"/fpga_modeling_reports/layer_grouppings/graph_groups_{group_type_count}_{count}",
-        #     )
         #     group_type_count += 1
 
         # for n in graph.nodes():

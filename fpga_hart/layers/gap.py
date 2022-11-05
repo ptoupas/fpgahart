@@ -2,6 +2,7 @@ import math
 from typing import Tuple
 
 import numpy as np
+
 from fpga_hart.layers.base_layer import BaseLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
@@ -43,7 +44,7 @@ class GAPLayer(BaseLayer):
         self.rows_out = self.output_shape[3]
         self.cols_out = self.output_shape[4]
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
-        
+
     def update_layer(self):
         self.full_rate_in = []
         self.full_rate_out = []
@@ -231,7 +232,7 @@ class GAPLayer(BaseLayer):
             self.mem_bd_out = [mem_bounded_out]
             self.total_bw_util = total_bw_util
 
-            config = [coarse_inout, mem_bw_in, mem_bw_out]
+            config = [coarse_inout]
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util

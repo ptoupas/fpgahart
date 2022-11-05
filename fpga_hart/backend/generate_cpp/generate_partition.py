@@ -7,9 +7,6 @@ from typing import Tuple
 import pandas as pd
 import yaml
 from dotmap import DotMap
-from fpga_hart.partitions.partition_parser import PartitionParser
-from fpga_hart.utils import utils
-
 from generate_tb import generate_tb_files
 from generate_top_level import generate_top_level_files
 from layers.generate_conv import generate_conv_files
@@ -21,6 +18,10 @@ from layers.generate_sigmoid import generate_sigmoid_files
 from layers.generate_split import generate_split_files
 from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
+
+from fpga_hart.partitions.partition_parser import PartitionParser
+from fpga_hart.utils import utils
+from fpga_hart.utils.graph_manipulation import visualize_graph
 
 
 def parse_args():
@@ -119,7 +120,7 @@ def generate_partition_code(
     )
     if not os.path.exists(f"generated_files/{prefix}/graphs/"):
         os.makedirs(f"generated_files/{prefix}/graphs/")
-    parser.visualize_graph(graph, f"generated_files/{prefix}/graphs/{partition_name}")
+    visualize_graph(graph, f"generated_files/{prefix}/graphs/{partition_name}", False, partition_name)
 
     # Generate top level partition file
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)

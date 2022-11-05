@@ -13,9 +13,6 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                has_gap, split_graph,
-                                                visualize_graph)
 
 
 def get_minimum_resource_utilization(hw_layer):
@@ -105,7 +102,8 @@ def calculate_wr_factor(graph, max_BRAM_util):
         bram_util, _, _ = get_minimum_resource_utilization(hw)
         if bram_util > max_BRAM_util:
             initial_filters = deepcopy(hw.filters)
-            for f in range(1,initial_filters): #utils.get_factors(initial_filters)[1:]
+            for f in range(1,initial_filters):
+            # for f in utils.get_factors(initial_filters)[1:]:
                 update_nodes_shapes(graph=graph, wr_f=f, old_filters=initial_filters, old_layer=layer)
                 bram_util_wr, _, _ = get_minimum_resource_utilization(hw)
                 if bram_util_wr < max_BRAM_util:

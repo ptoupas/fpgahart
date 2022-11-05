@@ -552,7 +552,7 @@ def get_nodes_sorted(graph):
     return list(g_sorted)
 
 
-def generate_layer_config(layer, config):
+def generate_layer_config(layer, config, wr_factor=1):
 
     layer_config = {}
     if isinstance(layer, GAPLayer):
@@ -570,6 +570,7 @@ def generate_layer_config(layer, config):
         layer_config["height_out"] = output_shape[3]
         layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, Convolutional3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
@@ -583,7 +584,7 @@ def generate_layer_config(layer, config):
         fine_factor = math.ceil(config[0] * layer.kd * layer.kh * layer.kw)
         coarse_in_factor = math.ceil(config[1] * layer.channels)
         coarse_out_factor = math.ceil(config[2] * layer.filters)
-        wr_factor = config[8] if len(config) >= 8 else 1
+        # wr_factor = config[3] if len(config) >= 4 else 1
         assert input_shape[0] == output_shape[0], "Input and output batch dimension must match"
         layer_config["batch_size"] = input_shape[0]
         layer_config["channels_in"] = input_shape[1]
@@ -643,6 +644,7 @@ def generate_layer_config(layer, config):
         layer_config["op_type"] = layer.op_type
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_factor"] = coarse_factor
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, ActivationLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
@@ -659,6 +661,7 @@ def generate_layer_config(layer, config):
         layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
         layer_config["op_type"] = layer.op_type
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, ElementWiseLayer):
         input_shape = layer.input_shape
         output_shape = layer.input_shape
@@ -678,6 +681,7 @@ def generate_layer_config(layer, config):
         layer_config["broadcasting"] = broadcasting
         layer_config["op_type"] = op_type
         layer_config["coarse_factor"] = coarse_factor
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, BatchNorm3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
@@ -693,6 +697,7 @@ def generate_layer_config(layer, config):
         layer_config["height_out"] = output_shape[3]
         layer_config["width_out"] = output_shape[4]
         layer_config["coarse_factor"] = coarse_factor
+        layer_config["wr_factor"] = wr_factor
     elif isinstance(layer, SqueezeExcitationLayer):
         pass
     elif isinstance(layer, FCLayer):
@@ -711,6 +716,7 @@ def generate_layer_config(layer, config):
         layer_config["shape_bias"] = bias_shape[0] if bias_shape else 0
         layer_config["coarse_in_factor"] = coarse_in_factor
         layer_config["coarse_out_factor"] = coarse_out_factor
+        layer_config["wr_factor"] = wr_factor
     else:
         assert False, "Not supported layer"
 
@@ -800,7 +806,7 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
     template_dict["MemBoundOut"] = result_dict["memBoundedOut"],
 
     if isinstance(layer_hw, Convolutional3DLayer):
-        layer_config = generate_layer_config(layer_hw, result_dict["config"])
+        layer_config = generate_layer_config(layer_hw, result_dict["config"], wr_factor=result_dict["wr_factor"])
     elif isinstance(layer_hw, Pooling3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     elif isinstance(layer_hw, GAPLayer):

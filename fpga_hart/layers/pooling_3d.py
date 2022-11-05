@@ -3,6 +3,7 @@ import math
 from typing import Tuple
 
 import numpy as np
+
 from fpga_hart import _logger
 from fpga_hart.layers.base_layer import BaseLayer
 
@@ -335,11 +336,7 @@ class Pooling3DLayer(BaseLayer):
 
             config = [
                 f_fine,
-                f_coarse_inout,
-                mem_bw_in,
-                mem_bw_out,
-                f_fine * kernel_elems,
-                f_coarse_inout * self.channels,
+                f_coarse_inout
             ]
             self.config = config
             self.memoryKB = memKBs

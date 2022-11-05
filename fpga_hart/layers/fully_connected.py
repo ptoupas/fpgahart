@@ -203,7 +203,7 @@ class FCLayer(BaseLayer):
             self.mem_bd_out = [mem_bounded_out]
             self.total_bw_util = total_bw_util
 
-            config = [coarse_in, coarse_out, mem_bw_in, mem_bw_out]
+            config = [coarse_in, coarse_out]
             self.config = config
             self.memoryKB = memKBs
             self.dsps_util = dsps_util

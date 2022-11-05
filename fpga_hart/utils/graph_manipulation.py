@@ -6,6 +6,7 @@ from typing import Tuple
 import networkx as nx
 import numpy as np
 
+import wandb
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.utils import utils
@@ -331,10 +332,11 @@ def add_off_chip_connections(
     return read_points, write_points
 
 
-def visualize_graph(graph: nx.DiGraph, path: str) -> None:
+def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str) -> None:
     PG = nx.nx_pydot.to_pydot(graph)
     PG.write_png(path + ".png")
-
+    if enable_wandb:
+        wandb.log({{graph_name}: wandb.Image(path + ".png")})
 
 def get_input_nodes(graph):
     input_nodes = []

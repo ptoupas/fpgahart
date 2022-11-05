@@ -4,8 +4,9 @@ import os
 from dataclasses import dataclass
 
 import numpy as np
-import wandb
 import yaml
+
+import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
 from fpga_hart.network_representation.model_descriptor import \
@@ -35,6 +36,8 @@ class LayerParser(ModelLayerDescriptor):
         self.layer_model_file = os.path.join(
             os.getcwd(), "fpga_modeling_reports", self.model_name, f"{self.model_name}_layers.json"
         )
+        if os.path.exists(self.layer_model_file):
+            os.remove(self.layer_model_file)
 
         with open("fpga_hart/config/report_template.yaml", "r") as yaml_file:
             self.report_dict = yaml.load(yaml_file, Loader=yaml.FullLoader)
