@@ -51,14 +51,21 @@ class PartitionComposer(BaseLayer):
         self.total_ops = 0
         self.max_latency_nodes = None
 
-    def get_total_workload(self, graph):
+    def get_total_workload(self, graph, wr_factor=1):
         total_wl = 0
-        for node in graph.nodes:
+        update_valid = False
+        for node in nx.topological_sort(graph):
             op_type = graph.nodes[node]["type"]
             hw = graph.nodes[node]["hw"]
 
+            if wr_factor > 1 and "Conv" in op_type:
+                update_valid = True
+
             if not op_type == "mem_in" and not op_type == "mem_out":
-                total_wl += hw.get_total_workload()
+                if update_valid:
+                    total_wl += hw.get_total_workload() * wr_factor
+                else:
+                    total_wl += hw.get_total_workload()
 
         return total_wl
 
@@ -537,6 +544,8 @@ class PartitionComposer(BaseLayer):
         shapes_out = []
         rates_in = []
         rates_out = []
+        mem_conns_in = []
+        mem_conns_out = []
         for n, node in enumerate(nx.topological_sort(graph)):
             if graph.nodes[node]["type"] == "mem_in":
                 nn = graph_idx[list(graph.successors(node))[0]]
@@ -551,6 +560,7 @@ class PartitionComposer(BaseLayer):
                     gamma_matrix_balanced[n, n] = abs(gamma_matrix_balanced[n, nn])
                 rates_in.append(gamma_matrix_balanced[n, n])
                 shapes_in.append(graph.nodes[node]["hw"].output_shape)
+                mem_conns_in.append([n, n])
             if graph.nodes[node]["type"] == "mem_out":
                 pn = graph_idx[list(graph.predecessors(node))[0]]
                 if (
@@ -567,6 +577,7 @@ class PartitionComposer(BaseLayer):
                     gamma_matrix_balanced[pn, n] = -gamma_matrix_balanced[pn, pn]
                 rates_out.append(abs(gamma_matrix_balanced[pn, n]))
                 shapes_out.append(graph.nodes[node]["hw"].input_shape)
+                mem_conns_out.append([pn, n])
 
         if DEBUG:
             print("Γ Balanced:\n{}".format(gamma_matrix_balanced))
@@ -591,6 +602,8 @@ class PartitionComposer(BaseLayer):
         ) = self.get_performance(
             workload_matrix,
             ii_matrix,
+            mem_conns_in,
+            mem_conns_out,
             total_muls,
             total_adds,
             layer_fifos_arrays,
@@ -606,13 +619,15 @@ class PartitionComposer(BaseLayer):
         slowest_nodes_names = [graph_layers[n] for n in slowest_nodes_idxs[:3]]
         self.max_latency_nodes = slowest_nodes_names
 
-        total_ops = self.get_total_workload(graph) * batch_size
+        total_ops = self.get_total_workload(graph, wr_factor=wr_factor) * batch_size
         throughput_ops = total_ops / latency_sec
-        thr_in /= workload_matrix[0, 0]  # Volumes per second
-        thr_out /= workload_matrix[-1, -1]  # Volumes per second
-        assert math.isclose(
-            thr_in, thr_out
-        ), "Thoughputs missmatch. IN = {}, OUT = {}.".format(thr_in, thr_out)
+
+        #TODO: double check if this is actually correct. Every input througput should be equal to every output?
+        for idx_in, (i, j) in enumerate(mem_conns_in):
+            curr_thr_in = thr_in[idx_in] / workload_matrix[i, j]
+            for idx_out, (k, h) in enumerate(mem_conns_out):
+                curr_thr_out = thr_out[idx_out] / workload_matrix[k, h]
+                assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(curr_thr_in, curr_thr_out)
 
         if (
             dsps_util < self.max_DSP_util
@@ -641,7 +656,8 @@ class PartitionComposer(BaseLayer):
             self.latency_sec = latency_sec
             self.latency_cycles = int(latency_cycles)
             self.throughput_ops = throughput_ops
-            self.throughput_vols = thr_out
+            #TODO: Is this correct? Do we have a throughput out that is the sum of all out throughputs to the mem?
+            self.throughput_vols = np.sum(np.array(thr_out))
 
             if DEBUG:
                 print(
@@ -681,7 +697,8 @@ class PartitionComposer(BaseLayer):
                 continue
 
             if op_type == "mem_out":
-                workload_matrix[n - 1, n] = np.prod(np.array(hw.input_shape[1:]))
+                pn = graph_idx[list(graph.predecessors(node))[0]]
+                workload_matrix[pn, n] = np.prod(np.array(hw.input_shape[1:]))
                 continue
 
             if isinstance(hw, ElementWiseLayer):
@@ -701,6 +718,8 @@ class PartitionComposer(BaseLayer):
         self,
         workload_matrix,
         ii,
+        mem_conns_in,
+        mem_conns_out,
         muls,
         adds,
         layer_fifos_arrays,
@@ -717,12 +736,12 @@ class PartitionComposer(BaseLayer):
             for n, node in enumerate(nx.topological_sort(graph)):
                 hw = graph.nodes[node]["hw"]
                 if isinstance(hw, Convolutional3DLayer):
-                    wr_kernel_shape = hw.kernel_shape
+                    wr_kernel_shape = [hw.filters, hw.channels] + hw.kernel_shape
                     conv_nodes_count += 1
             if conv_nodes_count > 1:
                 raise ValueError(f"Partition with weights reloading should not have more than 1 Conv layers. Currently {conv_nodes_count}.")
         else:
-            wr_kernel_shape = [1, 1, 1]
+            wr_kernel_shape = [1, 1, 1, 1, 1]
 
         mem_kb_total = 0
         bram_raw_out = layer_brams
@@ -755,10 +774,14 @@ class PartitionComposer(BaseLayer):
                 )
             )
 
-        thr_in = (batch * workload_matrix[0, 0]) / latency_sec  # Input words per second
-        thr_out = (
-            batch * workload_matrix[-1, -1]
-        ) / latency_sec  # Output words per second
+        thr_in = []
+        thr_out = []
+        for (i, j) in mem_conns_in:
+            thr_in_tmp = (batch * workload_matrix[i, j]) / latency_sec  # Input words per second
+            thr_in.append(thr_in_tmp)
+        for (i, j) in mem_conns_out:
+            thr_out_tmp = (batch * workload_matrix[i, j]) / latency_sec  # Output words per second
+            thr_out.append(thr_out_tmp)
 
         return (
             latency_sec,
