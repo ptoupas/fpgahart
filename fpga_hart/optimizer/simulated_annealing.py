@@ -9,6 +9,7 @@ from copy import deepcopy
 
 import numpy as np
 import scipy.constants as sc
+
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.activation import ActivationLayer
@@ -21,10 +22,12 @@ from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
+from fpga_hart.optimizer.optimizer_helper import check_partition_fitting
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                has_gap, split_graph,
+                                                get_input_nodes,
+                                                get_output_nodes, split_graph,
                                                 visualize_graph)
 
 
@@ -117,10 +120,10 @@ class SimulatedAnnealing(BaseLayer):
         cost_1, dp_info_1 = self.get_cost(
             config_1,
             mem_bw_1,
+            len(mem_in_1),
+            len(mem_out_1),
             target_graph=graph_1,
-            branch_mem_update=bb1,
-            mem_in_conns=mem_in_1,
-            mem_out_conns=mem_out_1,
+            branch_mem_update=bb1
         )
 
         nIN2 = len(mem_in_2)
@@ -132,10 +135,10 @@ class SimulatedAnnealing(BaseLayer):
         cost_2, dp_info_2 = self.get_cost(
             config_2,
             mem_bw_2,
+            len(mem_in_2),
+            len(mem_out_2),
             target_graph=graph_2,
-            branch_mem_update=bb2,
-            mem_in_conns=mem_in_2,
-            mem_out_conns=mem_out_2,
+            branch_mem_update=bb2
         )
 
         if cost_1 is None or cost_2 is None:
@@ -166,10 +169,10 @@ class SimulatedAnnealing(BaseLayer):
                 cost_1, dp_info_1 = self.get_cost(
                     config_1,
                     mem_bw_1,
+                    len(mem_in_1),
+                    len(mem_out_1),
                     target_graph=graph_1,
-                    branch_mem_update=bb1,
-                    mem_in_conns=mem_in_1,
-                    mem_out_conns=mem_out_1,
+                    branch_mem_update=bb1
                 )
 
                 nIN2 = len(mem_in_2)
@@ -181,10 +184,10 @@ class SimulatedAnnealing(BaseLayer):
                 cost_2, dp_info_2 = self.get_cost(
                     config_2,
                     mem_bw_2,
+                    len(mem_in_2),
+                    len(mem_out_2),
                     target_graph=graph_2,
-                    branch_mem_update=bb2,
-                    mem_in_conns=mem_in_2,
-                    mem_out_conns=mem_out_2,
+                    branch_mem_update=bb2
                 )
                 if (
                     cost_1 is not None
@@ -193,7 +196,7 @@ class SimulatedAnnealing(BaseLayer):
                 ):
                     break
             if cost_1 is None or cost_2 is None:
-                return None, None, None
+                return None, None, None, 0
 
         prev_state_1 = config_1
         prev_state_2 = config_2
@@ -243,10 +246,10 @@ class SimulatedAnnealing(BaseLayer):
                 new_cost_1, new_dp_info_1 = self.get_cost(
                     new_state_1,
                     new_mem_bw_1,
+                    len(mem_in_1),
+                    len(mem_out_1),
                     target_graph=graph_1,
-                    branch_mem_update=bb1,
-                    mem_in_conns=mem_in_1,
-                    mem_out_conns=mem_out_1,
+                    branch_mem_update=bb1
                 )
 
                 nIN2 = len(mem_in_2)
@@ -262,10 +265,10 @@ class SimulatedAnnealing(BaseLayer):
                 new_cost_2, new_dp_info_2 = self.get_cost(
                     new_state_2,
                     new_mem_bw_2,
+                    len(mem_in_2),
+                    len(mem_out_2),
                     target_graph=graph_2,
-                    branch_mem_update=bb2,
-                    mem_in_conns=mem_in_2,
-                    mem_out_conns=mem_out_2,
+                    branch_mem_update=bb2
                 )
 
                 if (
@@ -302,6 +305,8 @@ class SimulatedAnnealing(BaseLayer):
                         + "/fpga_modeling_reports/partition_graphs/"
                         + self.part_name
                         + "_phase_1",
+                        self.enable_wandb,
+                        f"{self.part_name}_phase_1",
                     )
                     visualize_graph(
                         graph_2,
@@ -309,6 +314,8 @@ class SimulatedAnnealing(BaseLayer):
                         + "/fpga_modeling_reports/partition_graphs/"
                         + self.part_name
                         + "_phase_2",
+                        self.enable_wandb,
+                        f"{self.part_name}_phase_2",
                     )
                 else:
                     if random.uniform(0, 1) < math.exp(
@@ -337,6 +344,8 @@ class SimulatedAnnealing(BaseLayer):
                             + "/fpga_modeling_reports/partition_graphs/"
                             + self.part_name
                             + "_phase_1",
+                            self.enable_wandb,
+                            f"{self.part_name}_phase_1",
                         )
                         visualize_graph(
                             graph_2,
@@ -344,6 +353,8 @@ class SimulatedAnnealing(BaseLayer):
                             + "/fpga_modeling_reports/partition_graphs/"
                             + self.part_name
                             + "_phase_2",
+                            self.enable_wandb,
+                            f"{self.part_name}_phase_1",
                         )
 
             current_temp *= self.cooling_rate
@@ -399,13 +410,14 @@ class SimulatedAnnealing(BaseLayer):
             self.mem_words_per_cycle,
             [solution_mem_1, solution_mem_2],
             [solution_dp_1, solution_dp_2],
+            0
         )
 
-    def initialize_optimizer(self):
+    def initialize_optimizer(self, graph, read_points, write_points, wr_factor):
         self.freeze_param = True
 
-        config, mem_bw, _, _ = self.generate_random_config()
-        cost, dp_info = self.get_cost(config, mem_bw)
+        config, mem_bw, _, _ = self.generate_random_config(target_graph=graph)
+        cost, dp_info = self.get_cost(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
         slowest_nodes = None
 
         if cost is None:
@@ -414,8 +426,9 @@ class SimulatedAnnealing(BaseLayer):
                 x = float(time.time() - start_time)
                 perc = 1/(1+math.exp(-0.1*(x-45)))
                 config, mem_bw, _, _ = self.generate_random_config(
+                    target_graph=graph,
                     keep_percentage=perc)
-                cost, dp_info = self.get_cost(config, mem_bw)
+                cost, dp_info = self.get_cost(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
 
                 if cost is not None:
                     slowest_nodes = dp_info["slowestNodes"]
@@ -453,142 +466,166 @@ class SimulatedAnnealing(BaseLayer):
         return config, cost, dp_info
 
     def run_optimizer(self):
-        if has_gap(self.graph) and self.branch_bram_util > self.max_BRAM_util:
-            return self.run_optimizer_double_graph()
+        # if has_gap(self.graph) and self.branch_bram_util > self.max_BRAM_util:
+        #     return self.run_optimizer_double_graph()
 
-        best_solution_mem = None
-        best_solution_dp = None
-        best_latency = 1000
-        for _ in range(self.best_of_iter):
+        #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
+        sub_partitions = check_partition_fitting(self.graph, self.max_BRAM_util-15, [])
+        extra_reconfigurations = len(sub_partitions) - 1
+        print(f'Splitting original partition into {len(sub_partitions)} sub-partitions. A number of {extra_reconfigurations} extra reconfiguration(s) will be added.')
 
-            (
-                config,
+        mem_bw_list = []
+        dp_info_list = []
+        wr_list = []
+        for i, sp in enumerate(sub_partitions):
+            graph = sp[0]
+            mem_in = sp[1]
+            mem_out = sp[2]
+            weights_reloading = sp[3]
+
+            read_points, write_points = add_off_chip_connections(
+                graph, mem_in, mem_out, gap_approx=self.gap_approx
+            )
+            visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/' + self.cnn_model_name + '/partition_graphs/' + self.part_name + '_split' + str(i), self.enable_wandb, f"{self.part_name}_split_{i}",)
+
+            best_solution_mem = None
+            best_solution_dp = None
+            best_latency = 1000
+            for _ in range(self.best_of_iter):
+                ( config,
                 cost,
                 dp_info,
                 mem_bw,
                 slowest_nodes,
-            ) = self.initialize_optimizer()
-            if config == None:
-                return None, None, None
+                ) = self.initialize_optimizer(graph=graph, read_points=read_points, write_points=write_points, wr_factor=weights_reloading)
 
-            prev_state = config
-            prev_cost = cost
-            solution_dp = dp_info
-            solution_mem = mem_bw
+                if config == None:
+                    return None, None, None, None, None
 
-            current_temp = self.t_max
-            # first_restart, second_restart, third_restart = True, True, True
-            count = 0
-            print(f"Temperature  |  Latency     |   Count")
-            while current_temp > self.t_min:
+                prev_state = config
+                prev_cost = cost
+                solution_dp = dp_info
+                solution_mem = mem_bw
 
-                # if self.enable_wandb:
-                #     log_dict = {}
-                #     log_dict["temperature"] = current_temp
-                #     log_dict["latency"] = prev_cost
-                #     wandb.log(log_dict)
+                current_temp = self.t_max
+                # first_restart, second_restart, third_restart = True, True, True
+                count = 0
+                print(f"Temperature  |  Latency     |   Count")
+                while current_temp > self.t_min:
 
-                num_iterations = 0
-                timeout_tmr_start = time.time()
-                while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
-                # for _ in range(self.iterationPerTemp):
-                    (
-                        new_state,
-                        new_mem_bw,
-                        _,
-                        _,
-                    ) = self.generate_random_config(
-                        neighbours=True,
-                        prev_state=prev_state,
-                        slowest_nodes=slowest_nodes,
-                    )
-                    new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw)
-                    if new_cost is not None:
-                        slowest_nodes = new_dp_info["slowestNodes"]
+                    # if self.enable_wandb:
+                    #     log_dict = {}
+                    #     log_dict["temperature"] = current_temp
+                    #     log_dict["latency"] = prev_cost
+                    #     wandb.log(log_dict)
 
-                    if new_cost is None:
-                        continue
-                    count += 1
-                    num_iterations += 1
-
-                    cost_diff = prev_cost - new_cost
-                    if cost_diff >= 0:
-                        prev_state = copy.deepcopy(new_state)
-                        prev_cost = copy.deepcopy(new_cost)
-                        solution_mem, solution_dp = (
-                            copy.deepcopy(new_mem_bw),
-                            copy.deepcopy(new_dp_info),
+                    num_iterations = 0
+                    timeout_tmr_start = time.time()
+                    while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
+                    # for _ in range(self.iterationPerTemp):
+                        (
+                            new_state,
+                            new_mem_bw,
+                            _,
+                            _,
+                        ) = self.generate_random_config(
+                            neighbours=True,
+                            prev_state=prev_state,
+                            slowest_nodes=slowest_nodes,
+                            target_graph=graph
                         )
-                    else:
-                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
+                        new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw, read_points, write_points, target_graph=graph, wr_factor=weights_reloading)
+                        if new_cost is not None:
+                            slowest_nodes = new_dp_info["slowestNodes"]
+
+                        if new_cost is None:
+                            continue
+                        count += 1
+                        num_iterations += 1
+
+                        cost_diff = prev_cost - new_cost
+                        if cost_diff >= 0:
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
                             solution_mem, solution_dp = (
                                 copy.deepcopy(new_mem_bw),
                                 copy.deepcopy(new_dp_info),
                             )
+                        else:
+                            if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
+                                prev_state = copy.deepcopy(new_state)
+                                prev_cost = copy.deepcopy(new_cost)
+                                solution_mem, solution_dp = (
+                                    copy.deepcopy(new_mem_bw),
+                                    copy.deepcopy(new_dp_info),
+                                )
 
-                current_temp *= self.cooling_rate
-                # if current_temp <= 0.01 and first_restart:
-                #     current_temp *= 100
-                #     first_restart = False
-                # elif current_temp <= 0.001 and second_restart:
-                #     current_temp *= 1000
-                #     second_restart = False
-                # elif current_temp <= 0.0001 and third_restart:
-                #     current_temp *= 1000
-                #     third_restart = False
+                    current_temp *= self.cooling_rate
+                    # if current_temp <= 0.01 and first_restart:
+                    #     current_temp *= 100
+                    #     first_restart = False
+                    # elif current_temp <= 0.001 and second_restart:
+                    #     current_temp *= 1000
+                    #     second_restart = False
+                    # elif current_temp <= 0.0001 and third_restart:
+                    #     current_temp *= 1000
+                    #     third_restart = False
+                    print(
+                        f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}",
+                        end="\r",
+                    )
+
                 print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}",
-                    end="\r",
+                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}"
                 )
 
+                if prev_cost < best_latency:
+                    best_latency = prev_cost
+                    best_solution_mem = solution_mem
+                    best_solution_dp = solution_dp
+
+            mem_bw_list.append(best_solution_mem)
+            dp_info_list.append(best_solution_dp)
+            wr_list.append(weights_reloading)
+
             print(
-                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}"
+                f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
             )
-
-            if prev_cost < best_latency:
-                best_latency = prev_cost
-                best_solution_mem = solution_mem
-                best_solution_dp = solution_dp
-
-        print(
-            f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
-        )
-        print(
-            "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
-                best_solution_dp["latency(C)"],
-                best_solution_dp["latency(S)"],
-                best_solution_dp["GOP/s"],
-                best_solution_dp["vols/s"],
-                best_solution_dp["DSP_RAW"],
-                best_solution_dp["DSP"],
-                best_solution_dp["BRAM_RAW"],
-                best_solution_dp["BRAM"],
-                best_solution_dp["rateIn"],
-                best_solution_dp["rateOut"],
-                best_solution_dp["depth"],
-                best_solution_dp["branch_depth"],
-                best_solution_dp["muls"],
-                best_solution_dp["adds"],
-                best_solution_dp["memWords"],
-                best_solution_dp["memKBs"],
-                best_solution_dp["memBoundedIn"],
-                best_solution_dp["memBoundedOut"],
-                best_solution_dp["config"],
+            print(
+                "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
+                    best_solution_dp["latency(C)"],
+                    best_solution_dp["latency(S)"],
+                    best_solution_dp["GOP/s"],
+                    best_solution_dp["vols/s"],
+                    best_solution_dp["DSP_RAW"],
+                    best_solution_dp["DSP"],
+                    best_solution_dp["BRAM_RAW"],
+                    best_solution_dp["BRAM"],
+                    best_solution_dp["rateIn"],
+                    best_solution_dp["rateOut"],
+                    best_solution_dp["depth"],
+                    best_solution_dp["branch_depth"],
+                    best_solution_dp["muls"],
+                    best_solution_dp["adds"],
+                    best_solution_dp["memWords"],
+                    best_solution_dp["memKBs"],
+                    best_solution_dp["memBoundedIn"],
+                    best_solution_dp["memBoundedOut"],
+                    best_solution_dp["config"],
+                )
             )
-        )
-        print("*" * 60)
-        return self.mem_words_per_cycle, [best_solution_mem], [best_solution_dp]
+            print("*" * 60)
+        return self.mem_words_per_cycle, mem_bw_list, dp_info_list, extra_reconfigurations, wr_list
 
     def get_cost(
         self,
         config,
         mem_bw,
+        read_points,
+        write_points,
         target_graph=None,
         branch_mem_update=None,
-        mem_in_conns=[],
-        mem_out_conns=[],
+        wr_factor=1
     ):
         """
         We should be able to choose whether we want to optimize for latency or throughput
@@ -621,11 +658,6 @@ class SimulatedAnnealing(BaseLayer):
             else:
                 assert False, "Not supported layer"
 
-        mem_in = mem_in_conns
-        mem_out = mem_out_conns
-        read_points, write_points = add_off_chip_connections(
-            graph, mem_in, mem_out, gap_approx=self.gap_approx
-        )
         dp_info = self.partition_composer.get_design_point(
             graph.copy(),
             comb_config,
@@ -635,8 +667,8 @@ class SimulatedAnnealing(BaseLayer):
             write_points,
             gap_approx=self.gap_approx,
             branch_mem=branch_mem,
+            wr_factor=wr_factor
         )
-        # visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/partition_graphs/' + self.part_name + '_int')
         if dp_info["config"]:
             return dp_info["latency(S)"], dp_info
             # return -dp_info['GOP/s'], dp_info
@@ -979,8 +1011,10 @@ class SimulatedAnnealing(BaseLayer):
             else:
                 assert False, "Not supported layer"
 
+        num_in_nodes = len(get_input_nodes(graph))
+        num_out_nodes = len(get_output_nodes(graph))
         mem_config_in, mem_config_out = self.get_mem_bw_feasible(
-            n_in=n_in, n_out=n_out, gap_approx=self.gap_approx
+            n_in=num_in_nodes, n_out=num_out_nodes, gap_approx=self.gap_approx
         )
 
         return config, [mem_config_in, mem_config_out], self.param_changes, param_perc
@@ -1507,7 +1541,6 @@ class SimulatedAnnealing(BaseLayer):
                 bw_out = bw_out[0] * mem_bw
                 bb_setup[bb]["bw_in"] = [bw_in]
                 bb_setup[bb]["bw_out"] = [bw_out]
-
             if "Conv" in bb:
                 layer_config = utils.generate_layer_config(bb_setup[bb]["hw"], [1, coarse_in, coarse_out])
                 bb_setup[bb]["config"] = layer_config
