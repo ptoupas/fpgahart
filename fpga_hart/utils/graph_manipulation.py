@@ -267,7 +267,6 @@ def add_off_chip_connections(
         if not edges_out:
             output_nodes.append(n)
 
-    # if not in_connections and not out_connections:
     for in_n in input_nodes:
         read_points.append(in_n)
         if not 'mem_in' in in_n.lower():
@@ -291,6 +290,8 @@ def add_off_chip_connections(
         mem_out_count += 1
 
     for con_in in in_connections:
+        if con_in in input_nodes:
+            continue
         if not 'mem_in' in con_in.lower():
             add_node_to_position(
                 G=graph,
@@ -302,6 +303,8 @@ def add_off_chip_connections(
         mem_in_count += 1
 
     for con_out in out_connections:
+        if con_out in output_nodes:
+            continue
         if not 'mem_out' in con_out.lower():
             add_node_to_position(
                 G=graph,
