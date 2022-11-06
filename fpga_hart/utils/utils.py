@@ -934,6 +934,24 @@ def get_merge_points(graph):
     return merge_points
 
 
+def get_worst_case_buffering(graph):
+    branch_edges = get_branch_start_end_points(graph)
+
+    branch_buffer = 0
+    for (splt, mrg) in branch_edges:
+        all_paths = [p for p in nx.all_simple_paths(graph, splt, mrg)]
+        num_sub_branches = len(all_paths) - 2
+
+        shortest_path = nx.shortest_path(graph, splt, mrg)
+        merge_node = shortest_path[-1]
+        pre_merge_node = shortest_path[-2]
+        assert (graph.nodes[pre_merge_node]["hw"].output_shape
+                    == graph.nodes[merge_node]["hw"].input_shape
+                ), "Layers input and output shapes does not match"
+        #TODO: This is the work case scenario for buffering the whole feature map. A more accurate design would be to calculate the depths for each layer in each branch and accumulate the depths to get the total buffer depth which will be the minimum between the work case scenario and the actual buffer depth.
+        branch_buffer += np.prod(np.array(graph.nodes[pre_merge_node]["hw"].output_shape))
+    return branch_buffer
+
 def get_branch_edges(graph):
     merge_points = get_merge_points(graph)
 
