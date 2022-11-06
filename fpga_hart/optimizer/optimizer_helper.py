@@ -117,74 +117,98 @@ def check_partition_fitting(graph, max_BRAM_util, result=[], original_graph=None
     if original_graph is None:
         original_graph = deepcopy(graph)
     sort_order = list(nx.topological_sort(original_graph))
-    min_bram_util = 0.0
 
-    for layer in nx.topological_sort(graph):
-        hw = graph.nodes[layer]["hw"]
-        bram_util, _, _ = get_minimum_resource_utilization(hw)
+    min_bram_util = utils.get_worst_case_buffering(graph)
 
-        min_bram_util += bram_util
-        if min_bram_util > max_BRAM_util:
-
-            ancestors = list(nx.ancestors(graph, layer))
+    if min_bram_util > max_BRAM_util:
+        for sp in utils.get_split_points(graph):
+            ancestors = list(nx.ancestors(graph, sp))
             ancestors.sort(key=lambda val: sort_order.index(val))
-            descendants = list(nx.descendants(graph, layer))
-            descendants.sort(key=lambda val: sort_order.index(val))
+            subgraph_nodes = deepcopy(ancestors)
+            subgraph_nodes.append(sp)
 
-            extra_inputs = []
-            extra_outputs = []
-            if ancestors:
-                subgraph_nodes = deepcopy(ancestors)
+            graph_1 = graph.subgraph(subgraph_nodes).copy()
+            graph_2 = graph.copy()
+            graph_2.remove_nodes_from(graph_1.nodes())
+            min_bram_util = utils.get_worst_case_buffering(graph_2)
 
-                append_current = True
-                for ancestor in subgraph_nodes:
-                    if "GlobalAveragePool" in ancestor or "Conv" in ancestor:
-                        append_current = False
-                        break
+            if min_bram_util <= max_BRAM_util:
+                extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
+                weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
 
-                if append_current:
-                    subgraph_nodes.append(layer)
+                if len(graph_2.nodes()) > 0:
+                    check_partition_fitting(graph_2, max_BRAM_util, result, original_graph)
+                break
+        if min_bram_util > max_BRAM_util:
+            raise ValueError(f"Graph {graph.nodes()} does not fit in the device even after partitioning based on branch buffering")
+    else:
+        for layer in nx.topological_sort(graph):
+            hw = graph.nodes[layer]["hw"]
+            bram_util, _, _ = get_minimum_resource_utilization(hw)
+
+            min_bram_util += bram_util
+            if min_bram_util > max_BRAM_util:
+
+                ancestors = list(nx.ancestors(graph, layer))
+                ancestors.sort(key=lambda val: sort_order.index(val))
+                descendants = list(nx.descendants(graph, layer))
+                descendants.sort(key=lambda val: sort_order.index(val))
+
+                extra_inputs = []
+                extra_outputs = []
+                if ancestors:
+                    subgraph_nodes = deepcopy(ancestors)
+
+                    append_current = True
+                    for ancestor in subgraph_nodes:
+                        if "GlobalAveragePool" in ancestor or "Conv" in ancestor:
+                            append_current = False
+                            break
+
+                    if append_current:
+                        subgraph_nodes.append(layer)
+
+                        for descendant in descendants:
+                            if "GlobalAveragePool" in descendant or "Conv" in descendant:
+                                break
+                            if "Add" in descendant or "Mul" in descendant:
+                                split_points = utils.get_split_points(graph)
+                                if not split_points:
+                                    subgraph_nodes.append(descendant)
+                                else:
+                                    #TODO: Check to which split point the descendant is connected and check only that
+                                    if len(split_points) > 1:
+                                        raise ValueError("More than one split point found. Not supported yet.")
+                                    if not list(nx.all_simple_paths(graph, split_points[0], descendant)):
+                                        subgraph_nodes.append(descendant)
+                                        break
+
+                    extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
+                    graph_1 = graph.subgraph(subgraph_nodes).copy()
+                    weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                    result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
+                else:
+                    subgraph_nodes = [layer]
 
                     for descendant in descendants:
                         if "GlobalAveragePool" in descendant or "Conv" in descendant:
                             break
-                        if "Add" in descendant or "Mul" in descendant:
-                            split_points = utils.get_split_points(graph)
-                            if not split_points:
-                                subgraph_nodes.append(descendant)
-                            else:
-                                #TODO: Check to which split point the descendant is connected and check only that
-                                if len(split_points) > 1:
-                                    raise ValueError("More than one split point found. Not supported yet.")
-                                if not list(nx.all_simple_paths(graph, split_points[0], descendant)):
-                                    subgraph_nodes.append(descendant)
-                                    break
+                        subgraph_nodes.append(descendant)
 
-                extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
-                graph_1 = graph.subgraph(subgraph_nodes).copy()
-                weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
-                result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
-            else:
-                subgraph_nodes = [layer]
+                    extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
+                    graph_1 = graph.subgraph(subgraph_nodes).copy()
+                    weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                    result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
 
-                for descendant in descendants:
-                    if "GlobalAveragePool" in descendant or "Conv" in descendant:
-                        break
-                    subgraph_nodes.append(descendant)
-
-                extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
-                graph_1 = graph.subgraph(subgraph_nodes).copy()
-                weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
-                result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
-
-            graph_2 = graph.copy()
-            graph_2.remove_nodes_from(graph_1.nodes())
-            if len(graph_2.nodes()) > 0:
-                check_partition_fitting(graph_2, max_BRAM_util, result, original_graph)
-            break
-    if min_bram_util <= max_BRAM_util:
-        extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, graph.nodes())
-        weights_reloading = calculate_wr_factor(graph, max_BRAM_util)
-        result.append([graph, extra_inputs, extra_outputs, weights_reloading])
+                graph_2 = graph.copy()
+                graph_2.remove_nodes_from(graph_1.nodes())
+                if len(graph_2.nodes()) > 0:
+                    check_partition_fitting(graph_2, max_BRAM_util, result, original_graph)
+                break
+        if min_bram_util <= max_BRAM_util:
+            extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, graph.nodes())
+            weights_reloading = calculate_wr_factor(graph, max_BRAM_util)
+            result.append([graph, extra_inputs, extra_outputs, weights_reloading])
 
     return result
