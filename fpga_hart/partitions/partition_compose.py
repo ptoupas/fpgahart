@@ -554,18 +554,18 @@ class PartitionComposer(BaseLayer):
             if graph.nodes[node]["type"] == "mem_out":
                 pn = graph_idx[list(graph.predecessors(node))[0]]
                 if (
-                    abs(gamma_matrix_balanced[n - 1, n])
-                    < gamma_matrix_balanced[n - 1, pn]
+                    abs(gamma_matrix_balanced[pn, n])
+                    < gamma_matrix_balanced[pn, pn]
                 ):
                     mem_bounded_out.append(True)
                     if DEBUG:
                         print(
-                            f"Memory out node {n} with rate {gamma_matrix_balanced[n-1,n]} -> {gamma_matrix_balanced[n-1,pn]}"
+                            f"Memory out node {n} with rate {gamma_matrix_balanced[pn,n]} -> {gamma_matrix_balanced[pn,pn]}"
                         )
                 else:
                     mem_bounded_out.append(False)
-                    gamma_matrix_balanced[n - 1, n] = -gamma_matrix_balanced[n - 1, pn]
-                rates_out.append(abs(gamma_matrix_balanced[n - 1, n]))
+                    gamma_matrix_balanced[pn, n] = -gamma_matrix_balanced[pn, pn]
+                rates_out.append(abs(gamma_matrix_balanced[pn, n]))
                 shapes_out.append(graph.nodes[node]["hw"].input_shape)
 
         if DEBUG:

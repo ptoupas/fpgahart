@@ -510,7 +510,7 @@ class PartitionParser(PartitionDescriptor):
             if not os.path.exists(log_results_path):
                 os.makedirs(log_results_path)
 
-        batch_size = np.arange(1, 250, 1)
+        batch_size = np.arange(1, 500, 1)
         lat_sec = ((self.model_avg_metrics["latency(C) Sum"] - self.model_avg_metrics["depth Sum"]) * batch_size + self.model_avg_metrics["depth Sum"]) / (self.clock_frequency * 1e6) + (self.reconfiguration_time * num_dev_reconfig)
         plt.plot(batch_size, lat_sec)
         plt.xlabel("Batch Size")
