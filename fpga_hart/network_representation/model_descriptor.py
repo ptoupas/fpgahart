@@ -2,6 +2,7 @@ from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
+
 from fpga_hart import _logger
 from fpga_hart.network_representation.onnx_parser import OnnxModelParser
 
@@ -37,6 +38,9 @@ class ModelLayerDescriptor(OnnxModelParser):
             operation = self.torch_layers[k]["operation"]
             input_shape = [self.torch_layers[k]["input"][0]]
             output_shape = self.torch_layers[k]["output"]
+            if operation in ["Relu", "Sigmoid", "Elu", "HardSigmoid", "LeakyRelu", "PRelu", "Selu", "Tanh", "Celu", "HardSwish", "Softmax"] and len(input_shape[0]) == 2 and len(output_shape) == 2:
+                input_shape[0] = input_shape[0] + [1, 1, 1]
+                output_shape = output_shape + [1, 1, 1]
             input_node = [self.torch_layers[k]["input_id"][0]]
             if self.model_name == "x3d_m":
                 if name == "Gemm_401":
