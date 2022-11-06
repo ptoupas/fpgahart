@@ -297,32 +297,6 @@ class PartitionParser(PartitionDescriptor):
     def model_partition(self, partition: list, name: str) -> None:
 
         graph = self.create_graph(partition)
-        branch_edges = utils.get_branch_edges(graph)
-
-        # Worst case scenario
-        branch_buffer = 0
-        for edge in branch_edges:
-            max_shape = 0
-            for pair in edge:
-                if (
-                    graph.nodes[pair[0]]["type"] == "ElementWise"
-                    and graph.nodes[pair[0]]["hw"].op_type == "Mul"
-                ) or (
-                    graph.nodes[pair[1]]["type"] == "ElementWise"
-                    and graph.nodes[pair[1]]["hw"].op_type == "Mul"
-                ):
-                    continue
-                assert (
-                    graph.nodes[pair[0]]["hw"].output_shape
-                    == graph.nodes[pair[1]]["hw"].input_shape_1
-                    or graph.nodes[pair[0]]["hw"].output_shape
-                    == graph.nodes[pair[1]]["hw"].input_shape_2
-                ), "Layers input and output shapes does not match"
-                max_shape = max(
-                    max_shape,
-                    np.prod(np.array(graph.nodes[pair[0]]["hw"].output_shape[1:])),
-                )
-            branch_buffer += max_shape
 
         if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/"):
             os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/")
