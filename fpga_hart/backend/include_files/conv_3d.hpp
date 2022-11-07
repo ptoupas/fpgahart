@@ -369,7 +369,7 @@ void conv_3d(
             filter_loop: for(unsigned int filter_index=0;filter_index<filters_per_group;filter_index++) {
 #pragma HLS LOOP_FLATTEN
 #pragma HLS PIPELINE II=1
-#pragma HLS DEPENDENCE variable=windowCache RAW intra true
+#pragma HLS DEPENDENCE variable=window_cache RAW intra true
                 if(filter_index%filters_per_group == 0) {
                 	DO_PRAGMA(HLS OCCURRENCE cycle=occurrence_filter_distance)
                     window_cache = in.read();
