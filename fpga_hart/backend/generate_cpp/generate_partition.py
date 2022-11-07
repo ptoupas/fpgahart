@@ -19,6 +19,7 @@ from layers.generate_split import generate_split_files
 from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
 
+from fpga_hart.backend.python_prototyping.generate_data import partition_3d
 from fpga_hart.partitions.partition_parser import PartitionParser
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
@@ -26,20 +27,19 @@ from fpga_hart.utils.graph_manipulation import visualize_graph
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
-    parser.add_argument("--model_name", help="name of the HAR model", required=True)
     parser.add_argument(
-        "--hls_project_path",
-        help="path of the HLS project to be generated",
-        required=True,
-    )
-    parser.add_argument(
-        "--prefix",
-        help="the parent folder in which to store the model's partitions",
+        "model_name",
+        choices=["x3d_m", "slowonly", "r2plus1d", "c3d"],
         type=str,
-        required=True,
+        help="name of the HAR model",
     )
     parser.add_argument(
-        "--config_file", help="name of the model's configuration file", required=True
+        "hls_project_path",
+        type=str,
+        help="path of the HLS project to be generated",
+    )
+    parser.add_argument(
+        "--config_file", help="name of the model's configuration file"
     )
 
     args = parser.parse_args()
@@ -49,18 +49,13 @@ def parse_args():
 def get_partitions_configurations(config_file):
     result = {}
 
-    configuration = pd.read_csv(config_file)
-    partitions = configuration["Part"].to_list()
+    configuration = pd.read_json(config_file)
+    partitions = configuration.columns.to_list()
     for p in partitions:
-        partition_layers_config = configuration[configuration["Part"] == p][
-            "config"
-        ].to_dict()
-        partition_layers_config = partition_layers_config[[*partition_layers_config][0]]
-        partition_layers_config = partition_layers_config.replace("'", '"')
-        partition_layers_config = json.loads(partition_layers_config)
-        partition_branch_depth = configuration[configuration["Part"] == p][
-            "Branch Depth"
-        ].values[0]
+        if "metrics" in p:
+            continue
+        partition_layers_config = configuration[p]["config"]
+        partition_branch_depth = configuration[p]["branch_depth"]
         result[p] = {
             "layers": partition_layers_config,
             "branch_depth": partition_branch_depth,
@@ -70,39 +65,38 @@ def get_partitions_configurations(config_file):
 
 
 def generate_partition_code(
-    layers_config, branch_depth, partition_name, parser, prefix, hls_project_path
-):
+    layers_config, branch_depth, partition_name, model_name, parser, hls_project_path):
     # Generate layers files
-    for l in [*layers_config]:
-        if "Swish" in l:
-            generate_swish_files(l, layers_config[l], f"{prefix}/{partition_name}")
-        elif "Relu" in l:
-            generate_relu_files(l, layers_config[l], f"{prefix}/{partition_name}")
-        elif "Sigmoid" in l:
-            generate_sigmoid_files(l, layers_config[l], f"{prefix}/{partition_name}")
-        elif "Add" in l or "Mul" in l:
-            generate_elemwise_files(l, layers_config[l], f"{prefix}/{partition_name}")
-        elif "Conv" in l:
-            generate_conv_files(
-                l, layers_config[l], f"{prefix}/{partition_name}", hls_project_path
-            )
-        elif "GlobalAveragePool" in l:
-            shorted_name = "Gap_" + l.split("_")[1]
-            generate_gap_files(
-                shorted_name, layers_config[l], f"{prefix}/{partition_name}"
-            )
-        elif "Gemm" in l:
-            generate_gemm_files(l, layers_config[l], f"{prefix}/{partition_name}")
+    for layer_name, layer_config in layers_config.items():
+        if "Swish" in layer_name:
+            generate_swish_files(layer_name, layer_config, model_name, partition_name=partition_name)
+        elif "Relu" in layer_name:
+            generate_relu_files(layer_name, layer_config, model_name, partition_name=partition_name)
+        elif "Sigmoid" in layer_name:
+            generate_sigmoid_files(layer_name, layer_config, model_name, partition_name=partition_name)
+        elif "Add" in layer_name or "Mul" in layer_name:
+            generate_elemwise_files(layer_name, layer_config, model_name, partition_name=partition_name)
+        elif "Conv" in layer_name:
+            generate_conv_files(layer_name, layer_config, model_name, hls_project_path, partition_name=partition_name)
+        elif "MaxPool" in layer_name or "AveragePool" in layer_name:
+            # TODO: Implement pooling
+            # generate_pool_files(layer_name, layer_config, model_name, partition_name=partition_name)
+            print("MaxPool and AveragePool not implemented yet")
+            pass
+        elif "GlobalAveragePool" in layer_name:
+            layer_name = "Gap_" + layer_name.split("_")[1]
+            generate_gap_files(layer_name, layer_config, model_name, partition_name=partition_name)
+        elif "Gemm" in layer_name:
+            generate_gemm_files(layer_name, layer_config, model_name, partition_name=partition_name)
         else:
-            raise Exception(f"Layer {l} not supported")
-
+            raise Exception(f"Layer {layer_name} not supported")
     # Create the graph of the partition
     graph = parser.create_graph([*layers_config])
 
     # Generate extra supporting files (split, squeeze)
     split_points = utils.get_split_points(graph)
     for sf in split_points:
-        generate_split_files(sf, layers_config[sf], f"{prefix}/{partition_name}")
+        generate_split_files(sf, layers_config[sf], model_name, partition_name=partition_name)
 
     squeeze_layers = identify_streams_mismatches(layers_config, graph.edges)
     for sl in squeeze_layers:
@@ -111,16 +105,23 @@ def generate_partition_code(
             layers_config[sl[0]],
             sl[1],
             layers_config[sl[1]],
-            f"{prefix}/{partition_name}",
+            model_name,
+            partition_name=partition_name,
         )
 
     # Update the graph with the supporting layers
     graph = utils.update_graph(
         graph, split_points=split_points, squeeze_layers=squeeze_layers
     )
-    if not os.path.exists(f"generated_files/{prefix}/graphs/"):
-        os.makedirs(f"generated_files/{prefix}/graphs/")
-    visualize_graph(graph, f"generated_files/{prefix}/graphs/{partition_name}", False, partition_name)
+    os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs")
+    if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs")):
+        os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs"))
+    visualize_graph(graph, os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs", partition_name + "_final"), False, partition_name)
+
+    # Generate data files
+    store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
+    partition_3d(partition_name, layers_config, graph, file_format="bin", store_path=store_path)
+    exit()
 
     # Generate top level partition file
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
@@ -175,16 +176,15 @@ if __name__ == "__main__":
 
     config = DotMap(config_dictionary)
 
-    parser = PartitionParser(args.model_name, False, False, False, config, False)
+    parser = PartitionParser(args.model_name, False, False, False, False, config, False)
 
-    partition_configuration = get_partitions_configurations(args.config_file)
+    if args.config_file:
+        partition_configuration = get_partitions_configurations(args.config_file)
+    else:
+        partition_configuration = get_partitions_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_partitions.json"))
 
-    for p in [*partition_configuration]:
-        generate_partition_code(
-            partition_configuration[p]["layers"],
-            partition_configuration[p]["branch_depth"],
-            p,
-            parser,
-            args.prefix,
-            args.hls_project_path,
-        )
+    for k, v in partition_configuration.items():
+        if args.config_file:
+            generate_partition_code(v['layers'], v['branch_depth'], k, "custom_partitions", parser, args.hls_project_path)
+        else:
+            generate_partition_code(v['layers'], v['branch_depth'], k, args.model_name, parser, args.hls_project_path)
