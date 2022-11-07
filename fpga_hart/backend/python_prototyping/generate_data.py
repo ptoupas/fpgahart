@@ -6,6 +6,7 @@ import random
 import sys
 from collections import deque
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
@@ -663,28 +664,7 @@ def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu
     else:
         raise Exception("Format not supported")
 
-
-def get_partitions_configurations(configuration_file):
-    result = {}
-
-    configuration = pd.read_csv(configuration_file)
-    partitions = configuration["Part"].to_list()
-    for p in partitions:
-        partition_layers_config = configuration[configuration["Part"] == p][
-            "config"
-        ].to_dict()
-        partition_layers_config = partition_layers_config[[*partition_layers_config][0]]
-        partition_layers_config = partition_layers_config.replace("'", '"')
-        partition_layers_config = json.loads(partition_layers_config)
-        partition_branch_depth = configuration[configuration["Part"] == p][
-            "Branch Depth"
-        ].values[0]
-        result[p] = partition_layers_config
-
-    return result
-
-
-def part_3d(file_format, config_file, prefix):
+def partition_3d(part, layers_config, graph, file_format, store_path="generated_data/partition_3d"):
     class X3d_m_layer(nn.Module):
         def __init__(self, layer_type, conv_config, file_path, part):
             super().__init__()
@@ -920,10 +900,10 @@ def part_3d(file_format, config_file, prefix):
             else:
                 raise Exception(f"Layer type {self.layer_type} is not supported")
 
-    partitions_config = get_partitions_configurations(config_file)
-
-    for part, layers in partitions_config.items():
-        layer_nodes = [*layers]
+    layers = [*layers_config]
+    for layer, config in layers_config.items():
+        print(layer, config)
+        continue
 
         layer_order = [l.split("_")[0] for l in layer_nodes]
         layer_type = get_x3d_m_layer_type(layer_order)
@@ -1508,6 +1488,7 @@ def parse_args():
     parser.add_argument(
         "--pool_op_type", choices=["max", "avg"], default="max", type=str
     )
+    parser.add_argument("--partition_name", default="partition_3d", type=str)
     parser.add_argument("--format", choices=["txt", "bin"], default="bin", type=str)
     parser.add_argument("--config_file", default="", type=str)
 
@@ -1559,9 +1540,9 @@ if __name__ == "__main__":
     elif op_type == "3d_gap":
         gap_3d(args.input_shape, args.coarse_in, args.coarse_out, args.format)
     elif op_type == "3d_part":
-        # TODO: prefix has been removed fix the part_3d input
-        prefix = 'FIXME_custom_partitions'
-        part_3d(args.format, args.config_file, "generated_data/" + prefix)
+        #TODO: generate a dictionary from the args.config_file
+        config_dict = {}
+        partition_3d(args.partition_name, config_dict, graph=nx.DiGraph(), file_format=args.format)
     elif op_type == "gemm":
         gemm(args.in_features, args.out_features, args.coarse_in, args.coarse_out, bias=args.bias, file_format=args.format)
     else:
