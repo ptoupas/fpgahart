@@ -344,7 +344,7 @@ def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name
 def get_input_nodes(graph):
     input_nodes = []
     for node in graph.nodes():
-        if graph.in_degree[node] == 0:
+        if graph.in_degree[node] == 0 or (graph.nodes[node]['type'] == 'ElementWise' and graph.in_degree[node] == 1):
             input_nodes.append(node)
     return input_nodes
 

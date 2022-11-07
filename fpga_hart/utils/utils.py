@@ -920,7 +920,7 @@ def get_out_streams(layer_graph, node_out):
 
 def get_split_points(graph):
     split_points = []
-    for node in graph.nodes():
+    for node in nx.topological_sort(graph):
         if graph.out_degree[node] > 1:
             split_points.append(node)
     return split_points
@@ -928,7 +928,7 @@ def get_split_points(graph):
 
 def get_merge_points(graph):
     merge_points = []
-    for node in graph.nodes():
+    for node in nx.topological_sort(graph):
         if graph.in_degree[node] > 1:
             merge_points.append(node)
     return merge_points
@@ -968,13 +968,13 @@ def get_conbinations(list1, list2):
 
 
 def get_input_node(graph):
-    for node in graph.nodes():
+    for node in nx.topological_sort(graph):
         if graph.in_degree[node] == 0:
             return node
 
 
 def get_output_node(graph):
-    for node in graph.nodes():
+    for node in nx.topological_sort(graph):
         if graph.out_degree[node] == 0:
             return node
 
@@ -1063,7 +1063,7 @@ def update_graph(graph, split_points=None, squeeze_layers=None):
 
 
 def add_supportive_nodes_config(graph, config):
-    for node in graph.nodes():
+    for node in nx.topological_sort(graph):
         if "Split_" in node and not node in config.keys():
             parent_node = node.split("Split_")[1]
             config[node] = {
@@ -1325,7 +1325,7 @@ def get_random_shape(
     graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, depth_dist_thresh: int = 10, height_dist_thresh: int = 10
 ) -> np.array:
     shapes_list = []
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = lookuptable[graph.nodes[n]["hw_type"]]
         if bb in bb_type and bb == "Gemm":
             shapes_list.append(
@@ -1367,7 +1367,7 @@ def get_random_shape(
 def get_minmax_input_channels(graph: nx.DiGraph, bb_type: str) -> int:
     max_input_channels = -1
     min_input_channels = 10000
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = graph.nodes[n]["hw_type"]
         if bb == bb_type:
             max_input_channels = max(
@@ -1382,7 +1382,7 @@ def get_minmax_input_channels(graph: nx.DiGraph, bb_type: str) -> int:
 def get_minmax_output_channels(graph: nx.DiGraph, bb_type: str) -> int:
     max_output_channels = -1
     min_output_channels = 10000
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = graph.nodes[n]["hw_type"]
         if bb == bb_type:
             max_output_channels = max(
@@ -1397,7 +1397,7 @@ def get_minmax_output_channels(graph: nx.DiGraph, bb_type: str) -> int:
 def get_minmax_depth(graph: nx.DiGraph, bb_type: str) -> int:
     max_depth = -1
     min_depth = 10000
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = graph.nodes[n]["hw_type"]
         if bb == bb_type:
             max_depth = max(max_depth, graph.nodes[n]["hw"].input_shape[2])
@@ -1408,7 +1408,7 @@ def get_minmax_depth(graph: nx.DiGraph, bb_type: str) -> int:
 def get_minmax_height(graph: nx.DiGraph, bb_type: str) -> int:
     max_height = -1
     min_height = 10000
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = graph.nodes[n]["hw_type"]
         if bb == bb_type:
             max_height = max(max_height, graph.nodes[n]["hw"].input_shape[3])
@@ -1419,7 +1419,7 @@ def get_minmax_height(graph: nx.DiGraph, bb_type: str) -> int:
 def get_minmax_width(graph: nx.DiGraph, bb_type: str) -> int:
     max_width = -1
     min_width = 10000
-    for n in graph.nodes():
+    for n in nx.topological_sort(graph):
         bb = graph.nodes[n]["hw_type"]
         if bb == bb_type:
             max_width = max(max_width, graph.nodes[n]["hw"].input_shape[4])
