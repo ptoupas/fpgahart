@@ -63,6 +63,7 @@ class PartitionParser(PartitionDescriptor):
             "BRAM %",
             "BRAMs",
             "depth",
+            "branch_depth",
             "dataSizeIn(MB)",
             "dataSizeOut(MB)",
         ]
@@ -76,8 +77,6 @@ class PartitionParser(PartitionDescriptor):
         self.partition_model_file = os.path.join(
             os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_partitions.json"
         )
-        if os.path.exists(self.partition_model_file):
-            os.remove(self.partition_model_file)
 
         if self.se_block:
             self.layer_model_file = os.path.join(
@@ -325,7 +324,7 @@ class PartitionParser(PartitionDescriptor):
         num_graphs = len(solution_mem)
 
         for i, (solution, wr) in enumerate(zip(solution_dp, weights_reloading)):
-            part_name = name + "_split_" + str(i) if num_graphs > 1 else name
+            part_name = name + "_split" + str(i) if num_graphs > 1 else name
 
             partition_results = deepcopy(solution)
             log_metrics = {}
@@ -356,6 +355,7 @@ class PartitionParser(PartitionDescriptor):
                 partition_results["BRAM"],
                 partition_results["BRAM_RAW"],
                 partition_results["depth"],
+                partition_results["branch_depth"],
                 partition_results["dataSizeIn"],
                 partition_results["dataSizeOut"],
             ]
@@ -381,6 +381,7 @@ class PartitionParser(PartitionDescriptor):
                 "BRAM %": partition_results["BRAM"],
                 "BRAMs": partition_results["BRAM_RAW"],
                 "depth": partition_results["depth"],
+                "branch_depth": partition_results["branch_depth"],
                 "dataSizeIn(MB)": partition_results["dataSizeIn"],
                 "dataSizeOut(MB)": partition_results["dataSizeOut"],
                 "config": partition_results["config"],
@@ -447,6 +448,9 @@ class PartitionParser(PartitionDescriptor):
         return res
 
     def parse(self):
+        if os.path.exists(self.partition_model_file):
+            os.remove(self.partition_model_file)
+
         if False:
             #TODO: Find a way to combine this with the partition split functionality
             duplicates_dict = self.idetify_sequential_duplicates()

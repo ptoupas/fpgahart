@@ -36,8 +36,6 @@ class LayerParser(ModelLayerDescriptor):
         self.layer_model_file = os.path.join(
             os.getcwd(), "fpga_modeling_reports", self.model_name, f"{self.model_name}_layers.json"
         )
-        if os.path.exists(self.layer_model_file):
-            os.remove(self.layer_model_file)
 
         with open("fpga_hart/config/report_template.yaml", "r") as yaml_file:
             self.report_dict = yaml.load(yaml_file, Loader=yaml.FullLoader)
@@ -62,6 +60,8 @@ class LayerParser(ModelLayerDescriptor):
         )
 
     def parse(self) -> None:
+        if os.path.exists(self.layer_model_file):
+            os.remove(self.layer_model_file)
 
         for name, descriptor in self.layers.items():
             self.model_layer(name, descriptor)
