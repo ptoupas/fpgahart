@@ -8,8 +8,10 @@ import numpy as np
 import onnx
 import onnx.numpy_helper
 import onnxoptimizer as optimizer
-from fpga_hart import _logger
+import onnxruntime as ort
 from onnxsim import simplify
+
+from fpga_hart import _logger
 
 
 def add_input_from_initializer(model: onnx.ModelProto):
@@ -75,11 +77,15 @@ class OnnxModelParser:
     def __post_init__(self) -> None:
         # _logger.setLevel(level=logging.INFO)
         self.model_path = os.path.join(os.getcwd(), "models", self.model_name + ".onnx")
+        self.optimized_model_path = os.path.join(os.getcwd(), "models", self.model_name + "_optimized.onnx")
         self.torch_layers = {}
         self.init_onnx_model()
 
     def init_onnx_model(self) -> None:
         self.onnx_model = onnx.load(self.model_path)
+        self.initial_model_inputs = [node.name for node in self.onnx_model.graph.input]
+        self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
+
         onnx.checker.check_model(self.onnx_model)
         self.onnx_model, check = simplify(self.onnx_model)
         assert check, "Simplified ONNX model could not be validated"
@@ -105,8 +111,41 @@ class OnnxModelParser:
         self.parse_layers()
         onnx.save(
             self.onnx_model,
-            os.path.join(os.getcwd(), "models", self.model_name + "_optimized.onnx"),
+            self.optimized_model_path,
         )
+
+    def add_outputs_to_model(self, outputs: list) -> None:
+        output_tensors =[node.output[0] for node in self.onnx_model.graph.node if node.name in outputs]
+
+        for out_t in output_tensors:
+            intermediate_layer_value_info = onnx.helper.ValueInfoProto()
+            intermediate_layer_value_info.name = out_t
+            self.onnx_model.graph.output.append(intermediate_layer_value_info)
+
+    def onnx_forward(self, x: np.ndarray) -> Tuple[list, list]:
+        assert len(self.initial_model_inputs) == 1, "Only one input supported in the onnx model"
+
+        extra_outputs = ["Add_14", "Conv_7"]
+        self.add_outputs_to_model(extra_outputs)
+
+        ort_sess = ort.InferenceSession(self.onnx_model.SerializeToString())
+        output_nodes_names = [self.get_node_from_tensor_output(out.name).name for out in ort_sess.get_outputs()]
+
+        outputs = ort_sess.run(None, {self.initial_model_inputs[0]: x.astype(np.float32)})
+
+        return outputs, output_nodes_names
+
+    def get_node_from_tensor_output(self, tensor_name: str) -> onnx.NodeProto:
+        for node in self.onnx_model.graph.node:
+            if tensor_name in node.output:
+                return node
+        raise ValueError(f"Tensor {tensor_name} not found in the model")
+
+    def get_node_from_tensor_input(self, tensor_name: str) -> onnx.NodeProto:
+        for node in self.onnx_model.graph.node:
+            if tensor_name in node.input:
+                return node
+        raise ValueError(f"Tensor {tensor_name} not found in the model")
 
     def get_config(self) -> None:
         config = configparser.ConfigParser()
