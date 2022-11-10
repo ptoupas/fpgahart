@@ -15,14 +15,14 @@ def generate_split_cpp(name: str, config: dict, model_name: str, partition_name:
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
-    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"split_{layer_name_lower}.cpp"))
+    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"))
 
-    cpp(f"#include \"split_{layer_name_lower}.hpp\"", newlines=2)
+    cpp(f"#include \"{layer_name_lower}.hpp\"", newlines=2)
 
-    with cpp.block(f"void split_{layer_name_lower}_layer(\n\
-        stream_t(split_{layer_name_lower}_data_t) in[SPLIT_{layer_name_upper}_COARSE],\n\
-        stream_t(split_{layer_name_lower}_data_t) out_1[SPLIT_{layer_name_upper}_COARSE],\n\
-        stream_t(split_{layer_name_lower}_data_t) out_2[SPLIT_{layer_name_upper}_COARSE])"):
+    with cpp.block(f"void {layer_name_lower}_layer(\n\
+        stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE],\n\
+        stream_t({layer_name_lower}_data_t) out_1[{layer_name_upper}_COARSE],\n\
+        stream_t({layer_name_lower}_data_t) out_2[{layer_name_upper}_COARSE])"):
 
         cpp("#pragma HLS INLINE OFF")
         cpp("#pragma HLS DATAFLOW", newlines=2)
@@ -31,16 +31,16 @@ def generate_split_cpp(name: str, config: dict, model_name: str, partition_name:
         cpp("#pragma HLS ARRAY_PARTITION variable=out_1 complete dim=0")
         cpp("#pragma HLS ARRAY_PARTITION variable=out_2 complete dim=0", newlines=2)
 
-        with cpp.block(f"for(int coarseIndex=0; coarseIndex<SPLIT_{layer_name_upper}_COARSE; coarseIndex++)"):
+        with cpp.block(f"for(int coarseIndex=0; coarseIndex<{layer_name_upper}_COARSE; coarseIndex++)"):
             cpp("#pragma HLS unroll", newlines=2)
 
             cpp(f"split_3d<\n\
-                SPLIT_{layer_name_upper}_RELU_BATCH_SIZE,\n\
-                SPLIT_{layer_name_upper}_RELU_CHANNELS,\n\
-                SPLIT_{layer_name_upper}_RELU_HEIGHT,\n\
-                SPLIT_{layer_name_upper}_RELU_WIDTH,\n\
-                SPLIT_{layer_name_upper}_RELU_DEPTH,\n\
-                split_{layer_name_lower}_data_t\n\
+                {layer_name_upper}_SPLIT_BATCH_SIZE,\n\
+                {layer_name_upper}_SPLIT_CHANNELS,\n\
+                {layer_name_upper}_SPLIT_HEIGHT,\n\
+                {layer_name_upper}_SPLIT_WIDTH,\n\
+                {layer_name_upper}_SPLIT_DEPTH,\n\
+                {layer_name_lower}_data_t\n\
             >(in[coarseIndex],out_1[coarseIndex],out_2[coarseIndex]);", newlines=2)
 
     cpp.close()
@@ -57,32 +57,32 @@ def generate_split_hpp(name: str, config: dict, model_name: str, partition_name:
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
-    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"split_{layer_name_lower}.hpp"))
+    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"))
 
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
     hpp("#include \"split_3d_.hpp\"", newlines=2)
 
-    hpp(f"#define SPLIT_{layer_name_upper}_BATCH_SIZE {batch_size}")
-    hpp(f"#define SPLIT_{layer_name_upper}_CHANNELS {channels}")
-    hpp(f"#define SPLIT_{layer_name_upper}_DEPTH {depth}")
-    hpp(f"#define SPLIT_{layer_name_upper}_HEIGHT {height}")
-    hpp(f"#define SPLIT_{layer_name_upper}_WIDTH {width}", newlines=2)
+    hpp(f"#define {layer_name_upper}_BATCH_SIZE {batch_size}")
+    hpp(f"#define {layer_name_upper}_CHANNELS {channels}")
+    hpp(f"#define {layer_name_upper}_DEPTH {depth}")
+    hpp(f"#define {layer_name_upper}_HEIGHT {height}")
+    hpp(f"#define {layer_name_upper}_WIDTH {width}", newlines=2)
 
-    hpp(f"#define SPLIT_{layer_name_upper}_COARSE {coarse_factor}", newlines=2)
+    hpp(f"#define {layer_name_upper}_COARSE {coarse_factor}", newlines=2)
 
-    hpp(f"#define SPLIT_{layer_name_upper}_RELU_BATCH_SIZE \tSPLIT_{layer_name_upper}_BATCH_SIZE")
-    hpp(f"#define SPLIT_{layer_name_upper}_RELU_CHANNELS \tDIVIDE(SPLIT_{layer_name_upper}_CHANNELS, SPLIT_{layer_name_upper}_COARSE)")
-    hpp(f"#define SPLIT_{layer_name_upper}_RELU_DEPTH \tSPLIT_{layer_name_upper}_DEPTH")
-    hpp(f"#define SPLIT_{layer_name_upper}_RELU_HEIGHT \tSPLIT_{layer_name_upper}_HEIGHT")
-    hpp(f"#define SPLIT_{layer_name_upper}_RELU_WIDTH \tSPLIT_{layer_name_upper}_WIDTH", newlines=2)
+    hpp(f"#define {layer_name_upper}_SPLIT_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
+    hpp(f"#define {layer_name_upper}_SPLIT_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS, {layer_name_upper}_COARSE)")
+    hpp(f"#define {layer_name_upper}_SPLIT_DEPTH \t{layer_name_upper}_DEPTH")
+    hpp(f"#define {layer_name_upper}_SPLIT_HEIGHT \t{layer_name_upper}_HEIGHT")
+    hpp(f"#define {layer_name_upper}_SPLIT_WIDTH \t{layer_name_upper}_WIDTH", newlines=2)
 
-    hpp(f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \tsplit_{layer_name_lower}_data_t;", newlines=3)
+    hpp(f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \t{layer_name_lower}_data_t;", newlines=3)
 
-    hpp(f"void split_{layer_name_lower}_layer(\n\
-        stream_t(split_{layer_name_lower}_data_t) in[SPLIT_{layer_name_upper}_COARSE],\n\
-        stream_t(split_{layer_name_lower}_data_t) out_1[SPLIT_{layer_name_upper}_COARSE],\n\
-        stream_t(split_{layer_name_lower}_data_t) out_2[SPLIT_{layer_name_upper}_COARSE]);")
+    hpp(f"void {layer_name_lower}_layer(\n\
+        stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE],\n\
+        stream_t({layer_name_lower}_data_t) out_1[{layer_name_upper}_COARSE],\n\
+        stream_t({layer_name_lower}_data_t) out_2[{layer_name_upper}_COARSE]);")
 
     hpp.close()
 

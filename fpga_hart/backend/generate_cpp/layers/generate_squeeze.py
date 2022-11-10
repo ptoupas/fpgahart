@@ -5,57 +5,40 @@ import numpy as np
 from .codegen import *
 
 
-def get_node_coarse_factor(config: dict, mode: str="in"):
-    if "coarse_factor" in config.keys():
-        return config["coarse_factor"]
-    if mode == "in":
-        return config["coarse_in_factor"]
-    elif mode == "out":
-        depthwise = config["depthwise"]
-        return config["coarse_out_factor"]
+def generate_squeeze_cpp(name: str, config: dict, model_name: str, partition_name: str):
 
+    batch_size = config["batch_size"]
+    channels = config["channels_out"]
+    depth = config["depth_out"]
+    height = config["height_out"]
+    width = config["width_out"]
 
-def generate_squeeze_cpp(in_name: str, in_config: dict, out_name: str, out_config: dict, model_name: str, partition_name: str):
-    if "broadcasting" in in_config.keys() or "broadcasting" in out_config.keys():
-        assert (
-            in_config["channels_out"] == out_config["channels_in"]
-        ), "Output shape of the first node must be the same as input shape of the second node"
-    else:
-        assert (
-            [in_config["channels_out"], in_config["depth_out"], in_config["height_out"], in_config["width_out"]] == [out_config["channels_in"], out_config["depth_in"], out_config["height_in"], out_config["width_in"]]
-        ), "Output shape of the first node must be the same as input shape of the second node"
-    batch_size = in_config["batch_size"]
-    channels = in_config["channels_out"]
-    depth = in_config["depth_out"]
-    height = in_config["height_out"]
-    width = in_config["width_out"]
+    node_in_coarse_factor = config['coarse_in_factor']
+    node_out_coarse_factor = config['coarse_out_factor']
 
-    node_in_coarse_factor = get_node_coarse_factor(in_config, mode="out")
-    node_out_coarse_factor = get_node_coarse_factor(out_config, mode="in")
+    squeeze_buffer = np.lcm(node_in_coarse_factor, node_out_coarse_factor)
 
-    layer_in_name_lower = in_name.replace("GlobalAveragePool", "GAP").lower()
-    layer_in_name_upper = in_name.replace("GlobalAveragePool", "GAP").upper()
-    layer_out_name_lower = out_name.replace("GlobalAveragePool", "GAP").lower()
-    layer_out_name_upper = out_name.replace("GlobalAveragePool", "GAP").upper()
+    layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
+    layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
     cpp = CppFile(
         os.path.join(
             os.getcwd(),
             "generated_files",
-            model_name, partition_name, f"{in_name}_to_{out_name}", "src",
-            f"squeeze_{layer_in_name_lower}_{layer_out_name_lower}.cpp",
+            model_name, partition_name, name, "src",
+            f"{layer_name_lower}.cpp",
         )
     )
 
     cpp(
-        f'#include "squeeze_{layer_in_name_lower}_{layer_out_name_lower}.hpp"',
+        f'#include "{layer_name_lower}.hpp"',
         newlines=2,
     )
 
     with cpp.block(
-        f"void squeeze_{layer_in_name_lower}_{layer_out_name_lower}_layer(\n\
-        stream_t(squeeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t) in[SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_IN],\n\
-        stream_t(squeeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t) out[SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_OUT])"
+        f"void {layer_name_lower}_layer(\n\
+        stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE_IN],\n\
+        stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE_OUT])"
     ):
 
         cpp("#pragma HLS INLINE OFF")
@@ -66,15 +49,15 @@ def generate_squeeze_cpp(in_name: str, in_config: dict, out_name: str, out_confi
 
         cpp(
             f"squeeze_3d<\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BATCH_SIZE,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_CHANNELS,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_HEIGHT,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_WIDTH,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_DEPTH,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_IN,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_OUT,\n\
-            SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BUFFER,\n\
-            squeeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t\n\
+            {layer_name_upper}_SQUEEZE_BATCH_SIZE,\n\
+            {layer_name_upper}_SQUEEZE_CHANNELS,\n\
+            {layer_name_upper}_SQUEEZE_HEIGHT,\n\
+            {layer_name_upper}_SQUEEZE_WIDTH,\n\
+            {layer_name_upper}_SQUEEZE_DEPTH,\n\
+            {layer_name_upper}_SQUEEZE_COARSE_IN,\n\
+            {layer_name_upper}_SQUEEZE_COARSE_OUT,\n\
+            {layer_name_upper}_SQUEEZE_BUFFER,\n\
+            {layer_name_lower}_data_t\n\
         >(in,out);",
             newlines=2,
         )
@@ -82,37 +65,28 @@ def generate_squeeze_cpp(in_name: str, in_config: dict, out_name: str, out_confi
     cpp.close()
 
 
-def generate_squeeze_hpp(in_name: str, in_config: dict, out_name: str, out_config: dict, model_name: str, partition_name: str):
-    if "broadcasting" in in_config.keys() or "broadcasting" in out_config.keys():
-        assert (
-            in_config["channels_out"] == out_config["channels_in"]
-        ), "Output shape of the first node must be the same as input shape of the second node"
-    else:
-        assert (
-            [in_config["channels_out"], in_config["depth_out"], in_config["height_out"], in_config["width_out"]] == [out_config["channels_in"], out_config["depth_in"], out_config["height_in"], out_config["width_in"]]
-        ), "Output shape of the first node must be the same as input shape of the second node"
-    batch_size = in_config["batch_size"]
-    channels = in_config["channels_out"]
-    depth = in_config["depth_out"]
-    height = in_config["height_out"]
-    width = in_config["width_out"]
+def generate_squeeze_hpp(name: str, config: dict, model_name: str, partition_name: str):
 
-    node_in_coarse_factor = get_node_coarse_factor(in_config, mode="out")
-    node_out_coarse_factor = get_node_coarse_factor(out_config, mode="in")
+    batch_size = config["batch_size"]
+    channels = config["channels_out"]
+    depth = config["depth_out"]
+    height = config["height_out"]
+    width = config["width_out"]
+
+    node_in_coarse_factor = config['coarse_in_factor']
+    node_out_coarse_factor = config['coarse_out_factor']
 
     squeeze_buffer = np.lcm(node_in_coarse_factor, node_out_coarse_factor)
 
-    layer_in_name_lower = in_name.replace("GlobalAveragePool", "GAP").lower()
-    layer_in_name_upper = in_name.replace("GlobalAveragePool", "GAP").upper()
-    layer_out_name_lower = out_name.replace("GlobalAveragePool", "GAP").lower()
-    layer_out_name_upper = out_name.replace("GlobalAveragePool", "GAP").upper()
+    layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
+    layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
 
     hpp = CppFile(
         os.path.join(
             os.getcwd(),
             "generated_files",
-            model_name, partition_name, f"{in_name}_to_{out_name}", "src",
-            f"squeeze_{layer_in_name_lower}_{layer_out_name_lower}.hpp",
+            model_name, partition_name, name, "src",
+            f"{layer_name_lower}.hpp",
         )
     )
 
@@ -121,69 +95,69 @@ def generate_squeeze_hpp(in_name: str, in_config: dict, out_name: str, out_confi
     hpp('#include "squeeze_3d_.hpp"', newlines=2)
 
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_BATCH_SIZE {batch_size}"
+        f"#define {layer_name_upper}_BATCH_SIZE {batch_size}"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_CHANNELS {channels}"
+        f"#define {layer_name_upper}_CHANNELS {channels}"
     )
-    hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_DEPTH {depth}")
-    hpp(f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_HEIGHT {height}")
+    hpp(f"#define {layer_name_upper}_DEPTH {depth}")
+    hpp(f"#define {layer_name_upper}_HEIGHT {height}")
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_WIDTH {width}",
+        f"#define {layer_name_upper}_WIDTH {width}",
         newlines=2,
     )
 
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_IN {node_in_coarse_factor}"
+        f"#define {layer_name_upper}_COARSE_IN {node_in_coarse_factor}"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_OUT {node_out_coarse_factor}",
+        f"#define {layer_name_upper}_COARSE_OUT {node_out_coarse_factor}",
         newlines=2,
     )
 
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BATCH_SIZE \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_BATCH_SIZE"
+        f"#define {layer_name_upper}_SQUEEZE_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_CHANNELS \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_CHANNELS"
+        f"#define {layer_name_upper}_SQUEEZE_CHANNELS \t{layer_name_upper}_CHANNELS"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_DEPTH \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_DEPTH"
+        f"#define {layer_name_upper}_SQUEEZE_DEPTH \t{layer_name_upper}_DEPTH"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_HEIGHT \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_HEIGHT"
+        f"#define {layer_name_upper}_SQUEEZE_HEIGHT \t{layer_name_upper}_HEIGHT"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_WIDTH \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_WIDTH"
+        f"#define {layer_name_upper}_SQUEEZE_WIDTH \t{layer_name_upper}_WIDTH"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_IN \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_IN"
+        f"#define {layer_name_upper}_SQUEEZE_COARSE_IN \t{layer_name_upper}_COARSE_IN"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_COARSE_OUT \tSQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_OUT"
+        f"#define {layer_name_upper}_SQUEEZE_COARSE_OUT \t{layer_name_upper}_COARSE_OUT"
     )
     hpp(
-        f"#define SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_SQUEEZE_BUFFER \t{squeeze_buffer}",
+        f"#define {layer_name_upper}_SQUEEZE_BUFFER \t{squeeze_buffer}",
         newlines=2,
     )
 
     hpp(
-        f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \tsqueeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t;",
+        f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \t{layer_name_lower}_data_t;",
         newlines=3,
     )
 
     hpp(
-        f"void squeeze_{layer_in_name_lower}_{layer_out_name_lower}_layer(\n\
-        stream_t(squeeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t) in[SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_IN],\n\
-        stream_t(squeeze_{layer_in_name_lower}_{layer_out_name_lower}_data_t) out[SQUEEZE_{layer_in_name_upper}_{layer_out_name_upper}_COARSE_OUT]);"
+        f"void {layer_name_lower}_layer(\n\
+        stream_t({layer_name_lower}_data_t) in[{layer_name_upper}_COARSE_IN],\n\
+        stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE_OUT]);"
     )
 
     hpp.close()
 
 
-def generate_squeeze_files(in_name: str, in_config: dict, out_name: str, out_config: dict, model_name: str, partition_name: str = ''):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, f"{in_name}_to_{out_name}", "src")):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, f"{in_name}_to_{out_name}", "src"))
+def generate_squeeze_files(name: str, config: dict, model_name: str, partition_name: str = ''):
+    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
-    generate_squeeze_hpp(in_name, in_config, out_name, out_config, model_name, partition_name)
-    generate_squeeze_cpp(in_name, in_config, out_name, out_config, model_name, partition_name)
+    generate_squeeze_hpp(name, config, model_name, partition_name)
+    generate_squeeze_cpp(name, config, model_name, partition_name)
