@@ -151,6 +151,22 @@ class OnnxModelParser:
                 in_shapes_list.append([dim.dim_value for dim in tensor.type.tensor_type.shape.dim])
         return in_shapes_list
 
+    def get_prev_nodes_from_node(self, node_name) -> list:
+        prev_nodes = []
+        node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
+        for tensor in node.input:
+            if not tensor in [ninit.name for ninit in self.onnx_model.graph.initializer]:
+                prev_nodes.append(self.get_node_from_tensor_output(tensor))
+        return prev_nodes
+
+    def get_next_nodes_from_node(self, node_name) -> list:
+        next_nodes = []
+        node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
+        for tensor in node.output:
+            if not tensor in [ninit.name for ninit in self.onnx_model.graph.initializer]:
+                next_nodes.append(self.get_node_from_tensor_input(tensor))
+        return next_nodes
+
     def get_config(self) -> None:
         config = configparser.ConfigParser()
         config.read(

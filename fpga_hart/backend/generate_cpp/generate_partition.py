@@ -2,6 +2,7 @@ import argparse
 import configparser
 import json
 import os
+from copy import deepcopy
 from typing import Tuple
 
 import pandas as pd
@@ -164,6 +165,6 @@ if __name__ == "__main__":
 
     for k, v in partition_configuration.items():
         if args.config_file:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", onnx_parser, args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
         else:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, onnx_parser, args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)

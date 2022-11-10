@@ -113,24 +113,37 @@ def calculate_wr_factor(graph, max_BRAM_util):
                 raise ValueError(f"Layer {layer} does not fit in the device even after weights reloading")
     return weights_reloading
 
-def check_partition_fitting(graph, max_BRAM_util, result=[], original_graph=None):
+def check_partition_fitting(graph, max_BRAM_util, word_bytes, bram_type, brams_total, result=[], original_graph=None):
     if original_graph is None:
         original_graph = deepcopy(graph)
     sort_order = list(nx.topological_sort(original_graph))
 
-    min_bram_util = utils.get_worst_case_buffering(graph)
-
+    min_bram_util = ((utils.get_worst_case_buffering(graph) * word_bytes / (bram_type * 1024) ) / brams_total) * 100
     if min_bram_util > max_BRAM_util:
-        for sp in utils.get_split_points(graph):
+        for sp in reversed(utils.get_split_points(graph)):
             ancestors = list(nx.ancestors(graph, sp))
             ancestors.sort(key=lambda val: sort_order.index(val))
             subgraph_nodes = deepcopy(ancestors)
             subgraph_nodes.append(sp)
 
+            #TODO: I dont like this, but it works. It should be improved since it is a workaround
+            if len(subgraph_nodes) == 1 and not "Conv" in subgraph_nodes[0]:
+                descendants = list(nx.descendants(graph, sp))
+                descendants.sort(key=lambda val: sort_order.index(val))
+                convs_added = 0
+                for d in descendants:
+                    if "Conv" in d and graph.in_degree[d] <= 1:
+                        if convs_added >= 1:
+                            break
+                        subgraph_nodes.append(d)
+                        convs_added += 1
+                    else:
+                        subgraph_nodes.append(d)
+
             graph_1 = graph.subgraph(subgraph_nodes).copy()
             graph_2 = graph.copy()
             graph_2.remove_nodes_from(graph_1.nodes())
-            min_bram_util = utils.get_worst_case_buffering(graph_2)
+            min_bram_util = ((utils.get_worst_case_buffering(graph_2) * word_bytes / (bram_type * 1024) ) / brams_total) * 100
 
             if min_bram_util <= max_BRAM_util:
                 extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
@@ -138,7 +151,7 @@ def check_partition_fitting(graph, max_BRAM_util, result=[], original_graph=None
                 result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
 
                 if len(graph_2.nodes()) > 0:
-                    check_partition_fitting(graph_2, max_BRAM_util, result, original_graph)
+                    check_partition_fitting(graph_2, max_BRAM_util, word_bytes, bram_type, brams_total, result, original_graph)
                 break
         if min_bram_util > max_BRAM_util:
             raise ValueError(f"Graph {graph.nodes()} does not fit in the device even after partitioning based on branch buffering")
@@ -204,7 +217,7 @@ def check_partition_fitting(graph, max_BRAM_util, result=[], original_graph=None
                 graph_2 = graph.copy()
                 graph_2.remove_nodes_from(graph_1.nodes())
                 if len(graph_2.nodes()) > 0:
-                    check_partition_fitting(graph_2, max_BRAM_util, result, original_graph)
+                    check_partition_fitting(graph_2, max_BRAM_util, word_bytes, bram_type, brams_total, result, original_graph)
                 break
         if min_bram_util <= max_BRAM_util:
             extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, graph.nodes())

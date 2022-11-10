@@ -5,6 +5,7 @@ import os
 import random
 import sys
 from collections import deque
+from copy import deepcopy
 
 import networkx as nx
 import numpy as np
@@ -911,10 +912,29 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
         input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
     output_nodes = []
     for node in mem_output_nodes:
-        assert len(partition_structure['layers'][node]['in_nodes']) == 1, "Memory output node should have only one input node"
-        output_nodes.append(partition_structure['layers'][node]['in_nodes'][0])
+        in_nodes = partition_structure['layers'][node]['in_nodes']
+        assert len(in_nodes) == 1, "Memory output node should have only one input node"
+        if partition_structure['layers'][in_nodes[0]]['type'] == "Split":
+            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer'])
+        elif partition_structure['layers'][in_nodes[0]]['type'] == "Squeeze":
+            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
+        else:
+            output_nodes.append(in_nodes[0])
 
-    onnx_parser.add_outputs_to_model(output_nodes)
+    inter_input_nodes = []
+    for i_n in input_nodes:
+        if i_n not in onnx_parser.initial_model_inputs:
+            prev_nodes = onnx_parser.get_prev_nodes_from_node(i_n)
+            for p_n in prev_nodes:
+                if p_n not in onnx_parser.initial_model_inputs and p_n.name not in partition_structure['layers']:
+                        inter_input_nodes.append(p_n.name)
+
+    updated_output_nodes = deepcopy(output_nodes)
+    for i_n in inter_input_nodes:
+        if i_n not in output_nodes:
+            updated_output_nodes.append(i_n)
+
+    onnx_parser.add_outputs_to_model(updated_output_nodes)
 
     in_shapes = onnx_parser.get_model_input_shapes()
 
@@ -924,12 +944,19 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
         in_data[name] = np.random.random_sample(shape).astype(np.float32)
     out, out_names = onnx_parser.onnx_forward(in_data)
 
+    #TODO: Check the case of original model input is not in the intermedidate input nodes
+    int_int_data = {}
+    for o, o_n in zip(out, out_names):
+        if o_n in inter_input_nodes:
+            int_int_data[o_n] = o
+
     out_data = {}
     for o, o_n in zip(out, out_names):
-        out_data[o_n] = o
+        if o_n in output_nodes:
+            out_data[o_n] = o
 
+    #TODO: get the weights from the conv and gemm layers
     return
-
     inputs = []
     for in_node in input_nodes:
         input_shape = [layers_config[in_node]["batch_size"],
