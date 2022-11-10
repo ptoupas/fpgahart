@@ -334,6 +334,126 @@ def add_off_chip_connections(
 
     return read_points, write_points
 
+def get_graph_structure(graph: nx.DiGraph, config: dict) -> dict:
+    graph_structure = {}
+    graph_structure["input_nodes"] = get_input_nodes(graph)
+    graph_structure["output_nodes"] = get_output_nodes(graph)
+    layers_sub_dict = {}
+    for n in nx.topological_sort(graph):
+        layers_sub_dict[n] = {}
+        layers_sub_dict[n]["type"] = graph.nodes[n]["type"]
+        layers_sub_dict[n]["in_edges"] = list(graph.in_edges(n))
+        layers_sub_dict[n]["out_edges"] = list(graph.out_edges(n))
+        layers_sub_dict[n]["in_nodes"] = list(graph.predecessors(n))
+        layers_sub_dict[n]["out_nodes"] = list(graph.successors(n))
+        layers_sub_dict[n]["split_node"] = True if graph.out_degree(n) > 1 else False
+        layers_sub_dict[n]["merge_node"] = True if graph.in_degree(n) > 1 else False
+        if "Mem_in" in n or "Mem_out" in n:
+            layers_sub_dict[n]["streams_in"] = 1
+            layers_sub_dict[n]["streams_out"] = 1
+        else:
+            if "Conv" in graph.nodes[n]["type"] or "Gemm" in graph.nodes[n]["type"]:
+                layers_sub_dict[n]["streams_in"] = config[n]["coarse_in_factor"]
+                layers_sub_dict[n]["streams_out"] = config[n]["coarse_out_factor"]
+            else:
+                layers_sub_dict[n]["streams_in"] = config[n]["coarse_factor"]
+                layers_sub_dict[n]["streams_out"] = config[n]["coarse_factor"]
+    graph_structure["layers"] = layers_sub_dict
+
+    update_graph_structure_split_layers(graph_structure)
+    update_graph_structure_squeeze_layers(graph_structure)
+
+    return graph_structure
+
+def update_graph_structure_split_layers(graph_structure: dict) -> None:
+    # create split layers
+    split_nodes = {}
+    for node, config in graph_structure["layers"].items():
+        if config['type'] == 'mem_in' or config['type'] == 'mem_out':
+            continue
+        if config['split_node']:
+            split_node_name = "Split_{}".format(node)
+            split_nodes[split_node_name] = {}
+            split_nodes[split_node_name]["type"] = 'Split'
+            split_nodes[split_node_name]["ref_layer"] = node
+            split_nodes[split_node_name]["in_edges"] = [(node, split_node_name)]
+            split_nodes[split_node_name]["out_edges"] = [(split_node_name, graph_structure["layers"][node]["out_nodes"][0]), (split_node_name, graph_structure["layers"][node]["out_nodes"][1])]
+            split_nodes[split_node_name]["in_nodes"] = [node]
+            split_nodes[split_node_name]["out_nodes"] = graph_structure["layers"][node]["out_nodes"]
+            split_nodes[split_node_name]["split_node"] = True
+            split_nodes[split_node_name]["merge_node"] = False
+            split_nodes[split_node_name]["streams_in"] = graph_structure["layers"][node]["streams_in"]
+            split_nodes[split_node_name]["streams_out"] = graph_structure["layers"][node]["streams_out"]
+
+            next_nodes = config['out_nodes']
+            for n in next_nodes:
+                if n in graph_structure["layers"]:
+                    graph_structure["layers"][n]['in_edges'][graph_structure["layers"][n]['in_edges'].index((node, n))] = (split_node_name, n)
+                    graph_structure["layers"][n]['in_nodes'][graph_structure["layers"][n]['in_nodes'].index(node)] = split_node_name
+
+            graph_structure["layers"][node]['out_edges'] = [(node, split_node_name)]
+            graph_structure["layers"][node]['out_nodes'] = [split_node_name]
+            graph_structure["layers"][node]['split_node'] = False
+
+    graph_structure["layers"] |= split_nodes
+
+def update_graph_structure_squeeze_layers(graph_structure: dict) -> None:
+    # create squeeze layers
+    squeeze_nodes = {}
+    for node, config in graph_structure["layers"].items():
+        if config['type'] == 'mem_in' or config['type'] == 'mem_out':
+            continue
+
+        prev_nodes = config['in_nodes']
+        next_nodes = config['out_nodes']
+
+        for p in prev_nodes:
+            if p not in graph_structure["layers"] or graph_structure["layers"][p]["type"] == 'mem_in':
+                continue
+            if graph_structure["layers"][p]["streams_out"] != config["streams_in"]:
+                squeeze_node_name = "Squeeze_{}_{}".format(p, node)
+                squeeze_nodes[squeeze_node_name] = {}
+                squeeze_nodes[squeeze_node_name]["type"] = 'Squeeze'
+                squeeze_nodes[squeeze_node_name]["ref_layer_in"] = p
+                squeeze_nodes[squeeze_node_name]["ref_layer_out"] = node
+                squeeze_nodes[squeeze_node_name]["in_edges"] = [(p, squeeze_node_name)]
+                squeeze_nodes[squeeze_node_name]["out_edges"] = [(squeeze_node_name, node)]
+                squeeze_nodes[squeeze_node_name]["in_nodes"] = [p]
+                squeeze_nodes[squeeze_node_name]["out_nodes"] = [node]
+                squeeze_nodes[squeeze_node_name]["split_node"] = False
+                squeeze_nodes[squeeze_node_name]["merge_node"] = False
+                squeeze_nodes[squeeze_node_name]["streams_in"] = graph_structure["layers"][p]["streams_out"]
+                squeeze_nodes[squeeze_node_name]["streams_out"] = config["streams_in"]
+
+                graph_structure["layers"][node]['in_edges'][graph_structure["layers"][node]['in_edges'].index((p,node))] = (squeeze_node_name, node)
+                graph_structure["layers"][node]['in_nodes'][graph_structure["layers"][node]['in_nodes'].index(p)] = squeeze_node_name
+                graph_structure["layers"][p]['out_edges'][graph_structure["layers"][p]['out_edges'].index((p,node))] = (p, squeeze_node_name)
+                graph_structure["layers"][p]['out_nodes'][graph_structure["layers"][p]['out_nodes'].index(node)]  = squeeze_node_name
+
+        for n in next_nodes:
+            if n not in graph_structure["layers"] or graph_structure["layers"][n]["type"] == 'mem_out':
+                continue
+            if graph_structure["layers"][n]["streams_in"] != config["streams_out"]:
+                squeeze_node_name = "Squeeze_{}_{}".format(node, n)
+                squeeze_nodes[squeeze_node_name] = {}
+                squeeze_nodes[squeeze_node_name]["type"] = 'Squeeze'
+                squeeze_nodes[squeeze_node_name]["ref_layer_in"] = node
+                squeeze_nodes[squeeze_node_name]["ref_layer_out"] = n
+                squeeze_nodes[squeeze_node_name]["in_edges"] = [(node, squeeze_node_name)]
+                squeeze_nodes[squeeze_node_name]["out_edges"] = [(squeeze_node_name, n)]
+                squeeze_nodes[squeeze_node_name]["in_nodes"] = [node]
+                squeeze_nodes[squeeze_node_name]["out_nodes"] = [n]
+                squeeze_nodes[squeeze_node_name]["split_node"] = False
+                squeeze_nodes[squeeze_node_name]["merge_node"] = False
+                squeeze_nodes[squeeze_node_name]["streams_in"] = config["streams_out"]
+                squeeze_nodes[squeeze_node_name]["streams_out"] = graph_structure["layers"][n]["streams_in"]
+
+                graph_structure["layers"][node]['out_edges'][graph_structure["layers"][node]['out_edges'].index((node, n))] = (node, squeeze_node_name)
+                graph_structure["layers"][node]['out_nodes'][graph_structure["layers"][node]['out_nodes'].index(n)] = squeeze_node_name
+                graph_structure["layers"][n]['in_edges'][graph_structure["layers"][n]['in_edges'].index((node, n))] = (squeeze_node_name, n)
+                graph_structure["layers"][n]['in_nodes'][graph_structure["layers"][n]['in_nodes'].index(node)] = squeeze_node_name
+
+    graph_structure["layers"] |= squeeze_nodes
 
 def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str) -> None:
     PG = nx.nx_pydot.to_pydot(graph)
