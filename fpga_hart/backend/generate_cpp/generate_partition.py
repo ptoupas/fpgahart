@@ -5,8 +5,6 @@ import os
 from typing import Tuple
 
 import pandas as pd
-import yaml
-from dotmap import DotMap
 from generate_tb import generate_tb_files
 from generate_top_level import generate_top_level_files
 from layers.generate_conv import generate_conv_files
@@ -20,7 +18,7 @@ from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
 
 from fpga_hart.backend.python_prototyping.generate_data import partition_3d
-from fpga_hart.partitions.partition_parser import PartitionParser
+from fpga_hart.network_representation.onnx_parser import OnnxModelParser
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 
@@ -55,9 +53,11 @@ def get_partitions_configurations(config_file):
         if "metrics" in p:
             continue
         partition_layers_config = configuration[p]["config"]
+        partition_structure = configuration[p]["structure"]
         partition_branch_depth = configuration[p]["branch_depth"]
         result[p] = {
             "layers": partition_layers_config,
+            "structure": partition_structure,
             "branch_depth": partition_branch_depth,
         }
 
@@ -65,7 +65,7 @@ def get_partitions_configurations(config_file):
 
 
 def generate_partition_code(
-    layers_config, branch_depth, partition_name, model_name, parser, hls_project_path):
+    layers_config, partition_structure, branch_depth, partition_name, model_name, onnx_parser, hls_project_path):
     # Generate layers files
     for layer_name, layer_config in layers_config.items():
         if "Swish" in layer_name:
@@ -90,38 +90,28 @@ def generate_partition_code(
             generate_gemm_files(layer_name, layer_config, model_name, partition_name=partition_name)
         else:
             raise Exception(f"Layer {layer_name} not supported")
-    # Create the graph of the partition
-    graph = parser.create_graph([*layers_config])
+
+    # Update layers config with split and squeeze layers
+    layer_config = utils.generate_supportive_layer_config(partition_structure['layers'], layers_config)
 
     # Generate extra supporting files (split, squeeze)
-    split_points = utils.get_split_points(graph)
-    for sf in split_points:
-        generate_split_files(sf, layers_config[sf], model_name, partition_name=partition_name)
+    split_points = [n for n, sp in partition_structure['layers'].items() if sp['type'] == 'Split']
+    for sp in split_points:
+        generate_split_files(sp, layers_config[sp], model_name, partition_name=partition_name)
 
-    squeeze_layers = identify_streams_mismatches(layers_config, graph.edges)
-    for sl in squeeze_layers:
+    squeeze_points = [n for n, sp in partition_structure['layers'].items() if sp['type'] == 'Squeeze']
+    for sp in squeeze_points:
         generate_squeeze_files(
-            sl[0],
-            layers_config[sl[0]],
-            sl[1],
-            layers_config[sl[1]],
+            sp,
+            layers_config[sp],
             model_name,
             partition_name=partition_name,
         )
 
-    # Update the graph with the supporting layers
-    graph = utils.update_graph(
-        graph, split_points=split_points, squeeze_layers=squeeze_layers
-    )
-    os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs")
-    if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs")):
-        os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs"))
-    visualize_graph(graph, os.path.join(os.getcwd(), "fpga_modeling_reports", model_name, "partition_graphs", partition_name + "_final"), False, partition_name)
-
     # Generate data files
     store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
-    partition_3d(partition_name, layers_config, graph, file_format="bin", store_path=store_path)
-    exit()
+    partition_3d(partition_name, partition_structure, onnx_parser, file_format="bin", store_path=store_path)
+    return
 
     # Generate top level partition file
     generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
@@ -165,18 +155,7 @@ def get_fpga_specs() -> Tuple[str, int, int, int, float]:
 if __name__ == "__main__":
     args = parse_args()
 
-    with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
-        config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
-        fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
-        config_dictionary['device'] = fpga_device
-        config_dictionary['clock_frequency'] = clock_freq
-        config_dictionary['total_dsps'] = dsp
-        config_dictionary['total_brams'] = bram
-        config_dictionary['total_mem_bw'] = mem_bw
-
-    config = DotMap(config_dictionary)
-
-    parser = PartitionParser(args.model_name, False, False, False, False, config, False)
+    onnx_parser = OnnxModelParser(args.model_name)
 
     if args.config_file:
         partition_configuration = get_partitions_configurations(args.config_file)
@@ -185,6 +164,6 @@ if __name__ == "__main__":
 
     for k, v in partition_configuration.items():
         if args.config_file:
-            generate_partition_code(v['layers'], v['branch_depth'], k, "custom_partitions", parser, args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", onnx_parser, args.hls_project_path)
         else:
-            generate_partition_code(v['layers'], v['branch_depth'], k, args.model_name, parser, args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, onnx_parser, args.hls_project_path)
