@@ -551,6 +551,39 @@ def get_nodes_sorted(graph):
     g_sorted = nx.topological_sort(graph)
     return list(g_sorted)
 
+def generate_supportive_layer_config(layers, layers_config):
+    for layer, config in layers.items():
+        if config['type'] == 'Split':
+            assert config["streams_in"] == config["streams_out"], "Split layer should have same number of streams in and out"
+            reference_layer = config['ref_layer']
+            layers_config[layer] = {
+                "batch_size": layers_config[reference_layer]['batch_size'],
+                "channels_in": layers_config[reference_layer]['channels_in'],
+                "depth_in": layers_config[reference_layer]['depth_in'],
+                "height_in": layers_config[reference_layer]['height_in'],
+                "width_in": layers_config[reference_layer]['width_in'],
+                "channels_out": layers_config[reference_layer]['channels_out'],
+                "depth_out": layers_config[reference_layer]['depth_out'],
+                "height_out": layers_config[reference_layer]['height_out'],
+                "width_out": layers_config[reference_layer]['width_out'],
+                "coarse_factor": config["streams_out"]
+            }
+        elif config['type'] == 'Squeeze':
+            reference_layer = config['ref_layer_in']
+            layers_config[layer] = {
+                "batch_size": layers_config[reference_layer]['batch_size'],
+                "channels_in": layers_config[reference_layer]['channels_in'],
+                "depth_in": layers_config[reference_layer]['depth_in'],
+                "height_in": layers_config[reference_layer]['height_in'],
+                "width_in": layers_config[reference_layer]['width_in'],
+                "channels_out": layers_config[reference_layer]['channels_out'],
+                "depth_out": layers_config[reference_layer]['depth_out'],
+                "height_out": layers_config[reference_layer]['height_out'],
+                "width_out": layers_config[reference_layer]['width_out'],
+                "coarse_in_factor": config["streams_in"],
+                "coarse_out_factor": config["streams_out"]
+            }
+    return layers_config
 
 def generate_layer_config(layer, config, wr_factor=1):
 
@@ -1060,32 +1093,6 @@ def update_graph(graph, split_points=None, squeeze_layers=None):
             graph.update(edges=new_edges, nodes=new_nodes)
 
     return graph
-
-
-def add_supportive_nodes_config(graph, config):
-    for node in nx.topological_sort(graph):
-        if "Split_" in node and not node in config.keys():
-            parent_node = node.split("Split_")[1]
-            config[node] = {
-                "shape_in": config[parent_node]["shape_out"],
-                "shape_out": config[parent_node]["shape_out"],
-                "coarse_factor": config[parent_node]["coarse_factor"]
-                if "coarse_factor" in config[parent_node].keys()
-                else config[parent_node]["coarse_out_factor"],
-            }
-        if "Squeeze_" in node and not node in config.keys():
-            node_decomp = node.split("_")
-            parent_node_1 = f"{node_decomp[1]}_{node_decomp[2]}"
-            # parent_node_2 = f"{node_decomp[3]}_{node_decomp[4]}"
-            config[node] = {
-                "shape_in": config[parent_node_1]["shape_out"],
-                "shape_out": config[parent_node_1]["shape_out"],
-                "coarse_factor": config[parent_node_1]["coarse_factor"]
-                if "coarse_factor" in config[parent_node_1].keys()
-                else config[parent_node_1]["coarse_out_factor"],
-            }
-    return config
-
 
 def normalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
