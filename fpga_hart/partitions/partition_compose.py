@@ -13,7 +13,7 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.utils import utils
+from fpga_hart.utils import graph_manipulation, utils
 from fpga_hart.utils.matrix_balancing import balance_memory_rates
 
 np.set_printoptions(precision=5, suppress=True, linewidth=250)
@@ -40,6 +40,7 @@ class PartitionComposer(BaseLayer):
         self.mem_bd_in = []
         self.mem_bd_out = []
         self.config = []
+        self.structure = {}
         self.dsps_util = 0
         self.dsps_raw = 0
         self.bram_util = 0
@@ -95,6 +96,7 @@ class PartitionComposer(BaseLayer):
         dp_info["memBoundedOut"] = self.mem_bd_out
         dp_info["slowestNodes"] = self.max_latency_nodes
         dp_info["config"] = self.config
+        dp_info["structure"] = self.structure
 
         return dp_info
 
@@ -648,6 +650,7 @@ class PartitionComposer(BaseLayer):
 
             self.total_ops = total_ops
             self.config = config
+            self.structure = graph_manipulation.get_graph_structure(graph, config)
             self.memoryKB = memKBs
             self.dsps_util = dsps_util
             self.dsps_raw = dsps_raw
