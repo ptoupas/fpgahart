@@ -510,17 +510,17 @@ class PartitionComposer(BaseLayer):
                     f"{node} - Latency(C)={latency_cycles}, Latency(C)-Depth={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}"
                 )
 
-            if (
-                not dp_info["config"]
-                or curr_dsps_util >= self.max_DSP_util
-                or curr_bram_util >= self.max_BRAM_util
-            ):
-                self.update_layer()
-                if DEBUG:
-                    print(
-                        f"{node}: Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
-                    )
-                return self.get_dp_info()
+            # if (
+            #     not dp_info["config"]
+            #     or curr_dsps_util >= self.max_DSP_util
+            #     or curr_bram_util >= self.max_BRAM_util
+            # ):
+            #     self.update_layer()
+            #     if DEBUG:
+            #         print(
+            #             f"{node}: Discarding design point. DSPS={curr_dsps_util}, BRAM={curr_bram_util}"
+            #         )
+            #     return self.get_dp_info()
 
         assert (
             len(off_chip_mem_in) == 0
@@ -532,6 +532,7 @@ class PartitionComposer(BaseLayer):
         layer_fifos_arrays["branch_buffering"] = self.calculate_branch_buffering_new(
             graph
         )
+        self.preliminary_branch_depth = layer_fifos_arrays["branch_buffering"]
 
         if DEBUG:
             print(f"Branch buffering: {layer_fifos_arrays['branch_buffering']}")
