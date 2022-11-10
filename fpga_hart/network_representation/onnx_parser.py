@@ -122,16 +122,13 @@ class OnnxModelParser:
             intermediate_layer_value_info.name = out_t
             self.onnx_model.graph.output.append(intermediate_layer_value_info)
 
-    def onnx_forward(self, x: np.ndarray) -> Tuple[list, list]:
+    def onnx_forward(self, x: dict) -> Tuple[list, list]:
         assert len(self.initial_model_inputs) == 1, "Only one input supported in the onnx model"
-
-        extra_outputs = ["Add_14", "Conv_7"]
-        self.add_outputs_to_model(extra_outputs)
 
         ort_sess = ort.InferenceSession(self.onnx_model.SerializeToString())
         output_nodes_names = [self.get_node_from_tensor_output(out.name).name for out in ort_sess.get_outputs()]
 
-        outputs = ort_sess.run(None, {self.initial_model_inputs[0]: x.astype(np.float32)})
+        outputs = ort_sess.run(None, x)
 
         return outputs, output_nodes_names
 
@@ -146,6 +143,13 @@ class OnnxModelParser:
             if tensor_name in node.input:
                 return node
         raise ValueError(f"Tensor {tensor_name} not found in the model")
+
+    def get_model_input_shapes(self) -> list:
+        in_shapes_list = []
+        for tensor in self.onnx_model.graph.input:
+            if tensor.name in self.initial_model_inputs:
+                in_shapes_list.append([dim.dim_value for dim in tensor.type.tensor_type.shape.dim])
+        return in_shapes_list
 
     def get_config(self) -> None:
         config = configparser.ConfigParser()

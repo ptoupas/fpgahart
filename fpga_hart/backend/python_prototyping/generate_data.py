@@ -13,6 +13,9 @@ import torch
 from fpbinary import FpBinary
 from torch import nn
 
+from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.utils.utils import get_branch_start_end_points
+
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
@@ -664,7 +667,7 @@ def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu
     else:
         raise Exception("Format not supported")
 
-def partition_3d(part, layers_config, graph, file_format, store_path="generated_data/partition_3d"):
+def partition_3d(part, partition_structure, onnx_parser, file_format, store_path="generated_data/partition_3d"):
     class X3d_m_layer(nn.Module):
         def __init__(self, layer_type, conv_config, file_path, part):
             super().__init__()
@@ -900,6 +903,48 @@ def partition_3d(part, layers_config, graph, file_format, store_path="generated_
             else:
                 raise Exception(f"Layer type {self.layer_type} is not supported")
 
+    mem_input_nodes = partition_structure['input_nodes']
+    mem_output_nodes = partition_structure['output_nodes']
+    input_nodes = []
+    for node in mem_input_nodes:
+        assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
+        input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
+    output_nodes = []
+    for node in mem_output_nodes:
+        assert len(partition_structure['layers'][node]['in_nodes']) == 1, "Memory output node should have only one input node"
+        output_nodes.append(partition_structure['layers'][node]['in_nodes'][0])
+
+    onnx_parser.add_outputs_to_model(output_nodes)
+
+    in_shapes = onnx_parser.get_model_input_shapes()
+
+    assert len(in_shapes) == len(onnx_parser.initial_model_inputs), "Number of input nodes and input shapes should be same"
+    in_data = {}
+    for name, shape in zip(onnx_parser.initial_model_inputs, in_shapes):
+        in_data[name] = np.random.random_sample(shape).astype(np.float32)
+    out, out_names = onnx_parser.onnx_forward(in_data)
+
+    out_data = {}
+    for o, o_n in zip(out, out_names):
+        out_data[o_n] = o
+
+    return
+
+    inputs = []
+    for in_node in input_nodes:
+        input_shape = [layers_config[in_node]["batch_size"],
+                       layers_config[in_node]["channels_in"],
+                       layers_config[in_node]["depth_in"],
+                       layers_config[in_node]["height_in"],
+                       layers_config[in_node]["width_in"]]
+        inputs.append(torch.randn(input_shape))
+
+    in_out_branch_dict = {}
+    for (i, o) in get_branch_start_end_points(graph):
+        in_out_branch_dict[i] = o
+
+    parse_graph(graph, input_nodes[0], in_out_branch_dict, deque(), input_nodes, output_nodes)
+
     layers = [*layers_config]
     for layer, config in layers_config.items():
         print(layer, config)
@@ -971,27 +1016,6 @@ def partition_3d(part, layers_config, graph, file_format, store_path="generated_
             )
         else:
             raise Exception("Format not supported")
-
-
-def generate_onnx(model, input_data, file_name):
-    torch.onnx.export(model, input_data, file_name, verbose=False)
-    # onnx_model = onnx.load(file_name)
-    # onnx.checker.check_model(onnx_model)
-    # onnx_model = onnx.shape_inference.infer_shapes(onnx_model)
-    # passes = [
-    # 		"extract_constant_to_initializer",
-    # 		"eliminate_unused_initializer",
-    # 		"eliminate_nop_transpose",
-    # 		"eliminate_nop_pad",
-    # 		"fuse_consecutive_transposes",
-    # 		"fuse_transpose_into_gemm",
-    # 		"fuse_matmul_add_bias_into_gemm",
-    # 		"fuse_bn_into_conv",
-    # ]
-    # onnx_model = optimizer.optimize(onnx_model, passes=passes)
-    # onnx.checker.check_model(onnx_model)
-
-    # torch.onnx.export(onnx_model, input_data, file_name, verbose=True)
 
 def pool_3d(input_shape,
             kernel_shape,
@@ -1065,7 +1089,7 @@ def conv_3d(
                 depth + 2 * pad_depth,
                 channels,
             ),
-            dtype=float,
+            dtype=np.float32,
         )
 
         for index, _ in np.ndenumerate(data_padded):
@@ -1110,7 +1134,7 @@ def conv_3d(
                 kernel_width,
                 kernel_depth,
             ),
-            dtype=float,
+            dtype=np.float32
         )
 
         for index, _ in np.ndenumerate(out):
@@ -1489,6 +1513,7 @@ def parse_args():
         "--pool_op_type", choices=["max", "avg"], default="max", type=str
     )
     parser.add_argument("--partition_name", default="partition_3d", type=str)
+    parser.add_argument("--model_name", default="", type=str)
     parser.add_argument("--format", choices=["txt", "bin"], default="bin", type=str)
     parser.add_argument("--config_file", default="", type=str)
 
@@ -1542,7 +1567,7 @@ if __name__ == "__main__":
     elif op_type == "3d_part":
         #TODO: generate a dictionary from the args.config_file
         config_dict = {}
-        partition_3d(args.partition_name, config_dict, graph=nx.DiGraph(), file_format=args.format)
+        partition_3d(args.partition_name, config_dict, OnnxModelParser(args.model_name), file_format=args.format)
     elif op_type == "gemm":
         gemm(args.in_features, args.out_features, args.coarse_in, args.coarse_out, bias=args.bias, file_format=args.format)
     else:
