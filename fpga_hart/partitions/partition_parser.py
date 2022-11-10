@@ -360,13 +360,20 @@ class PartitionParser(PartitionDescriptor):
                 partition_results["dataSizeOut"],
             ]
 
+            report_dict = {}
             if self.enable_wandb:
+                report_dict[part_name] = {
+                    "Times Repeated": times_repeat,
+                    "Num Splits": extra_reconfig+1,
+                    "Times Weights Reloading": wr,
+                    "config": partition_results["config"],
+                    "structure": partition_results["structure"],
+                }
                 artifact = wandb.Artifact("partitions", type="json")
                 with artifact.new_file("partition_config.json") as f:
-                    json.dump(partition_results["config"], f)
+                    json.dump(report_dict, f)
                 wandb.log_artifact(artifact)
 
-            report_dict = {}
             report_dict[part_name] = {
                 "Times Repeated": times_repeat,
                 "Num Splits": extra_reconfig+1,
@@ -385,6 +392,7 @@ class PartitionParser(PartitionDescriptor):
                 "dataSizeIn(MB)": partition_results["dataSizeIn"],
                 "dataSizeOut(MB)": partition_results["dataSizeOut"],
                 "config": partition_results["config"],
+                "structure": partition_results["structure"],
             }
             utils.update_report_file(self.partition_model_file, report_dict)
         return extra_reconfig
