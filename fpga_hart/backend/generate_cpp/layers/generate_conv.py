@@ -30,6 +30,15 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
     coarse_in_factor = config["coarse_in_factor"]
     coarse_out_factor = config["coarse_out_factor"]
 
+    spatial = True if kd == 1 and kh > 1 and kw > 1 else False
+    temporal = True if kd > 1 and kh == 1 and kw == 1 else False
+    if spatial:
+        sw_func_call = "sliding_window_3d_spatial"
+    elif temporal:
+        sw_func_call = "sliding_window_3d_temporal"
+    else:
+        sw_func_call = "sliding_window_3d"
+
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
@@ -132,7 +141,7 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
             if not pointwise:
                 if not depthwise:
                     cpp(
-                        f"sliding_window_3d<\n\
+                        f"{sw_func_call}<\n\
                         {layer_name_upper}_SW_BATCH_SIZE,\n\
                         {layer_name_upper}_SW_CHANNELS,\n\
                         {layer_name_upper}_SW_HEIGHT,\n\
@@ -169,7 +178,7 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
                     )
                 else:
                     cpp(
-                        f"sliding_window_3d<\n\
+                        f"{sw_func_call}<\n\
                         {layer_name_upper}_SW_BATCH_SIZE,\n\
                         {layer_name_upper}_SW_CHANNELS,\n\
                         {layer_name_upper}_SW_HEIGHT,\n\
