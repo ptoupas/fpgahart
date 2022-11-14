@@ -1093,6 +1093,7 @@ class SimulatedAnnealing(BaseLayer):
                         )
 
             current_temp *= self.cooling_rate
+            keep_percentage = 1/(1+math.exp(-2*(current_temp-0.7))) * 100
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r")
 
         print(

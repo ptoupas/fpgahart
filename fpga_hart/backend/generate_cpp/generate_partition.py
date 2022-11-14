@@ -12,6 +12,7 @@ from layers.generate_conv import generate_conv_files
 from layers.generate_elemwise import generate_elemwise_files
 from layers.generate_gap import generate_gap_files
 from layers.generate_gemm import generate_gemm_files
+from layers.generate_pool import generate_pool_files
 from layers.generate_relu import generate_relu_files
 from layers.generate_sigmoid import generate_sigmoid_files
 from layers.generate_split import generate_split_files
@@ -80,10 +81,7 @@ def generate_partition_code(
         elif "Conv" in layer_name:
             generate_conv_files(layer_name, layer_config, model_name, hls_project_path, partition_name=partition_name)
         elif "MaxPool" in layer_name or "AveragePool" in layer_name:
-            # TODO: Implement pooling
-            # generate_pool_files(layer_name, layer_config, model_name, partition_name=partition_name)
-            print("MaxPool and AveragePool not implemented yet")
-            pass
+            generate_pool_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "GlobalAveragePool" in layer_name:
             layer_name = "Gap_" + layer_name.split("_")[1]
             generate_gap_files(layer_name, layer_config, model_name, partition_name=partition_name)
