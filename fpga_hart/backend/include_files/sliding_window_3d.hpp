@@ -46,22 +46,22 @@ void sliding_window_3d_windows(
     const unsigned int semi_padded_depth = depth + padd - 1;
 
     hls::stream<T> line_buffer_3d[kh][kw_minus];
-    DO_PRAGMA(HLS STREAM variable = line_buffer_3d depth = (channels * (padded_depth) + 1))
-#pragma HLS ARRAY_PARTITION variable = line_buffer_3d complete dim = 0
-#pragma HLS BIND_STORAGE variable = line_buffer_3d type = fifo impl = bram
+    DO_PRAGMA(HLS STREAM variable=line_buffer_3d depth = (channels * (padded_depth) + 1))
+#pragma HLS ARRAY_PARTITION variable=line_buffer_3d complete dim = 0
+#pragma HLS BIND_STORAGE variable=line_buffer_3d type=fifo impl=bram
 
     hls::stream<T> line_buffer_2d[kh_minus];
-    DO_PRAGMA(HLS STREAM variable = line_buffer_2d depth = (channels * ((padded_depth) * (padded_width) - (kw_minus)*depth - (kd_minus)) + 1))
-#pragma HLS ARRAY_PARTITION variable = line_buffer_2d complete dim = 0
-#pragma HLS BIND_STORAGE variable = line_buffer_2d type = fifo impl = bram
+    DO_PRAGMA(HLS STREAM variable=line_buffer_2d depth = (channels * ((padded_depth) * (padded_width) - (kw_minus)*depth - (kd_minus)) + 1))
+#pragma HLS ARRAY_PARTITION variable=line_buffer_2d complete dim = 0
+#pragma HLS BIND_STORAGE variable=line_buffer_2d type=fifo impl=bram
 
     hls::stream<T> window_buffer_3d[kh][kw][kd_minus];
-    DO_PRAGMA(HLS STREAM variable = window_buffer_3d depth = (channels + 1))
-#pragma HLS ARRAY_PARTITION variable = window_buffer_3d complete dim = 0
-#pragma HLS BIND_STORAGE variable = window_buffer_3d type = fifo impl = bram
+    DO_PRAGMA(HLS STREAM variable=window_buffer_3d depth = (channels + 1))
+#pragma HLS ARRAY_PARTITION variable=window_buffer_3d complete dim = 0
+#pragma HLS BIND_STORAGE variable=window_buffer_3d type=fifo impl=bram
 
     T cube_cache[kh][kw][kd];
-#pragma HLS ARRAY_PARTITION variable = cube_cache complete dim = 0
+#pragma HLS ARRAY_PARTITION variable=cube_cache complete dim = 0
 
 in_loop_batch:
     for (unsigned int batch_index = 0; batch_index < batch; batch_index++)
@@ -81,10 +81,10 @@ in_loop_batch:
 
 #pragma HLS LOOP_FLATTEN
 #pragma HLS PIPELINE II = 1
-#pragma HLS DEPENDENCE variable = line_buffer_3d WAR intra true
-#pragma HLS DEPENDENCE variable = line_buffer_2d WAR intra true
-#pragma HLS DEPENDENCE variable = window_buffer_3d WAR intra true
-#pragma HLS DEPENDENCE variable = cube_cache WAR intra true
+#pragma HLS DEPENDENCE variable=line_buffer_3d WAR intra true
+#pragma HLS DEPENDENCE variable=line_buffer_2d WAR intra true
+#pragma HLS DEPENDENCE variable=window_buffer_3d WAR intra true
+#pragma HLS DEPENDENCE variable=cube_cache WAR intra true
 
                         T pixel;
                         // read in pixel
@@ -409,8 +409,8 @@ void sliding_window_3d(
     const unsigned char kernel_size_z = K_D;
 
     hls::stream<sw_t> frame_buffer[kernel_size_x][kernel_size_y][kernel_size_z];
-#pragma HLS STREAM variable = frame_buffer
-#pragma HLS ARRAY_PARTITION variable = frame_buffer complete dim = 0
+#pragma HLS STREAM variable=frame_buffer
+#pragma HLS ARRAY_PARTITION variable=frame_buffer complete dim = 0
     //#pragma HLS BIND_STORAGE variable=frame_buffer type=fifo impl=bram
 
     sliding_window_3d_windows<
@@ -489,12 +489,12 @@ void sliding_window_line_shift_spatial(
     const unsigned line_buffer_depth = cols*channels+pad_left*channels+pad_right*channels+1;
     DO_PRAGMA( HLS STREAM variable=line_buffer depth=line_buffer_depth )
     #pragma HLS ARRAY_PARTITION variable=line_buffer complete dim=0
-    #pragma HLS resource variable=line_buffer core=FIFO_BRAM
+    #pragma HLS BIND_STORAGE variable=line_buffer type=fifo impl=bram
 
     stream_t(sliding_window_t) window_buffer[kernel_size_x][kernel_size_y-1]; // pixel window cache
     DO_PRAGMA( HLS STREAM variable=window_buffer depth=channels+1 )
     #pragma HLS ARRAY_PARTITION variable=window_buffer complete dim=0
-    #pragma HLS resource variable=window_buffer core=FIFO_BRAM
+    #pragma HLS BIND_STORAGE variable=window_buffer type=fifo impl=bram
 
     sliding_window_t frame_cache[kernel_size_x][kernel_size_y];
     #pragma HLS ARRAY_PARTITION variable=frame_cache complete dim=0
@@ -835,12 +835,12 @@ void sliding_window_line_shift_temporal(
     const unsigned line_buffer_depth = cols*channels+pad_left*channels+pad_right*channels+1;
     DO_PRAGMA( HLS STREAM variable=line_buffer depth=line_buffer_depth )
     #pragma HLS ARRAY_PARTITION variable=line_buffer complete dim=0
-    #pragma HLS resource variable=line_buffer core=FIFO_BRAM
+    #pragma HLS BIND_STORAGE variable=line_buffer type=fifo impl=bram
 
     stream_t(sliding_window_t) window_buffer[kernel_size_x][kernel_size_y-1]; // pixel window cache
     DO_PRAGMA( HLS STREAM variable=window_buffer depth=channels+1 )
     #pragma HLS ARRAY_PARTITION variable=window_buffer complete dim=0
-    #pragma HLS resource variable=window_buffer core=FIFO_BRAM
+    #pragma HLS BIND_STORAGE variable=window_buffer type=fifo impl=bram
 
     sliding_window_t frame_cache[kernel_size_x][kernel_size_y];
     #pragma HLS ARRAY_PARTITION variable=frame_cache complete dim=0
@@ -1183,22 +1183,22 @@ void sliding_window_3d_temporal(
 //     const unsigned int semi_padded_depth = depth + padd - 1;
 
 //     hls::stream<T> line_buffer_3d[kh][kw_minus];
-//     DO_PRAGMA(HLS STREAM variable = line_buffer_3d depth = (channels * (padded_depth) + 1))
-// #pragma HLS ARRAY_PARTITION variable = line_buffer_3d complete dim = 0
-// #pragma HLS BIND_STORAGE variable = line_buffer_3d type = fifo impl = bram
+//     DO_PRAGMA(HLS STREAM variable=line_buffer_3d depth = (channels * (padded_depth) + 1))
+// #pragma HLS ARRAY_PARTITION variable=line_buffer_3d complete dim = 0
+// #pragma HLS BIND_STORAGE variable=line_buffer_3d type=fifo impl=bram
 
 //     hls::stream<T> line_buffer_2d[kh_minus];
-//     DO_PRAGMA(HLS STREAM variable = line_buffer_2d depth = (channels * ((padded_depth) * (padded_width) - (kw_minus)*depth - (kd_minus)) + 1))
-// #pragma HLS ARRAY_PARTITION variable = line_buffer_2d complete dim = 0
-// #pragma HLS BIND_STORAGE variable = line_buffer_2d type = fifo impl = bram
+//     DO_PRAGMA(HLS STREAM variable=line_buffer_2d depth = (channels * ((padded_depth) * (padded_width) - (kw_minus)*depth - (kd_minus)) + 1))
+// #pragma HLS ARRAY_PARTITION variable=line_buffer_2d complete dim = 0
+// #pragma HLS BIND_STORAGE variable=line_buffer_2d type=fifo impl=bram
 
 //     hls::stream<T> window_buffer_3d[kh][kw][kd_minus];
-//     DO_PRAGMA(HLS STREAM variable = window_buffer_3d depth = (channels + 1))
-// #pragma HLS ARRAY_PARTITION variable = window_buffer_3d complete dim = 0
-// #pragma HLS BIND_STORAGE variable = window_buffer_3d type = fifo impl = bram
+//     DO_PRAGMA(HLS STREAM variable=window_buffer_3d depth = (channels + 1))
+// #pragma HLS ARRAY_PARTITION variable=window_buffer_3d complete dim = 0
+// #pragma HLS BIND_STORAGE variable=window_buffer_3d type=fifo impl=bram
 
 //     T cube_cache[kh][kw][kd];
-// #pragma HLS ARRAY_PARTITION variable = cube_cache complete dim = 0
+// #pragma HLS ARRAY_PARTITION variable=cube_cache complete dim = 0
 
 // in_loop_batch:
 //     for (unsigned int batch_index = 0; batch_index < batch; batch_index++)
@@ -1218,10 +1218,10 @@ void sliding_window_3d_temporal(
 
 // #pragma HLS LOOP_FLATTEN
 // #pragma HLS PIPELINE II = 1
-// #pragma HLS DEPENDENCE variable = line_buffer_3d WAR intra true
-// #pragma HLS DEPENDENCE variable = line_buffer_2d WAR intra true
-// #pragma HLS DEPENDENCE variable = window_buffer_3d WAR intra true
-// #pragma HLS DEPENDENCE variable = cube_cache WAR intra true
+// #pragma HLS DEPENDENCE variable=line_buffer_3d WAR intra true
+// #pragma HLS DEPENDENCE variable=line_buffer_2d WAR intra true
+// #pragma HLS DEPENDENCE variable=window_buffer_3d WAR intra true
+// #pragma HLS DEPENDENCE variable=cube_cache WAR intra true
 
 //                         T pixel;
 //                         // read in pixel
@@ -1559,8 +1559,8 @@ void sliding_window_3d_temporal(
 
 //     hls::stream<sw_t>
 //         frame_buffer[kernel_size_x][kernel_size_y][kernel_size_z];
-// #pragma HLS STREAM variable = frame_buffer
-// #pragma HLS ARRAY_PARTITION variable = frame_buffer complete dim = 0
+// #pragma HLS STREAM variable=frame_buffer
+// #pragma HLS ARRAY_PARTITION variable=frame_buffer complete dim = 0
 //     //#pragma HLS BIND_STORAGE variable=frame_buffer type=fifo impl=bram
 
 //     sliding_window_3d_windows<
