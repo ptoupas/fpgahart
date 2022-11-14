@@ -459,7 +459,7 @@ def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name
     PG = nx.nx_pydot.to_pydot(graph)
     PG.write_png(path + ".png")
     if enable_wandb:
-        wandb.log({{graph_name}: wandb.Image(path + ".png")})
+        wandb.log({graph_name: wandb.Image(path + ".png")})
 
 def get_input_nodes(graph):
     input_nodes = []

@@ -355,7 +355,7 @@ class PartitionParser(PartitionDescriptor):
                 partition_results["BRAM"],
                 partition_results["BRAM_RAW"],
                 partition_results["depth"],
-                partition_results["branch_depth"],
+                json.dumps(partition_results["branch_depth"], indent=2),
                 partition_results["dataSizeIn"],
                 partition_results["dataSizeOut"],
             ]
@@ -371,7 +371,7 @@ class PartitionParser(PartitionDescriptor):
                 }
                 artifact = wandb.Artifact("partitions", type="json")
                 with artifact.new_file("partition_config.json") as f:
-                    json.dump(report_dict, f)
+                    json.dump(report_dict, f, indent=2)
                 wandb.log_artifact(artifact)
 
             report_dict[part_name] = {
