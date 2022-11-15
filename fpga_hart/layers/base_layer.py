@@ -5,6 +5,7 @@ import math
 import os
 
 import numpy as np
+
 from fpga_hart import _logger
 
 
@@ -207,7 +208,7 @@ class BaseLayer:
                 + (kh - 1) * line_buffer_2d_brams
                 + kh * kw * (kd - 1) * window_buffer_3d_brams
             )
-            bram_raw += sw_brams * coarse_in
+            bram_raw += sw_brams * coarse_inout
         if "elemwise_bc" in layer_fifos_arrays.keys():
             array_elemwise_brams = self.bram_memory_resource_model(
                 layer_fifos_arrays["elemwise_bc"], 30

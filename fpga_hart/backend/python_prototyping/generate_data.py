@@ -1183,6 +1183,7 @@ def conv_3d(
     # sliding_window_out = get_sliding_window_output(
     #     x.numpy().transpose(0, 3, 4, 2, 1), kernel_shape, padding, stride
     # )
+    # sliding_window_out.tofile(store_path + "/sw_output.bin")
 
     write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
     if file_format == "bin":

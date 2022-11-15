@@ -85,6 +85,7 @@ def generate_pool_cpp(name: str, config: dict, model_name: str, partition_name: 
                 {layer_name_upper}_SW_STRIDE_HEIGHT,\n\
                 {layer_name_upper}_SW_STRIDE_WIDTH,\n\
                 {layer_name_upper}_SW_STRIDE_DEPTH,\n\
+                {layer_name_upper}_SW_PAD_VALUE,\n\
                 {layer_name_lower}_data_t\n\
             >(in[coarseIndex],sw_out[coarseIndex]);",
                 newlines=2,
@@ -170,6 +171,10 @@ def generate_pool_hpp(name: str, config: dict, model_name: str, partition_name: 
     hpp(f"#define {layer_name_upper}_HEIGHT_OUT {height_out}")
     hpp(f"#define {layer_name_upper}_WIDTH_OUT {width_out}", newlines=2)
 
+    if "max" in op_type:
+        hpp(f"#define {layer_name_upper}_SW_PAD_VALUE -100000")
+    else:
+        hpp(f"#define {layer_name_upper}_SW_PAD_VALUE 0")
     hpp(f"#define {layer_name_upper}_SW_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
     hpp(
         f"#define {layer_name_upper}_SW_CHANNELS \tDIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)"

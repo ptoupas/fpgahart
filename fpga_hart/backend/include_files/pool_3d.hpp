@@ -29,13 +29,13 @@ void pool_3d_inner(
 #pragma HLS ARRAY_PARTITION variable=in complete dim=0
 
     pool_t cache;
-    #pragma HLS DEPENDENCE variable=cache RAW intra true
 
-    #pragma HLS unroll region
-    pool_loop_1: for (unsigned char k1 = 0; k1 < kh; k1++) {
-        pool_loop_2: for (unsigned char k2 = 0; k2 < kw; k2++) {
-            pool_loop_3: for (unsigned char k3 = 0; k3 < kd; k3++) {
-                if (k1 == 0 && k2 == 0 && k3 == 0) {
+    pool_loop_1: for (unsigned int k1 = 0; k1 < kh; k1++) {
+#pragma HLS unroll
+        pool_loop_2: for (unsigned int k2 = 0; k2 < kw; k2++) {
+            pool_loop_3: for (unsigned int k3 = 0; k3 < kd; k3++) {
+#pragma HLS DEPENDENCE variable=cache RAW intra true
+            	if (k1 == 0 && k2 == 0 && k3 == 0) {
                     cache = in[k1][k2][k3].read();
                 }
                 else {

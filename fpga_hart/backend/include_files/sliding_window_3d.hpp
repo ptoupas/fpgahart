@@ -14,6 +14,7 @@ template <
     unsigned int PAD_H,
     unsigned int PAD_W,
     unsigned int PAD_D,
+    int PAD_VALUE,
     typename T>
 void sliding_window_3d_windows(
     hls::stream<T> &in,
@@ -90,15 +91,15 @@ in_loop_batch:
                         // read in pixel
                         if (row_index < padh || row_index > semi_padded_height)
                         {
-                            pixel = 0;
+                            pixel = (T)PAD_VALUE;
                         }
                         else if (col_index < padw || col_index > semi_padded_width)
                         {
-                            pixel = 0;
+                            pixel = (T)PAD_VALUE;
                         }
                         else if (depth_index < padd || depth_index > semi_padded_depth)
                         {
-                            pixel = 0;
+                            pixel = (T)PAD_VALUE;
                         }
                         else
                         {
@@ -394,6 +395,7 @@ template <
     unsigned int STRIDE_H,
     unsigned int STRIDE_W,
     unsigned int STRIDE_D,
+    int PAD_VALUE,
     typename sw_t>
 void sliding_window_3d(
     hls::stream<sw_t> &in,
@@ -425,6 +427,7 @@ void sliding_window_3d(
         PAD_H,
         PAD_W,
         PAD_D,
+        PAD_VALUE,
         sw_t>(in, frame_buffer);
 
     sliding_window_3d_filtered_windows<
@@ -460,6 +463,7 @@ template<
     unsigned int PAD_LEFT,
     unsigned int KERNEL_SIZE_X,
     unsigned int KERNEL_SIZE_Y,
+    int PAD_VALUE,
     typename sliding_window_t
 >
 void sliding_window_line_shift_spatial(
@@ -523,16 +527,16 @@ void sliding_window_line_shift_spatial(
 
                     // pixel padding
                     if( row_index < pad_bottom ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if ( row_index > rows+pad_bottom-1 ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if ( col_index < pad_left ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if (col_index > cols+pad_left-1 ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else {
                         pixel = in.read();
@@ -720,6 +724,7 @@ template<
     unsigned int STRIDE_H,
     unsigned int STRIDE_W,
     unsigned int STRIDE_D,
+    int PAD_VALUE,
     typename sliding_window_t
 >
 void sliding_window_3d_spatial(
@@ -753,6 +758,7 @@ void sliding_window_3d_spatial(
         PAD_W,
         K_H,
         K_W,
+        PAD_VALUE,
         sliding_window_t
     >(in,frame_buffer);
 
@@ -806,6 +812,7 @@ template<
     unsigned int PAD_LEFT,
     unsigned int KERNEL_SIZE_X,
     unsigned int KERNEL_SIZE_Y,
+    int PAD_VALUE,
     typename sliding_window_t
 >
 void sliding_window_line_shift_temporal(
@@ -869,16 +876,16 @@ void sliding_window_line_shift_temporal(
 
                     // pixel padding
                     if( row_index < pad_bottom ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if ( row_index > rows+pad_bottom-1 ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if ( col_index < pad_left ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else if (col_index > cols+pad_left-1 ) {
-                        pixel = 0;
+                        pixel = (sliding_window_t)PAD_VALUE;
                     }
                     else {
                         pixel = in.read();
@@ -1065,6 +1072,7 @@ template<
     unsigned int STRIDE_H,
     unsigned int STRIDE_W,
     unsigned int STRIDE_D,
+    int PAD_VALUE,
     typename sliding_window_t
 >
 void sliding_window_3d_temporal(
@@ -1097,6 +1105,7 @@ void sliding_window_3d_temporal(
         PAD_D,
         1,
         K_D,
+        PAD_VALUE,
         sliding_window_t
     >(in,frame_buffer);
 
@@ -1227,15 +1236,15 @@ void sliding_window_3d_temporal(
 //                         // read in pixel
 //                         if (row_index < padh || row_index > semi_padded_height)
 //                         {
-//                             pixel = 0;
+//                             pixel = (sliding_window_t)PAD_VALUE;
 //                         }
 //                         else if (col_index < padw || col_index > semi_padded_width)
 //                         {
-//                             pixel = 0;
+//                             pixel = (sliding_window_t)PAD_VALUE;
 //                         }
 //                         else if (depth_index < padd || depth_index > semi_padded_depth)
 //                         {
-//                             pixel = 0;
+//                             pixel = (sliding_window_t)PAD_VALUE;
 //                         }
 //                         else
 //                         {
