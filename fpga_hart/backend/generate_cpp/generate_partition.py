@@ -107,17 +107,16 @@ def generate_partition_code(
             partition_name=partition_name,
         )
 
-    # Generate data files
-    store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
-    partition_3d(partition_name, partition_structure, onnx_parser, file_format="bin", store_path=store_path)
-    return
-
     # Generate top level partition file
-    generate_top_level_files(graph, branch_depth, layers_config, partition_name, prefix)
+    generate_top_level_files(partition_name, model_name, branch_depth, partition_structure, layers_config)
+    return
 
     # Generate testbench file
     generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False)
 
+    # Generate data files
+    store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
+    partition_3d(partition_name, partition_structure, onnx_parser, file_format="bin", store_path=store_path)
 
 def identify_streams_mismatches(layers_config, connections):
     squeeze_layers = []

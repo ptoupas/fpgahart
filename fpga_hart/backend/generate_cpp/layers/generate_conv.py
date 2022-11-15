@@ -48,11 +48,18 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
         else f"{layer_name_upper}_COARSE_OUT_INNER"
     )
 
-    cpp = CppFile(
-        os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+    if partition_name != '':
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.cpp"
+            )
         )
-    )
+    else:
+        cpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+            )
+        )
 
     cpp(f'#include "{layer_name_lower}.hpp"', newlines=2)
 
@@ -63,7 +70,6 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
     ):
 
         cpp("#pragma HLS INLINE OFF")
-        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
         cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
@@ -76,6 +82,8 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
         )
         # cpp(f"#pragma HLS BIND_STORAGE variable=weights_{layer_name_lower} type=ram_2p")
         cpp(f"#pragma HLS STABLE variable=weights_{layer_name_lower}", newlines=2)
+
+        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         if not pointwise:
             cpp(
@@ -357,13 +365,22 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    weights_file_path = os.path.join(hls_project_path, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
+    if partition_name != '':
+        weights_file_path = os.path.join(hls_project_path, partition_name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
 
-    hpp = CppFile(
-        os.path.join(
-            os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+        hpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.hpp"
+            )
         )
-    )
+    else:
+        weights_file_path = os.path.join(hls_project_path, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
+
+        hpp = CppFile(
+            os.path.join(
+                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+            )
+        )
 
     hpp("#pragma once", newlines=2)
     hpp('#include "common_.hpp"')
@@ -584,9 +601,12 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
 
 
 def generate_conv_files(name: str, config: dict, model_name: str, hls_project_path: str, partition_name: str = ''):
-
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
+    if partition_name != '':
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src"))
+    else:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
     generate_conv_hpp(name, config, model_name, partition_name, hls_project_path)
     generate_conv_cpp(name, config, model_name, partition_name)

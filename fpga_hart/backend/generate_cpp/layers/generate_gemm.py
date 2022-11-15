@@ -20,11 +20,18 @@ def generate_gemm_cpp(name: str, config: dict, model_name: str, partition_name: 
             )
         )
     else:
-        cpp = CppFile(
-            os.path.join(
-                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+        if partition_name != '':
+            cpp = CppFile(
+                os.path.join(
+                    os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.cpp"
+                )
             )
-        )
+        else:
+            cpp = CppFile(
+                os.path.join(
+                    os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"
+                )
+            )
 
     cpp(f'#include "{layer_name_lower}.hpp"', newlines=2)
 
@@ -36,7 +43,6 @@ def generate_gemm_cpp(name: str, config: dict, model_name: str, partition_name: 
     ):
 
         cpp("#pragma HLS INLINE OFF")
-        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
         cpp("#pragma HLS ARRAY_PARTITION variable=weights  complete dim=0")
@@ -52,6 +58,8 @@ def generate_gemm_cpp(name: str, config: dict, model_name: str, partition_name: 
         )
         cpp("#pragma HLS STREAM variable=gemm_out")
         cpp("#pragma HLS ARRAY_PARTITION variable=gemm_out  complete dim=0", newlines=2)
+
+        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         with cpp.block(
             f"for(int coarseIndex=0; coarseIndex<{layer_name_upper}_COARSE_IN; coarseIndex++)"
@@ -115,11 +123,18 @@ def generate_gemm_hpp(name: str, config: dict, model_name: str, partition_name: 
             )
         )
     else:
-        hpp = CppFile(
-            os.path.join(
-                os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+        if partition_name != '':
+            hpp = CppFile(
+                os.path.join(
+                    os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.hpp"
+                )
             )
-        )
+        else:
+            hpp = CppFile(
+                os.path.join(
+                    os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"
+                )
+            )
 
     hpp("#pragma once", newlines=2)
     hpp('#include "common_.hpp"')
@@ -172,8 +187,12 @@ def generate_gemm_files(name: str, config: dict, model_name: str, partition_name
         if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src")):
             os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "latency_driven", name, "src"))
     else:
-        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
-            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
+        if partition_name != '':
+            if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src")):
+                os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src"))
+        else:
+            if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+                os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
     generate_gemm_hpp(name, config, model_name, partition_name, dynamic_reconfig)
     generate_gemm_cpp(name, config, model_name, partition_name, dynamic_reconfig)

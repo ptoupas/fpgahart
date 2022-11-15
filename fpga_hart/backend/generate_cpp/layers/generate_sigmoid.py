@@ -14,7 +14,10 @@ def generate_sigmoid_cpp(name: str, config: dict, model_name: str, partition_nam
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"))
+    if partition_name != '':
+        cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.cpp"))
+    else:
+        cpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.cpp"))
 
     cpp(f"#include \"{layer_name_lower}.hpp\"", newlines=2)
 
@@ -23,10 +26,11 @@ def generate_sigmoid_cpp(name: str, config: dict, model_name: str, partition_nam
         stream_t({layer_name_lower}_data_t) out[{layer_name_upper}_COARSE])"):
 
         cpp("#pragma HLS INLINE OFF")
-        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
         cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
+
+        cpp("#pragma HLS DATAFLOW", newlines=2)
 
         with cpp.block(f"for(int coarseIndex=0; coarseIndex<{layer_name_upper}_COARSE; coarseIndex++)"):
             cpp("#pragma HLS unroll", newlines=2)
@@ -53,7 +57,10 @@ def generate_sigmoid_hpp(name: str, config: dict, model_name: str, partition_nam
     layer_name_lower = name.lower()
     layer_name_upper = name.upper()
 
-    hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"))
+    if partition_name != '':
+        hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.hpp"))
+    else:
+        hpp = CppFile(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src", f"{layer_name_lower}.hpp"))
 
     hpp("#pragma once", newlines=2)
     hpp("#include \"common_.hpp\"")
@@ -82,8 +89,12 @@ def generate_sigmoid_hpp(name: str, config: dict, model_name: str, partition_nam
     hpp.close()
 
 def generate_sigmoid_files(name: str, config: dict, model_name: str, partition_name: str = ''):
-    if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
-        os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
+    if partition_name != '':
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src"))
+    else:
+        if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src")):
+            os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, name, "src"))
 
     generate_sigmoid_hpp(name, config, model_name, partition_name)
     generate_sigmoid_cpp(name, config, model_name, partition_name)
