@@ -1073,28 +1073,53 @@ def get_output_node(graph):
 
 def get_branch_start_end_points(graph):
     result = []
-    split_points = get_split_points(graph)
-    for sp in split_points:
-        merge_point = None
-        next_node = sp
-        extra_split_points = 0
-        while True:
-            if graph.out_degree[next_node] == 1:
-                next_node = list(graph.successors(next_node))[0]
-            elif graph.out_degree[next_node] > 1:
-                extra_split_points += 1
-                next_node = list(graph.successors(next_node))[0]
-            else:
-                break
-
-            if graph.in_degree[next_node] > 1:
-                extra_split_points -= 1
-                if extra_split_points == 0:
-                    merge_point = next_node
+    def traverse_branch_bw(graph, mp, result):
+        for pred in graph.predecessors(mp):
+            prev_node = pred
+            while True:
+                if graph.out_degree[prev_node] > 1:
+                    if (prev_node, mp) not in result:
+                        result.append((prev_node, mp))
                     break
-        result.append((sp, merge_point))
+
+                if graph.in_degree[prev_node] == 1:
+                    prev_node = list(graph.predecessors(prev_node))[0]
+                elif graph.in_degree[prev_node] > 1:
+                    prev_node = traverse_branch_bw(graph, prev_node, result)
+                    assert len(list(graph.predecessors(prev_node))) == 1, "Split layer before split layer is not supported"
+                    prev_node = list(graph.predecessors(prev_node))[0]
+                elif graph.in_degree[prev_node] == 0:
+                    if (prev_node, mp) not in result:
+                        result.append((prev_node, mp))
+                    break
+        return prev_node
+
+    merge_points = get_merge_points(graph)
+    for mp in merge_points:
+        traverse_branch_bw(graph, mp, result)
+
     return result
 
+    # split_points = get_split_points(graph)
+    # for sp in split_points:
+    #     merge_point = None
+    #     next_node = sp
+    #     extra_split_points = 0
+    #     while True:
+    #         if graph.out_degree[next_node] == 1:
+    #             next_node = list(graph.successors(next_node))[0]
+    #         elif graph.out_degree[next_node] > 1:
+    #             extra_split_points += 1
+    #             next_node = list(graph.successors(next_node))[0]
+    #         else:
+    #             break
+
+    #         if graph.in_degree[next_node] > 1:
+    #             extra_split_points -= 1
+    #             if extra_split_points == 0:
+    #                 merge_point = next_node
+    #                 break
+    #     result.append((sp, merge_point))
 
 def update_graph(graph, split_points=None, squeeze_layers=None):
     if split_points is None and squeeze_layers is None:

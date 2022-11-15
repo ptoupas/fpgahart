@@ -133,8 +133,8 @@ class PartitionComposer(BaseLayer):
                     )
                     + 2
                 )
-                branch_buffering[end_point] = {"split": in_point, "depth": final_depth}
-            else:
+                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
+            elif num_paths == 2:
                 final_depth = (
                     min(
                         abs(depths[0] - depths[-1]),
@@ -142,8 +142,16 @@ class PartitionComposer(BaseLayer):
                     )
                     + 2
                 )
-                branch_buffering[end_point] = {"split": in_point, "depth": final_depth}
-
+                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
+            else:
+                final_depth = (
+                    min(
+                        abs(depths[0]),
+                        np.product(graph.nodes[end_point]["hw"].input_shape),
+                    )
+                    + 2
+                )
+                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
         return branch_buffering
 
     @staticmethod
@@ -752,7 +760,8 @@ class PartitionComposer(BaseLayer):
         bram_raw_out = layer_brams
 
         if "branch_buffering" in layer_fifos_arrays:
-            for merge_node, v in layer_fifos_arrays["branch_buffering"].items():
+            for _, v in layer_fifos_arrays["branch_buffering"].items():
+                merge_node = v["end"]
                 curr_depth = v["depth"]
                 # depth_per_fifo = math.ceil(curr_depth/config[merge_node]['coarse_factor'])
                 bram_raw_out += (
