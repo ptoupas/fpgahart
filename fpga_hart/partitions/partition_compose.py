@@ -626,10 +626,12 @@ class PartitionComposer(BaseLayer):
         throughput_ops = total_ops / latency_sec
 
         #TODO: double check if this is actually correct. Every input througput should be equal to every output?
+        thr_out_vols = []
         for idx_in, (i, j) in enumerate(mem_conns_in):
             curr_thr_in = thr_in[idx_in] / workload_matrix[i, j]
             for idx_out, (k, h) in enumerate(mem_conns_out):
                 curr_thr_out = thr_out[idx_out] / workload_matrix[k, h]
+                thr_out_vols.append(curr_thr_out)
                 assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(curr_thr_in, curr_thr_out)
 
         if (
@@ -661,8 +663,7 @@ class PartitionComposer(BaseLayer):
             self.latency_cycles = int(latency_cycles)
             self.throughput_ops = throughput_ops
             #TODO: Is this correct? Do we have a throughput out that is the sum of all out throughputs to the mem?
-            self.throughput_vols = np.sum(np.array(thr_out))
-
+            self.throughput_vols = np.sum(np.array(thr_out_vols))
             if DEBUG:
                 print(
                     "GOPs/s={:.2f}, DSPS={}({:.2f}), BRAM={}({:.2f}), depth={}, latency(s)={:.2f}, latency(c)={:.2f}, mem bounded in = {}, mem bounded out = {}".format(
