@@ -71,6 +71,7 @@ class Convolutional3DLayer(BaseLayer):
 
         self.bias_shape = [self.filters]
         if self.depthwise:
+            self.input_shape[1] = self.filters
             self.channels = self.filters
             self.groups = self.filters
 

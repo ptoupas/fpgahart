@@ -51,6 +51,7 @@ class PartitionComposer(BaseLayer):
         self.throughput_vols = 0
         self.total_ops = 0
         self.max_latency_nodes = None
+        self.preliminary_branch_depth = {}
 
     def get_total_workload(self, graph, wr_factor=1):
         total_wl = 0
@@ -101,11 +102,12 @@ class PartitionComposer(BaseLayer):
         return dp_info
 
     @staticmethod
-    def calculate_branch_buffering_new(graph):
+    def calculate_branch_buffering(graph):
         branch_buffering = {}
         branch_edges = utils.get_branch_start_end_points(graph)
         if branch_edges and (branch_edges[0][0] == None or branch_edges[0][1] == None):
             return branch_buffering
+        unconnected_branches = {}
         for (in_point, end_point) in branch_edges:
             num_paths = len(
                 list(nx.all_simple_paths(graph, source=in_point, target=end_point))
@@ -123,26 +125,33 @@ class PartitionComposer(BaseLayer):
                     depth_branch += graph.nodes[p]["hw"].depth
                 depths.append(depth_branch)
                 paths.append(path)
-                # print(f"merge @ {merge_node}, split @ {split_node} -> path: {path}, depth: {depth_branch}")
+
             if num_paths > 2:
-                longest_idx = np.argmax(depths[:-1])
+                longest_idx = np.argmax(depths)
+                shortest_idx = np.argmin(depths)
                 final_depth = (
                     min(
-                        abs(depths[longest_idx] - depths[-1]),
+                        abs(depths[longest_idx] - depths[shortest_idx]),
                         np.product(graph.nodes[end_point]["hw"].input_shape),
                     )
                     + 2
                 )
-                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
+                branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": final_depth}
             elif num_paths == 2:
+                longest_idx = np.argmax(depths)
+                shortest_idx = np.argmin(depths)
                 final_depth = (
                     min(
-                        abs(depths[0] - depths[-1]),
+                        abs(depths[longest_idx] - depths[shortest_idx]),
                         np.product(graph.nodes[end_point]["hw"].input_shape),
                     )
                     + 2
                 )
-                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
+                assert paths[0][-1] == paths[1][-1], "Paths should end at the same node"
+                if paths[0][0] == paths[1][0] and not 'Mem_in' in paths[0][0]:
+                    branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": final_depth}
+                else:
+                    unconnected_branches[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[longest_idx][-2], "depth": depths[longest_idx], "path": paths[longest_idx]}
             else:
                 final_depth = (
                     min(
@@ -151,55 +160,42 @@ class PartitionComposer(BaseLayer):
                     )
                     + 2
                 )
-                branch_buffering[f"{in_point}_to_{end_point}"] = {"start": in_point, "end": end_point, "depth": final_depth}
+                unconnected_branches[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[0][-2], "depth": final_depth, "path": paths[0]}
+
+        if unconnected_branches:
+            remove_keys = []
+            unconn_paths = []
+            keys = []
+            for k, v in unconnected_branches.items():
+                if len(v["path"]) == 2 and "Mem_in" in v["path"][0]:
+                    remove_keys.append(k)
+                unconn_paths.append(v["path"])
+                keys.append(k)
+            for i in range(len(unconn_paths)):
+                for j in range(len(unconn_paths)):
+                    if i != j:
+                        flag = (all(x in unconn_paths[i] for x in unconn_paths[j]))
+                        if flag:
+                            remove_keys.append(keys[j])
+            for k in remove_keys:
+                unconnected_branches.pop(k)
+
+            if len(unconnected_branches) > 1:
+                start_p =[]
+                end_p = []
+                conn_p = []
+                depths = []
+                assert len(unconnected_branches) == 2, "Only two unconnected branches are supported"
+                for k, v in unconnected_branches.items():
+                    start_p.append(v["start"])
+                    end_p.append(v["end"])
+                    conn_p.append(v["conn"])
+                    depths.append(v["depth"])
+                assert end_p[0] == end_p[1], "Unconnected branches should end at the same point"
+                longest_idx = np.argmax(depths)
+                shortest_idx = np.argmin(depths)
+                branch_buffering[f"{start_p[shortest_idx]}_{end_p[shortest_idx]}"] = {"start": start_p[shortest_idx], "end": end_p[shortest_idx], "conn": conn_p[shortest_idx], "depth": depths[longest_idx]-depths[shortest_idx]}
         return branch_buffering
-
-    @staticmethod
-    def calculate_branch_buffering(graph):
-        # TODO: Deal with buffering needed without a common split node for the two branches (like in the case of gap approx)
-        def iterate_graph(graph, node, branches):
-            sub_branch = True
-            split_node = None
-            for i, pn in enumerate(graph.predecessors(node)):
-                curr_node = pn
-                curr_branch = []
-                while True:
-                    if (
-                        graph.out_degree(curr_node) > 1
-                        or graph.nodes[curr_node]["type"] == "mem_in"
-                    ) and sub_branch:
-                        split_node = curr_node
-                        break
-                    elif graph.in_degree(curr_node) > 1:
-                        curr_branch.append(curr_node)
-                        curr_node = iterate_graph(graph, curr_node, [])
-                        sub_branch = False
-                    else:
-                        sub_branch = True
-                        curr_branch.append(curr_node)
-                        curr_node = list(graph.predecessors(curr_node))[0]
-                branches.append(curr_branch)
-            return split_node
-
-        merge_nodes = utils.get_merge_points(graph)
-        final_branches = {}
-        for mn in merge_nodes:
-            branches = []
-            iterate_graph(graph, mn, branches)
-            final_branches[mn] = branches
-
-        for mn in merge_nodes:
-            buff_list = []
-            for b in final_branches[mn]:
-                branch_depth = sum([graph.nodes[n]["hw"].depth for n in b])
-                buff_list.append(branch_depth)
-            final_branches[mn].append(max(buff_list) - min(buff_list))
-
-        buffering = 0
-        for val in final_branches.values():
-            buffering += val[-1]
-
-        return buffering
 
     @staticmethod
     def find_node_idx(graph, request_node):
@@ -537,7 +533,7 @@ class PartitionComposer(BaseLayer):
             len(off_chip_mem_out) == 0
         ), "Off-chip memory OUT points left hanging. Wrong configuration of the graph."
 
-        layer_fifos_arrays["branch_buffering"] = self.calculate_branch_buffering_new(
+        layer_fifos_arrays["branch_buffering"] = self.calculate_branch_buffering(
             graph
         )
         self.preliminary_branch_depth = layer_fifos_arrays["branch_buffering"]

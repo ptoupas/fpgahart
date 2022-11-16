@@ -959,6 +959,8 @@ def get_split_points(graph):
     for node in nx.topological_sort(graph):
         if graph.out_degree[node] > 1:
             split_points.append(node)
+        if graph.nodes[node]["type"] == "GlobalAveragePool":
+            split_points.insert(0, node)
     return split_points
 
 
@@ -970,7 +972,7 @@ def get_merge_points(graph):
     return merge_points
 
 
-def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle):
+def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx):
     # branch_edges = get_branch_start_end_points(graph)
 
     # branch_buffer = 0
@@ -1026,7 +1028,7 @@ def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle):
     mem_bw_in = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_in))]
     mem_bw_out = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_out))]
     read_points, write_points = add_off_chip_connections(
-                graph, nodes_in, nodes_out)
+                graph, nodes_in, nodes_out, gap_approx)
     dp_info = partition_composer.get_design_point(
         graph.copy(),
         comb_config,
@@ -1034,15 +1036,18 @@ def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle):
         mem_bw_out,
         read_points,
         write_points,
+        gap_approx=gap_approx
     )
-    if not dp_info['config']:
-        return 0
 
-    branch_buffern_new = 0
+    branch_buffer_new = 0
     for k, v in partition_composer.preliminary_branch_depth.items():
-        branch_buffern_new += v['depth']
+        branch_buffer_new += v['depth']
+    bram_util = ((branch_buffer_new * word_bytes / (bram_type * 1024) ) / brams_total) * 100
 
-    return branch_buffern_new
+    if not dp_info['config'] and bram_util <= 90.0:
+        return 0, 0
+
+    return branch_buffer_new, bram_util
 
 def get_branch_edges(graph):
     merge_points = get_merge_points(graph)
@@ -1092,6 +1097,11 @@ def get_branch_start_end_points(graph):
                     if (prev_node, mp) not in result:
                         result.append((prev_node, mp))
                     break
+        if "Mem_in" in prev_node and prev_node in list(graph.predecessors(mp)):
+            assert len(list(graph.predecessors(mp))) == 2, f"If prev_node is a mem_in node {mp} should have atleast 2 predecessors since it is a merge point"
+            predecessors = list(graph.predecessors(mp))
+            predecessors.remove(prev_node)
+            prev_node = predecessors[0]
         return prev_node
 
     merge_points = get_merge_points(graph)
