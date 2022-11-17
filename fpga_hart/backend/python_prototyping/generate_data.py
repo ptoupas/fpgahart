@@ -904,12 +904,18 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
             else:
                 raise Exception(f"Layer type {self.layer_type} is not supported")
 
-    mem_input_nodes = partition_structure['input_nodes']
-    mem_output_nodes = partition_structure['output_nodes']
+    model_input_nodes = onnx_parser.get_model_input_nodes()
+    mem_input_nodes = sorted(partition_structure['input_nodes'])
+    mem_output_nodes = sorted(partition_structure['output_nodes'])
     input_nodes = []
     for node in mem_input_nodes:
         assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
         input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
+
+    for i, node in enumerate(input_nodes):
+        if "Swish" in node:
+            input_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
+
     output_nodes = []
     for node in mem_output_nodes:
         in_nodes = partition_structure['layers'][node]['in_nodes']
@@ -920,6 +926,10 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
             output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
         else:
             output_nodes.append(in_nodes[0])
+
+    for i, node in enumerate(output_nodes):
+        if "Swish" in node:
+            output_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
 
     inter_input_nodes = []
     for i_n in input_nodes:
@@ -944,16 +954,39 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
         in_data[name] = np.random.random_sample(shape).astype(np.float32)
     out, out_names = onnx_parser.onnx_forward(in_data)
 
-    #TODO: Check the case of original model input is not in the intermedidate input nodes
-    int_int_data = {}
+    int_in_data = {}
+    if input_nodes == model_input_nodes and len(input_nodes) == 1:
+        int_in_data[input_nodes[0]] = in_data[onnx_parser.initial_model_inputs[0]]
+        inter_input_nodes.append(input_nodes[0])
     for o, o_n in zip(out, out_names):
         if o_n in inter_input_nodes:
-            int_int_data[o_n] = o
+            int_in_data[o_n] = o
 
     out_data = {}
     for o, o_n in zip(out, out_names):
         if o_n in output_nodes:
             out_data[o_n] = o
+
+    for i, n_in in enumerate(inter_input_nodes):
+        data = int_in_data[n_in]
+        if len(data.shape) == 5:
+            data.transpose(0, 3, 4, 2, 1)
+        if file_format == "bin":
+            data.tofile(store_path + f"/input_{i+1}.bin")
+        elif file_format == "txt":
+            np.savetxt(store_path + f"/input_{i+1}.txt", data.flatten(), fmt="%.8f")
+        else:
+            raise Exception("Format not supported")
+    for i, n_out in enumerate(output_nodes):
+        data = out_data[n_out]
+        if len(data.shape) == 5:
+            data.transpose(0, 3, 4, 2, 1)
+        if file_format == "bin":
+            data.tofile(store_path + f"/output_{i+1}.bin")
+        elif file_format == "txt":
+            np.savetxt(store_path + f"/output_{i+1}.txt", data.flatten(), fmt="%.8f")
+        else:
+            raise Exception("Format not supported")
 
     #TODO: get the weights from the conv and gemm layers
     return

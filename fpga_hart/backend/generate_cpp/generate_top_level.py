@@ -33,6 +33,8 @@ def find_fifo_depth(edge_out, partition_structure, branch_depth):
                     return v['depth']
                 else:
                     return 2
+            if partition_structure[conn_node]['type'] != "Squeeze" and partition_structure[conn_node]['type'] != "Split":
+                return 2
             raise Exception("Error in finding fifo depth")
     return 2
 

@@ -132,6 +132,13 @@ class OnnxModelParser:
 
         return outputs, output_nodes_names
 
+    def get_model_input_nodes(self) -> list:
+        in_node_list = []
+        for tensor in self.onnx_model.graph.input:
+            if tensor.name in self.initial_model_inputs:
+                in_node_list.append(self.get_node_from_tensor_input(tensor.name).name)
+        return in_node_list
+
     def get_node_from_tensor_output(self, tensor_name: str) -> onnx.NodeProto:
         for node in self.onnx_model.graph.node:
             if tensor_name in node.output:
@@ -155,6 +162,8 @@ class OnnxModelParser:
         prev_nodes = []
         node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
         for tensor in node.input:
+            if tensor in self.initial_model_inputs:
+                continue
             if not tensor in [ninit.name for ninit in self.onnx_model.graph.initializer]:
                 prev_nodes.append(self.get_node_from_tensor_output(tensor))
         return prev_nodes
