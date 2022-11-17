@@ -25,6 +25,7 @@ DEBUG = False
 class PartitionComposer(BaseLayer):
     def __init__(self, max_DSP_util, max_BRAM_util):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+        self.preliminary_branch_depth = {}
 
     def update_layer(self):
         self.full_rate_in = []
@@ -51,7 +52,6 @@ class PartitionComposer(BaseLayer):
         self.throughput_vols = 0
         self.total_ops = 0
         self.max_latency_nodes = None
-        self.preliminary_branch_depth = {}
 
     def get_total_workload(self, graph, wr_factor=1):
         total_wl = 0
@@ -511,7 +511,7 @@ class PartitionComposer(BaseLayer):
 
             if DEBUG:
                 print(
-                    f"{node} - Latency(C)={latency_cycles}, Latency(C)-Depth={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}"
+                    f"{node} - Latency(C)={latency_cycles}, Latency(C)-Depth={latency_cycles-depth}, DSPs={muls}, BRAM={bram_raw}, Depth={depth}, Total Depth={total_depth}, Total DSPs={total_muls}, Total BRAM={total_brams}, BRAM Util={curr_bram_util}, DSP Util={curr_dsps_util}"
                 )
 
             # if (
