@@ -80,7 +80,7 @@ def generate_partition_code(
             generate_elemwise_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "Conv" in layer_name:
             generate_conv_files(layer_name, layer_config, model_name, hls_project_path, partition_name=partition_name)
-        elif "MaxPool" in layer_name or "AveragePool" in layer_name:
+        elif "MaxPool" in layer_name or "AveragePool" in layer_name and not "GlobalAveragePool" in layer_name:
             generate_pool_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "GlobalAveragePool" in layer_name:
             layer_name = "Gap_" + layer_name.split("_")[1]
@@ -161,6 +161,7 @@ if __name__ == "__main__":
         partition_configuration = get_partitions_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_partitions.json"))
 
     for k, v in partition_configuration.items():
+        print(f"Generating partition {k}")
         if args.config_file:
             generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
         else:

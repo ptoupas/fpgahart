@@ -561,28 +561,28 @@ def generate_supportive_layer_config(layers, layers_config):
             reference_layer = config['ref_layer']
             layers_config[layer] = {
                 "batch_size": layers_config[reference_layer]['batch_size'],
-                "channels_in": layers_config[reference_layer]['channels_in'],
-                "depth_in": layers_config[reference_layer]['depth_in'],
-                "height_in": layers_config[reference_layer]['height_in'],
-                "width_in": layers_config[reference_layer]['width_in'],
-                "channels_out": layers_config[reference_layer]['channels_out'],
-                "depth_out": layers_config[reference_layer]['depth_out'],
-                "height_out": layers_config[reference_layer]['height_out'],
-                "width_out": layers_config[reference_layer]['width_out'],
+                "channels_in": layers_config[reference_layer]['channels_in'] if 'channels_in' in layers_config[reference_layer] else layers_config[reference_layer]['features_in'],
+                "depth_in": layers_config[reference_layer]['depth_in'] if 'depth_in' in layers_config[reference_layer] else 1,
+                "height_in": layers_config[reference_layer]['height_in'] if 'height_in' in layers_config[reference_layer] else 1,
+                "width_in": layers_config[reference_layer]['width_in'] if 'width_in' in layers_config[reference_layer] else 1,
+                "channels_out": layers_config[reference_layer]['channels_out'] if 'channels_out' in layers_config[reference_layer] else layers_config[reference_layer]['features_out'],
+                "depth_out": layers_config[reference_layer]['depth_out'] if 'depth_out' in layers_config[reference_layer] else 1,
+                "height_out": layers_config[reference_layer]['height_out'] if 'height_out' in layers_config[reference_layer] else 1,
+                "width_out": layers_config[reference_layer]['width_out'] if 'width_out' in layers_config[reference_layer] else 1,
                 "coarse_factor": config["streams_out"]
             }
         elif config['type'] == 'Squeeze':
             reference_layer = config['ref_layer_in']
             layers_config[layer] = {
                 "batch_size": layers_config[reference_layer]['batch_size'],
-                "channels_in": layers_config[reference_layer]['channels_in'],
-                "depth_in": layers_config[reference_layer]['depth_in'],
-                "height_in": layers_config[reference_layer]['height_in'],
-                "width_in": layers_config[reference_layer]['width_in'],
-                "channels_out": layers_config[reference_layer]['channels_out'],
-                "depth_out": layers_config[reference_layer]['depth_out'],
-                "height_out": layers_config[reference_layer]['height_out'],
-                "width_out": layers_config[reference_layer]['width_out'],
+                "channels_in": layers_config[reference_layer]['channels_in'] if 'channels_in' in layers_config[reference_layer] else layers_config[reference_layer]['features_in'],
+                "depth_in": layers_config[reference_layer]['depth_in'] if 'depth_in' in layers_config[reference_layer] else 1,
+                "height_in": layers_config[reference_layer]['height_in'] if 'height_in' in layers_config[reference_layer] else 1,
+                "width_in": layers_config[reference_layer]['width_in'] if 'width_in' in layers_config[reference_layer] else 1,
+                "channels_out": layers_config[reference_layer]['channels_out'] if 'channels_out' in layers_config[reference_layer] else layers_config[reference_layer]['features_out'],
+                "depth_out": layers_config[reference_layer]['depth_out'] if 'depth_out' in layers_config[reference_layer] else 1,
+                "height_out": layers_config[reference_layer]['height_out'] if 'height_out' in layers_config[reference_layer] else 1,
+                "width_out": layers_config[reference_layer]['width_out'] if 'width_out' in layers_config[reference_layer] else 1,
                 "coarse_in_factor": config["streams_in"],
                 "coarse_out_factor": config["streams_out"]
             }

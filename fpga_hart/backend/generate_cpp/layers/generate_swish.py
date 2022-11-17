@@ -76,7 +76,7 @@ def generate_swish_hpp(name: str, config: dict, model_name: str, partition_name:
     if partition_name != '':
         hpp = CppFile(
             os.path.join(
-                os.getcwd(), "generated_files", model_name, partition_name, f"{layer_name_lower}.hpp"
+                os.getcwd(), "generated_files", model_name, partition_name, "src", f"{layer_name_lower}.hpp"
             )
         )
     else:

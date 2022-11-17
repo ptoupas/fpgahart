@@ -9,93 +9,32 @@ from fpga_hart.utils.utils import (generate_supportive_layer_config,
                                    get_output_node)
 
 
-def convert_name(name):
-    numbers = re.findall(r"\d+", name)
-    for n in numbers:
-        if name.endswith(n):
-            name = name.replace(n, f"_{n}")
-        else:
-            name = name.replace(n, f"_{n}_")
-    if "split" in name:
-        name = name.replace("split", "split_")
-    if "squeeze" in name:
-        name = name.replace("squeeze", "squeeze_")
-    return name
-
-
-def get_nodes_and_fifos(graph, config):
-    nodes_with_fifos = {}
-    for start_node in graph.nodes:
-        start_node_name = start_node.lower().replace("_", "")
-
-        prev_nodes = list(graph.predecessors(start_node))
-        in_fifo_names = []
-        if prev_nodes:
-            sorted_inputs = []
-            for pn in prev_nodes:
-                in_fifo_name = pn.lower().replace("_",
-                                                  "") + "_" + start_node_name
-                sorted_inputs.append((
-                    in_fifo_name.replace("globalaveragepool", "gap"),
-                    config[pn]["shape_in"],
-                ))
-            sorted_inputs = sorted(sorted_inputs,
-                                   key=lambda x: np.prod(np.array(x[1])),
-                                   reverse=True)
-            for si in sorted_inputs:
-                in_fifo_names.append(si[0])
-        else:
-            in_fifo_names.append("in")
-
-        next_nodes = list(graph.successors(start_node))
-        out_fifo_names = []
-        if next_nodes:
-            for nn in next_nodes:
-                out_fifo_name = start_node_name + "_" + nn.lower().replace(
-                    "_", "")
-                out_fifo_names.append(
-                    out_fifo_name.replace("globalaveragepool", "gap"))
-        else:
-            out_fifo_names.append("out")
-
-        nodes_with_fifos[start_node] = {
-            "in_fifos": in_fifo_names,
-            "out_fifos": out_fifo_names,
-        }
-
-    unique_fifos = []
-    for node in [*nodes_with_fifos]:
-        in_fifos = nodes_with_fifos[node]["in_fifos"]
-        out_fifos = nodes_with_fifos[node]["out_fifos"]
-        for fifo in in_fifos:
-            if fifo not in unique_fifos and fifo != "in":
-                unique_fifos.append(fifo.replace("globalaveragepool", "gap"))
-        for fifo in out_fifos:
-            if fifo not in unique_fifos and fifo != "out":
-                unique_fifos.append(fifo.replace("globalaveragepool", "gap"))
-
-    split_squeeze_nodes = []
-    for node in [*nodes_with_fifos]:
-        if "Split" in node or "Squeeze" in node:
-            split_squeeze_nodes.append(node)
-
-    nodes_in_order = []
-    for node in [*nodes_with_fifos]:
-        if not ("Split" in node or "Squeeze" in node):
-            nodes_in_order.append(node)
-            for sqn in split_squeeze_nodes:
-                if "Squeeze" in sqn:
-                    sqn_decompose = sqn.split("_")
-                    sqn_decompose = (
-                        f"{sqn_decompose[0]}_{sqn_decompose[1]}_{sqn_decompose[2]}"
-                    )
+def find_fifo_depth(edge_out, partition_structure, branch_depth):
+    for k, v in branch_depth.items():
+        if v['end'] == edge_out[1]:
+            conn_node = edge_out[0]
+            if conn_node == v['conn']:
+                return v['depth']
+            if partition_structure[conn_node]['type'] == "Squeeze":
+                ref_layer_in = partition_structure[conn_node]['ref_layer_in']
+                if partition_structure[ref_layer_in]['type'] == "Split":
+                    new_ref_layer = partition_structure[ref_layer_in]['ref_layer']
+                    if new_ref_layer == v['conn']:
+                        return v['depth']
+                    else:
+                        return 2
                 else:
-                    sqn_decompose = sqn
-                if node in sqn_decompose:
-                    nodes_in_order.append(sqn)
-
-    return nodes_with_fifos, nodes_in_order, unique_fifos
-
+                    if ref_layer_in == v['conn']:
+                        return v['depth']
+                    else:
+                        return 2
+            if partition_structure[conn_node]['type'] == "Split":
+                if partition_structure[conn_node]['ref_layer'] == v['conn']:
+                    return v['depth']
+                else:
+                    return 2
+            raise Exception("Error in finding fifo depth")
+    return 2
 
 def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: dict, partition_structure: dict, branch_depth: dict, input_nodes: list, output_nodes: list):
 
@@ -106,10 +45,6 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
     coarse_factor_out = []
     for node in output_nodes:
         coarse_factor_out.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_out_factor"])
-
-    # nodes_with_fifos, nodes_in_order, unique_fifos = get_nodes_and_fifos(
-    #     graph, layers_config)
-    # branch_edges = get_branch_edges(graph)
 
     partition_name_lower = partition_name.lower()
     partition_name_upper = partition_name.upper()
@@ -145,31 +80,51 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
             else:
                 cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i} complete dim=0")
 
+
+        for l, v in partition_structure['layers'].items():
+            if v['type'] == "mem_in" or v['type'] == "mem_out":
+                continue
+            node_data_type = l.lower().replace("globalaveragepool", "gap") + "_data_t"
+            node_coarse_out = l.upper().replace("GLOBALAVERAGEPOOL", "GAP") + "_COARSE_OUT" if v['type'] in ["Conv", "Pooling", "Gemm", "Squeeze"] else l.upper().replace("GLOBALAVERAGEPOOL", "GAP") + "_COARSE"
+
+            for n_out, e_out in zip(v['out_nodes'], v['out_edges']):
+                if "Mem_out" in n_out:
+                    continue
+                fifo_name = e_out[0].lower() + "_" + e_out[1].lower()
+                fifo_depth = find_fifo_depth(e_out, partition_structure['layers'], branch_depth)
+                cpp(f"stream_t({node_data_type}) {fifo_name}[{node_coarse_out}];")
+                cpp(f"#pragma HLS STREAM variable={fifo_name} depth={fifo_depth}")
+                cpp(
+                    f"#pragma HLS ARRAY_PARTITION variable={fifo_name} complete dim=0",
+                    newlines=2,
+                )
+
         cpp("#pragma HLS DATAFLOW", newlines=2)
 
-        # for fifo in unique_fifos:
-        #     fifo_out_lower = convert_name(fifo.split("_")[1]).lower()
-        #     fifo_out_upper = fifo_out_lower.upper()
-        #     data_type = f"{fifo_out_lower}_data_t"
-        #     coarse = (f"{fifo_out_upper}_COARSE" if (
-        #         not ("conv" in fifo_out_lower or "squeeze" in fifo_out_lower)
-        #         or "split" in fifo_out_lower) else
-        #               f"{fifo_out_upper}_COARSE_IN")
-
-        #     cpp(f"stream_t({data_type}) {fifo}[{coarse}];")
-        #     cpp(f"#pragma HLS STREAM variable={fifo}")
-        #     cpp(
-        #         f"#pragma HLS ARRAY_PARTITION variable={fifo} complete dim=0",
-        #         newlines=2,
-        #     )
-
-        # for node in nodes_in_order:
-        #     node_name = node.lower() + "_layer"
-        #     node_name = node_name.replace("globalaveragepool", "gap")
-        #     in_fifos = ",".join(nodes_with_fifos[node]["in_fifos"])
-        #     out_fifos = ",".join(nodes_with_fifos[node]["out_fifos"])
-
-        #     cpp(f"{node_name}({in_fifos},{out_fifos});", newlines=2)
+        for l, v in partition_structure['layers'].items():
+            if v['type'] == "mem_in" or v['type'] == "mem_out":
+                continue
+            node_name = l.lower() + "_layer"
+            node_name = node_name.replace("globalaveragepool", "gap")
+            in_streams = ""
+            out_streams = ""
+            for n_in, e_in in zip(v['in_nodes'], v['in_edges']):
+                if "Mem_in" in n_in:
+                    in_id = int(n_in.split("Mem_in")[-1]) - 1
+                    in_streams += f"in_{in_id}, "
+                else:
+                    in_streams += f"{e_in[0]}_{e_in[1]}, "
+            for i, (n_out, e_out) in enumerate(zip(v['out_nodes'], v['out_edges'])):
+                if i == len(v['out_nodes']) - 1:
+                    postfix = ""
+                else:
+                    postfix = ", "
+                if "Mem_out" in n_out:
+                    out_id = int(n_out.split("Mem_out")[-1]) - 1
+                    out_streams += f"out_{out_id}{postfix}"
+                else:
+                    out_streams += f"{e_out[0]}_{e_out[1]}{postfix}"
+            cpp(f"{node_name}({in_streams.lower()}{out_streams.lower()});", newlines=2)
 
     cpp.close()
 
@@ -184,10 +139,10 @@ def generate_top_level_hpp(partition_name: str, model_name: str, layers_config: 
     coarse_factor_in = []
 
     for node in input_nodes:
-        channels_in.append(layers_config[node]["channels_in"])
-        depth_in.append(layers_config[node]["depth_in"])
-        height_in.append(layers_config[node]["height_in"])
-        width_in.append(layers_config[node]["width_in"])
+        channels_in.append(layers_config[node]["channels_in"] if "channels_in" in layers_config[node] else layers_config[node]["features_in"])
+        depth_in.append(layers_config[node]["depth_in"] if "depth_in" in layers_config[node] else 1)
+        height_in.append(layers_config[node]["height_in"] if "height_in" in layers_config[node] else 1)
+        width_in.append(layers_config[node]["width_in"] if "width_in" in layers_config[node] else 1)
         coarse_factor_in.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_in_factor"])
 
     channels_out = []
@@ -197,10 +152,10 @@ def generate_top_level_hpp(partition_name: str, model_name: str, layers_config: 
     coarse_factor_out = []
 
     for node in output_nodes:
-        channels_out.append(layers_config[node]["channels_out"])
-        depth_out.append(layers_config[node]["depth_out"])
-        height_out.append(layers_config[node]["height_out"])
-        width_out.append(layers_config[node]["width_out"])
+        channels_out.append(layers_config[node]["channels_out"] if "channels_out" in layers_config[node] else layers_config[node]["features_out"])
+        depth_out.append(layers_config[node]["depth_out"] if "depth_out" in layers_config[node] else 1)
+        height_out.append(layers_config[node]["height_out"] if "height_out" in layers_config[node] else 1)
+        width_out.append(layers_config[node]["width_out"] if "width_out" in layers_config[node] else 1)
         coarse_factor_out.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_out_factor"])
 
     partition_name_lower = partition_name.lower()
