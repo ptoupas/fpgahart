@@ -52,6 +52,13 @@ class Convolutional3DLayer(BaseLayer):
         elif np.prod(np.array(self.kernel_shape)) == 1:
             self.pointwise = True
 
+        self.spatial = False
+        self.temporal = False
+        if self.kd > 1 and self.kh == 1 and self.kw == 1:
+            self.temporal = True
+        if self.kd == 1 and self.kh > 1 and self.kw > 1:
+            self.spatial = True
+
     def update_shapes(
         self, input_shape, output_shape, groups=None, padding=None, stride=None
     ):
@@ -180,25 +187,50 @@ class Convolutional3DLayer(BaseLayer):
             "acc_array": 0,
         }
         if not self.pointwise:
-            depth_line_buffer_3d = (
-                math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
-            )
-            layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
-
-            depth_line_buffer_2d = (
-                math.ceil(1 / f_coarseIn)
-                * (
-                    (self.depth_in + 2 * self.padding[0])
-                    * (self.cols_in + 2 * self.padding[2])
-                    - (self.kw - 1) * self.depth_in
-                    - (self.kd - 1)
+            if not self.temporal and not self.spatial:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
                 )
-                + 1
-            )
-            layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
 
-            depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
-            layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+                depth_line_buffer_2d = (
+                    math.ceil(1 / f_coarseIn)
+                    * (
+                        (self.depth_in + 2 * self.padding[0])
+                        * (self.cols_in + 2 * self.padding[2])
+                        - (self.kw - 1) * self.depth_in
+                        - (self.kd - 1)
+                    )
+                    + 1
+                )
+                layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+
+                depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
+                layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+            elif self.spatial and not self.temporal:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
+                )
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+
+                depth_line_buffer_2d = (
+                    math.ceil(1 / f_coarseIn)
+                    * (
+                        (self.depth_in + 2 * self.padding[0])
+                        * (self.cols_in + 2 * self.padding[2])
+                        - (self.kw - 1) * self.depth_in
+                    )
+                    + 1
+                )
+                layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+            elif self.temporal and not self.spatial:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
+                )
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+
+                depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
+                layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
 
         if not self.depthwise:
             # Accumulator Module (AM) Depth and Memory
@@ -326,63 +358,87 @@ class Convolutional3DLayer(BaseLayer):
             # Glue Module (GM) Depth and Memory
         else:
             # Sliding Window Module (SWM) Depth and Memory
-            first_time_read_input = (
-                self.padding[1]
-                * math.ceil(1 / f_coarseIn)
-                * (self.cols_in + 2 * self.padding[2])
-                * (self.depth_in + 2 * self.padding[0])
-                + self.padding[2]
-                * math.ceil(1 / f_coarseIn)
-                * (self.depth_in + 2 * self.padding[0])
-                + self.padding[0] * math.ceil(1 / f_coarseIn)
-                + 1
-            )
-
-            depth_line_buffer_3d = (
-                math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
-            )
-            layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
-
-            depth_line_buffer_2d = (
-                math.ceil(1 / f_coarseIn)
-                * (
-                    (self.depth_in + 2 * self.padding[0])
-                    * (self.cols_in + 2 * self.padding[2])
-                    - (self.kw - 1) * self.depth_in
-                    - (self.kd - 1)
+            if not self.temporal and not self.spatial:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
                 )
-                + 1
-            )
-            layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
 
-            depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
-            layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+                depth_line_buffer_2d = (
+                    math.ceil(1 / f_coarseIn)
+                    * (
+                        (self.depth_in + 2 * self.padding[0])
+                        * (self.cols_in + 2 * self.padding[2])
+                        - (self.kw - 1) * self.depth_in
+                        - (self.kd - 1)
+                    )
+                    + 1
+                )
+                layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
 
-            # DEPTH V1
-            depth += (
-                math.ceil(1 / f_coarseIn)
-                * (self.cols_in + 2 * self.padding[2])
-                * (self.depth_in + 2 * self.padding[0])
-                * (self.kh - 1)
-                + math.ceil(1 / f_coarseIn)
-                * (self.depth_in + 2 * self.padding[0])
-                * (self.kw - 1)
-                + math.ceil(1 / f_coarseIn) * (self.kd - 1)
-            )
+                depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
+                layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+
+                # DEPTH
+                depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.cols_in + 2 * self.padding[2])
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kh - 1)
+                    + math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                    + math.ceil(1 / f_coarseIn) * (self.kd - 1)
+                )
+            elif self.spatial and not self.temporal:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
+                )
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+
+                depth_line_buffer_2d = (
+                    math.ceil(1 / f_coarseIn)
+                    * (
+                        (self.depth_in + 2 * self.padding[0])
+                        * (self.cols_in + 2 * self.padding[2])
+                        - (self.kw - 1) * self.depth_in
+                    )
+                    + 1
+                )
+                layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+
+                # DEPTH
+                depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.cols_in + 2 * self.padding[2])
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kh - 1)
+                    + math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                )
+            elif self.temporal and not self.spatial:
+                depth_line_buffer_3d = (
+                    math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
+                )
+                layer_fifos_arrays["sw_lb_3d"] = depth_line_buffer_3d
+
+                depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
+                layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+
+                # DEPTH
+                depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                    + math.ceil(1 / f_coarseIn) * (self.kd - 1)
+                )
+
             depth += math.ceil(1 / f_coarseIn) * (
                 (self.kh - 1) * self.kw * self.kd
                 + (self.kw - 1) * self.kd
                 + (self.kd - 1)
             )
-
-            # DEPTH V2
-            # depth += self.kh*(self.kw-1) * depth_line_buffer_3d + (self.kh-1) * depth_line_buffer_2d + self.kh*self.kw*(self.kd-1) * depth_window_buffer_3d
-
-            # DEPTH V3
-            # depth_ = math.ceil(1/f_coarseIn) * (self.cols_in + 2*self.padding[2]) * (self.depth_in + 2*self.padding[0]) * (self.kh - 1) +\
-            #         math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1) +\
-            #         math.ceil(1/f_coarseIn) * (self.kd - 1)
-            # depth += depth_ - first_time_read_input - (self.cols_in - 1) * math.ceil(1/f_coarseIn) * (self.kd - 1) - math.ceil(1/f_coarseIn) * (self.depth_in + 2*self.padding[0]) * (self.kw - 1)
 
             # Fork Module (FM) Depth and Memory
 
@@ -402,10 +458,7 @@ class Convolutional3DLayer(BaseLayer):
             array_accumulator = math.ceil(1 / f_coarseOut)
             layer_fifos_arrays["acc_array"] = array_accumulator
 
-            # DEPTH V1
-            # depth += depth_accumulator
-
-            # DEPTH V2
+            # DEPTH
             depth += math.ceil(1 / f_coarseOut) + 1
 
             max_parallel_muls = (
