@@ -36,7 +36,7 @@ def find_fifo_depth(edge_out, partition_structure, branch_depth):
             raise Exception("Error in finding fifo depth")
     return 2
 
-def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: dict, partition_structure: dict, branch_depth: dict, input_nodes: list, output_nodes: list):
+def generate_partition_level_cpp(partition_name: str, model_name: str, layers_config: dict, partition_structure: dict, branch_depth: dict, input_nodes: list, output_nodes: list):
 
     coarse_factor_in = []
     for node in input_nodes:
@@ -129,7 +129,7 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
     cpp.close()
 
 
-def generate_top_level_hpp(partition_name: str, model_name: str, layers_config: dict, header_files: list, input_nodes: list, output_nodes: list):
+def generate_partition_level_hpp(partition_name: str, model_name: str, layers_config: dict, header_files: list, input_nodes: list, output_nodes: list):
     batch_size = layers_config[input_nodes[0]]["batch_size"]
 
     channels_in = []
@@ -214,6 +214,193 @@ def generate_top_level_hpp(partition_name: str, model_name: str, layers_config: 
     hpp.close()
 
 
+def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: dict, input_nodes: list, output_nodes: list):
+
+    coarse_factor_in = []
+    for node in input_nodes:
+        coarse_factor_in.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_in_factor"])
+
+    coarse_factor_out = []
+    for node in output_nodes:
+        coarse_factor_out.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_out_factor"])
+
+    partition_name_lower = partition_name.lower()
+    partition_name_upper = partition_name.upper()
+
+    cpp = CppFile(
+        os.path.join(
+            os.getcwd(),
+            "generated_files",
+            model_name,
+            partition_name,
+            "src", f"{partition_name_lower}_top.cpp",
+        ))
+
+    cpp(f'#include "{partition_name_lower}_top.hpp"', newlines=2)
+
+    with cpp.block(
+        "template <int PIXEL_LOOP, int COARSE, typename T, typename T_AXIS>\n\
+         void axis_to_stream(\n\
+                stream_t(T_AXIS) in[COARSE],\n\
+                stream_t(T) out[COARSE])"
+    ):
+        cpp("#pragma HLS INLINE OFF", newlines=2)
+
+        cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
+        cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
+
+        with cpp.block("for(int pixelIndex=0; pixelIndex<PIXEL_LOOP; pixelIndex++)"):
+            cpp("#pragma HLS PIPELINE II=1")
+            with cpp.block("for(int coarseIndex=0; coarseIndex<COARSE; coarseIndex++)"):
+                cpp("T tmp;")
+                cpp("tmp.range() = in[coarseIndex].read().data;")
+                cpp("out[coarseIndex].write(tmp);")
+
+    with cpp.block(
+        "template <int PIXEL_LOOP, int COARSE, typename T, typename T_AXIS>\n\
+         void stream_to_axis(\n\
+                stream_t(T) in[COARSE],\n\
+                stream_t(T_AXIS) out[COARSE])"
+    ):
+        cpp("#pragma HLS INLINE OFF", newlines=2)
+
+        cpp("#pragma HLS ARRAY_PARTITION variable=in  complete dim=0")
+        cpp("#pragma HLS ARRAY_PARTITION variable=out complete dim=0", newlines=2)
+
+        with cpp.block("for(int pixelIndex=0; pixelIndex<PIXEL_LOOP; pixelIndex++)"):
+            cpp("#pragma HLS PIPELINE II=1")
+            with cpp.block("for(int coarseIndex=0; coarseIndex<COARSE; coarseIndex++)"):
+                cpp("T_AXIS tmp;")
+                cpp("tmp.data = in[coarseIndex].read().range();")
+                cpp("tmp.keep = -1;")
+                cpp("tmp.user = (pixelIndex == 0);")
+                cpp("tmp.last = (pixelIndex == PIXEL_LOOP-1);")
+                cpp("out[coarseIndex].write(tmp);")
+
+    cpp(f"void {partition_name_lower}_top(")
+    for i in range(len(coarse_factor_in)):
+        cpp(f"\tstream_t(axi_stream_t) in_{i}[{partition_name_upper}_STREAMS_IN_{i}],")
+    for i in range(len(coarse_factor_out)):
+        if i == len(coarse_factor_out) - 1:
+            cpp(f"\tstream_t(axi_stream_t) out_{i}[{partition_name_upper}_STREAMS_OUT_{i}]\n)")
+        else:
+            cpp(f"\tstream_t(axi_stream_t) out_{i}[{partition_name_upper}_STREAMS_OUT_{i}],")
+    with cpp.block(''):
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"#pragma HLS INTERFACE mode=axis register_mode=both depth=32 port=in_{i} register")
+        for i in range(len(coarse_factor_out)):
+            cpp(f"#pragma HLS INTERFACE mode=axis register_mode=both depth=32 port=out_{i} register")
+        cpp("#pragma HLS INTERFACE mode=s_axilite bundle=control port=return", newlines=2)
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"#pragma HLS ARRAY_PARTITION variable=in_{i} complete dim=0")
+        for i in range(len(coarse_factor_out)):
+            if i == len(coarse_factor_out) - 1:
+                cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i} complete dim=0", newlines=2)
+            else:
+                cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i} complete dim=0")
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"stream_t({partition_name_lower}_data_t) in_{i}_stream[{partition_name_upper}_STREAMS_IN_{i}];")
+        for i in range(len(coarse_factor_out)):
+            if i == len(coarse_factor_out) - 1:
+                cpp(f"stream_t({partition_name_lower}_data_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];", newlines=2)
+            else:
+                cpp(f"stream_t({partition_name_lower}_data_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];")
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"#pragma HLS ARRAY_PARTITION variable=in_{i}_stream complete dim=0")
+        for i in range(len(coarse_factor_out)):
+            if i == len(coarse_factor_out) - 1:
+                cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i}_stream complete dim=0", newlines=2)
+            else:
+                cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i}_stream complete dim=0")
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"const int pixel_loop_in_{i} = {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN_{i}, {partition_name_upper}_STREAMS_IN_{i})*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i};")
+
+        for i in range(len(coarse_factor_out)):
+            if i == len(coarse_factor_out) - 1:
+                cpp(f"const int pixel_loop_out_{i} = {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i}, {partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i};", newlines=2)
+            else:
+                cpp(f"const int pixel_loop_out_{i} = {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i}, {partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i};")
+
+        cpp("#pragma HLS DATAFLOW", newlines=2)
+
+        for i in range(len(coarse_factor_in)):
+            cpp(f"axis_to_stream<pixel_loop_in_{i}, {partition_name_upper}_STREAMS_IN_{i}, {partition_name_lower}_data_t, axi_stream_t>(in_{i}, in_{i}_stream);")
+
+        cpp(f"{partition_name_lower}(")
+        for i in range(len(coarse_factor_in)):
+            cpp(f"\tin_{i}_stream,")
+        for i in range(len(coarse_factor_out)):
+            if i == len(coarse_factor_out) - 1:
+                cpp(f"\tout_{i}_stream\n\t);")
+            else:
+                cpp(f"\tout_{i}_stream,")
+
+        for i in range(len(coarse_factor_out)):
+            cpp(f"stream_to_axis<pixel_loop_out_{i}, {partition_name_upper}_STREAMS_OUT_{i}, {partition_name_lower}_data_t, axi_stream_t>(out_{i}_stream, out_{i});")
+
+    cpp.close()
+
+def generate_top_level_hpp(partition_name: str, model_name: str, layers_config: dict, input_nodes: list, output_nodes: list):
+    batch_size = layers_config[input_nodes[0]]["batch_size"]
+
+    channels_in = []
+    depth_in = []
+    height_in = []
+    width_in = []
+    coarse_factor_in = []
+
+    for node in input_nodes:
+        channels_in.append(layers_config[node]["channels_in"] if "channels_in" in layers_config[node] else layers_config[node]["features_in"])
+        depth_in.append(layers_config[node]["depth_in"] if "depth_in" in layers_config[node] else 1)
+        height_in.append(layers_config[node]["height_in"] if "height_in" in layers_config[node] else 1)
+        width_in.append(layers_config[node]["width_in"] if "width_in" in layers_config[node] else 1)
+        coarse_factor_in.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_in_factor"])
+
+    channels_out = []
+    depth_out = []
+    height_out = []
+    width_out = []
+    coarse_factor_out = []
+
+    for node in output_nodes:
+        channels_out.append(layers_config[node]["channels_out"] if "channels_out" in layers_config[node] else layers_config[node]["features_out"])
+        depth_out.append(layers_config[node]["depth_out"] if "depth_out" in layers_config[node] else 1)
+        height_out.append(layers_config[node]["height_out"] if "height_out" in layers_config[node] else 1)
+        width_out.append(layers_config[node]["width_out"] if "width_out" in layers_config[node] else 1)
+        coarse_factor_out.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_out_factor"])
+
+    partition_name_lower = partition_name.lower()
+    partition_name_upper = partition_name.upper()
+
+    hpp = CppFile(
+        os.path.join(
+            os.getcwd(),
+            "generated_files",
+            model_name,
+            partition_name,
+            "src", f"{partition_name_lower}_top.hpp",
+        ))
+
+    hpp("#pragma once", newlines=2)
+
+    hpp(f'#include "{partition_name_lower}.hpp"', newlines=2)
+
+    hpp(f"void {partition_name_lower}_top(")
+    for i in range(len(coarse_factor_in)):
+        hpp(f"\tstream_t(axi_stream_t) in_{i}[{partition_name_upper}_STREAMS_IN_{i}],")
+    for i in range(len(coarse_factor_out)):
+        if i == len(coarse_factor_out) - 1:
+            hpp(f"\tstream_t(axi_stream_t) out_{i}[{partition_name_upper}_STREAMS_OUT_{i}]\n);")
+        else:
+            hpp(f"\tstream_t(axi_stream_t) out_{i}[{partition_name_upper}_STREAMS_OUT_{i}],")
+
+    hpp.close()
+
 def generate_top_level_files(partition_name: str, model_name: str, branch_depth: dict, partition_structure: dict, layers_config: dict):
     if not os.path.exists(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src")):
         os.makedirs(os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "src"))
@@ -241,8 +428,7 @@ def generate_top_level_files(partition_name: str, model_name: str, branch_depth:
         else:
             output_nodes.append(in_nodes[0])
 
-
-    generate_top_level_hpp(
+    generate_partition_level_hpp(
         partition_name,
         model_name,
         layers_config,
@@ -251,12 +437,28 @@ def generate_top_level_files(partition_name: str, model_name: str, branch_depth:
         output_nodes,
     )
 
-    generate_top_level_cpp(
+    generate_partition_level_cpp(
         partition_name,
         model_name,
         layers_config,
         partition_structure,
         branch_depth,
+        input_nodes,
+        output_nodes,
+    )
+
+    generate_top_level_hpp(
+        partition_name,
+        model_name,
+        layers_config,
+        input_nodes,
+        output_nodes,
+    )
+
+    generate_top_level_cpp(
+        partition_name,
+        model_name,
+        layers_config,
         input_nodes,
         output_nodes,
     )
