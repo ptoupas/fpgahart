@@ -668,7 +668,7 @@ def relu_3d(input_shape, coarse_in, file_format, store_path="generated_data/relu
     else:
         raise Exception("Format not supported")
 
-def partition_3d(part, partition_structure, onnx_parser, file_format, store_path="generated_data/partition_3d"):
+def partition_3d(part, partition_structure, layers_config, onnx_parser, file_format, store_path="generated_data/partition_3d"):
     class X3d_m_layer(nn.Module):
         def __init__(self, layer_type, conv_config, file_path, part):
             super().__init__()
@@ -904,6 +904,60 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
             else:
                 raise Exception(f"Layer type {self.layer_type} is not supported")
 
+    def transform_store_weights_onnx(weights, node_name, layers_config, store_path, file_format):
+        node = layers_config[node_name]
+
+        coarse_in = node["coarse_in_factor"]
+        coarse_out = node["coarse_out_factor"]
+        if len(weights.shape) == 5:
+            depthwise = node["depthwise"]
+            wr = node["wr_factor"]
+            groups = node["groups"]
+
+            if not depthwise:
+                assert weights.shape == (node["channels_out"], node["channels_in"], node["kernel_depth"], node["kernel_height"], node["kernel_width"]), "Shape mismatch"
+            else:
+                assert weights.shape == (node["channels_out"], 1, node["kernel_depth"], node["kernel_height"], node["kernel_width"]), "Shape mismatch"
+
+            if not depthwise:
+                print(
+                    "weights_{}_cin{}_cout{}:".format(node_name.lower(), coarse_in, coarse_out),
+                    weights.shape,
+                )
+                weights_transformed = transform_weights(
+                    weights, coarse_in, coarse_out, 1, 1, groups=groups
+                )
+                with open(store_path + "/weights_{}_cin{}_cout{}.csv".format(node_name.lower(), coarse_in, coarse_out), "w",) as f:
+                    f.write(array_init(weights_transformed[0]))
+            else:
+                print(
+                    "weights_{}_cin{}_cout{}:".format(node_name.lower(), coarse_in, coarse_out),
+                    weights.shape,
+                )
+                weights_transformed = transform_weights(
+                    weights,
+                    1,
+                    1,
+                    1,
+                    coarse_group=coarse_in,
+                    groups=groups,
+                )
+                with open(store_path + "/weights_{}_cin{}_cout{}.csv".format(node_name.lower(), coarse_in, coarse_out), "w",) as f:
+                    f.write(array_init(weights_transformed[0]))
+        elif len(weights.shape) == 2:
+            weights = transform_weights_fc(weights, coarse_in, coarse_out)
+
+            if file_format == "bin":
+                weights.tofile(store_path + "/weights_{}_cin{}_cout{}.bin".format(node_name.lower(), coarse_in, coarse_out))
+            elif file_format == "txt":
+                np.savetxt(
+                    store_path + "/weights_{}_cin{}_cout{}.txt".format(node_name.lower(), coarse_in, coarse_out), weights.flatten(), fmt="%.8f"
+                )
+            else:
+                raise Exception("Format not supported")
+        else:
+            raise Exception("Weights shape not supported")
+
     model_input_nodes = onnx_parser.get_model_input_nodes()
     mem_input_nodes = sorted(partition_structure['input_nodes'])
     mem_output_nodes = sorted(partition_structure['output_nodes'])
@@ -988,7 +1042,14 @@ def partition_3d(part, partition_structure, onnx_parser, file_format, store_path
         else:
             raise Exception("Format not supported")
 
-    #TODO: get the weights from the conv and gemm layers
+    for layer, config in partition_structure['layers'].items():
+        if config['type'] in ["Conv", "Gemm", "BatchNormalization"]:
+            weights, biases = onnx_parser.get_node_weight_bias(layer)
+            transform_store_weights_onnx(weights, layer, layers_config, store_path, file_format)
+            if biases is not None:
+                pass
+                # transform_store_biases_onnx(biases, layer, layers_config, store_path)
+
     return
     inputs = []
     for in_node in input_nodes:
@@ -1628,7 +1689,7 @@ if __name__ == "__main__":
     elif op_type == "3d_part":
         #TODO: generate a dictionary from the args.config_file
         config_dict = {}
-        partition_3d(args.partition_name, config_dict, OnnxModelParser(args.model_name), file_format=args.format)
+        partition_3d(args.partition_name, config_dict, config_dict, OnnxModelParser(args.model_name), file_format=args.format)
     elif op_type == "gemm":
         gemm(args.in_features, args.out_features, args.coarse_in, args.coarse_out, bias=args.bias, file_format=args.format)
     else:

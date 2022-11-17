@@ -109,14 +109,17 @@ def generate_partition_code(
 
     # Generate top level partition file
     generate_top_level_files(partition_name, model_name, branch_depth, partition_structure, layers_config)
+
+    # Generate data files
+    store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
+    if not os.path.exists(store_path):
+        os.makedirs(store_path)
+    partition_3d(partition_name, partition_structure, layers_config, onnx_parser, file_format="bin", store_path=store_path)
     return
 
     # Generate testbench file
     generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False)
 
-    # Generate data files
-    store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
-    partition_3d(partition_name, partition_structure, onnx_parser, file_format="bin", store_path=store_path)
 
 def identify_streams_mismatches(layers_config, connections):
     squeeze_layers = []
@@ -162,7 +165,8 @@ if __name__ == "__main__":
 
     for k, v in partition_configuration.items():
         print(f"Generating partition {k}")
-        if args.config_file:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
-        else:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)
+        if "part_26" in k:
+            if args.config_file:
+                generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
+            else:
+                generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)

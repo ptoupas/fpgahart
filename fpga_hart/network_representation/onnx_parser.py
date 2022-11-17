@@ -114,6 +114,24 @@ class OnnxModelParser:
             self.optimized_model_path,
         )
 
+    def get_node_weight_bias(self, node_name: str) -> Tuple[np.ndarray, np.ndarray]:
+        node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
+        if node.op_type not in ["Conv", "Gemm", "BatchNormalization"]:
+            raise ValueError(f"Node {node_name} is not a Conv, Gemm or BatchNormalization node and has no weights")
+
+        weight = None
+        bias = None
+
+        weight_initializer = node.input[1]
+        weight_initializer_idx = [i for i, n in enumerate(self.onnx_model.graph.initializer) if n.name == weight_initializer][0]
+        weight = onnx.numpy_helper.to_array(self.onnx_model.graph.initializer[weight_initializer_idx])
+        bias_initializer = node.input[2] if len(node.input) > 2 else None
+        if bias_initializer is not None:
+            bias_initializer_idx = [i for i, n in enumerate(self.onnx_model.graph.initializer) if n.name == bias_initializer][0]
+            bias = onnx.numpy_helper.to_array(self.onnx_model.graph.initializer[bias_initializer_idx])
+
+        return weight, bias
+
     def add_outputs_to_model(self, outputs: list) -> None:
         output_tensors =[node.output[0] for node in self.onnx_model.graph.node if node.name in outputs]
 
