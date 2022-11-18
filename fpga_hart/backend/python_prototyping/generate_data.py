@@ -524,15 +524,12 @@ def gemm(
         print(
             f"bias shape: {bias.shape}. Size in KB: {(bias.size * 2) / 1024:.4f}"
         )
-        bias = transform_biases(bias, coarse_out)
-        if file_format == "bin":
-            bias.tofile(store_path + "/bias.bin")
-        elif file_format == "txt":
-            np.savetxt(
-                store_path + "/bias.txt", bias.flatten(), fmt="%.8f"
-            )
-        else:
-            raise Exception("Format not supported")
+        biases_transformed = transform_biases(bias, coarse_out)
+        with open(
+            f"{store_path}/biases_{layer_name}_cout{coarse_out}.csv",
+            "w",
+        ) as f:
+            f.write(array_init(biases_transformed[0]))
 
     out = gemm(x)
 

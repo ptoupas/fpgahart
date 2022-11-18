@@ -389,7 +389,7 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
                     {layer_name_upper}_BIAS_FILTERS,\n\
                     {layer_name_lower}_data_t,\n\
                     {layer_name_lower}_data_t\n\
-                >(glue_out[i],biases_custom_conv_layer[i],out[i]);",
+                >(glue_out[i],biases_{layer_name_lower}[i],out[i]);",
                     newlines=2,
                 )
     cpp.close()

@@ -95,11 +95,12 @@ class LayerParser(ModelLayerDescriptor):
             os.remove(self.layer_model_file)
 
         if layer_type == "Pool":
-            name = "custom_pool_layer"
+            op_type = "MaxPool"
+            name = "custom_Pool_layer"
             layer_descriptor = {
-                "operation": "MaxPool",
-                "shape_in": [[1, 64, 8, 128, 128]],
-                "shape_out": [1, 64, 8, 64, 64],
+                "operation": op_type,
+                "shape_in": [[1, 3, 8, 16, 16]],
+                "shape_out": [1, 3, 8, 8, 8],
                 "node_in": ["323"],
                 "node_out": "324",
                 "branching": False,
@@ -108,9 +109,10 @@ class LayerParser(ModelLayerDescriptor):
                 "stride": [1, 2, 2],
             }
         elif layer_type == "Activation":
-            name = "custom_activation_layer"
+            op_type = "Sigmoid"
+            name = f"custom_{op_type}_layer"
             layer_descriptor = {
-                "operation": "Sigmoid",
+                "operation": op_type,
                 "shape_in": [[1, 432, 16, 8, 8]],
                 "shape_out": [1, 432, 16, 8, 8],
                 "node_in": ["323"],
@@ -118,17 +120,17 @@ class LayerParser(ModelLayerDescriptor):
                 "branching": False
             }
         elif layer_type == "Conv":
-            name = "custom_conv_layer"
+            name = "custom_Conv_layer"
             layer_descriptor = {
                 "operation": "Conv",
-                "shape_in": [[1, 256, 2, 16, 16]],
-                "shape_out": [1, 576, 2, 16, 16],
+                "shape_in": [[1, 2, 3, 4, 4]],
+                "shape_out": [1, 4, 3, 4, 4],
                 "node_in": ["575"],
                 "node_out": "576",
                 "branching": False,
-                "kernel": [576, 256, 1, 3, 3],
-                "bias": [576],
-                "padding": [0, 1, 1],
+                "kernel": [4, 2, 3, 1, 1],
+                "bias": [4],
+                "padding": [1, 0, 0],
                 "stride": [1, 1, 1],
                 "groups": 1,
                 "dilation": [1, 1, 1],
@@ -136,8 +138,8 @@ class LayerParser(ModelLayerDescriptor):
 
             # layer_descriptor = {
             #     "operation": "Conv",
-            #     "shape_in": [[1, 4, 4, 6, 6]],
-            #     "shape_out": [1, 4, 4, 6, 6],
+            #     "shape_in": [[1, 4, 3, 4, 4]],
+            #     "shape_out": [1, 4, 3, 4, 4],
             #     "node_in": ["575"],
             #     "node_out": "576",
             #     "branching": False,
@@ -164,19 +166,19 @@ class LayerParser(ModelLayerDescriptor):
             #     "dilation": [1, 1, 1],
             # }
         elif layer_type == "Gemm":
-            name = "custom_gemm_layer"
+            name = "custom_Gemm_layer"
             layer_descriptor = {
                 "operation": "Gemm",
-                "shape_in": [[1, 50]],
-                "shape_out": [1, 100],
+                "shape_in": [[1, 10]],
+                "shape_out": [1, 20],
                 "node_in": ["960"],
                 "node_out": "970",
                 "branching": False,
-                "kernel": [50, 100],
-                "bias": [100],
+                "kernel": [10, 20],
+                "bias": [20],
             }
         elif layer_type == "GlobalAveragePool":
-            name = "custom_gap_layer"
+            name = "custom_Gap_layer"
             layer_descriptor = {
                 "operation": "GlobalAveragePool",
                 "shape_in": [[1, 432, 16, 8, 8]],
@@ -186,23 +188,15 @@ class LayerParser(ModelLayerDescriptor):
                 "branching": False,
             }
         elif layer_type == "Elementwise":
-            name = "custom_elemwise_layer"
+            op_type = "Mul"
+            name = f"custom_{op_type}_layer"
             layer_descriptor = {
-                "operation": "Mul",
+                "operation": op_type,
                 "shape_in": [[1, 432, 16, 8, 8], [1, 432, 1, 1, 1]],
                 "shape_out": [1, 432, 16, 8, 8],
                 "node_in": ["323"],
                 "node_out": "324",
                 "branching": False
             }
-
-            # layer_descriptor = {
-            #     "operation": "Add",
-            #     "shape_in": [[1, 192, 16, 8, 8], [1, 192, 16, 8, 8]],
-            #     "shape_out": [1, 192, 16, 8, 8],
-            #     "node_in": ["323"],
-            #     "node_out": "324",
-            #     "branching": False
-            # }
 
         self.model_layer(name, layer_descriptor)

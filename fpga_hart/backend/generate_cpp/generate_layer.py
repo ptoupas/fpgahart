@@ -107,7 +107,7 @@ def generate_layer_code(
         layer_name = "Gap_" + layer_name.split("_")[1]
         generate_gap_files(layer_name, layers_config, model_name)
     elif layers_type == "Gemm":
-        generate_gemm_files(layer_name, layers_config, model_name)
+        generate_gemm_files(layer_name, layers_config, model_name, hls_project_path)
     elif layers_type == "DR_Activation":
         # TODO: Implement DYNAMIC reconfigurable activation
         # generate_dr_activation_files(layer_name, layers_config, model_name)
@@ -132,7 +132,7 @@ def generate_layer_code(
         layer_name = "Gap"
         generate_gap_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
     elif layers_type == "DR_Gemm":
-        generate_gemm_files(layer_name, layers_config, model_name, dynamic_reconfig=dynamic_reconfig)
+        generate_gemm_files(layer_name, layers_config, model_name, hls_project_path, dynamic_reconfig=dynamic_reconfig)
     else:
         raise Exception(f"Layer {layers_type} not supported")
 

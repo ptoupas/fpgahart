@@ -86,7 +86,7 @@ def generate_partition_code(
             layer_name = "Gap_" + layer_name.split("_")[1]
             generate_gap_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "Gemm" in layer_name:
-            generate_gemm_files(layer_name, layer_config, model_name, partition_name=partition_name)
+            generate_gemm_files(layer_name, layer_config, model_name, hls_project_path, partition_name=partition_name)
         else:
             raise Exception(f"Layer {layer_name} not supported")
 
