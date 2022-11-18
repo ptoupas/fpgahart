@@ -54,7 +54,7 @@ def get_minimum_resource_utilization(hw_layer):
     else:
         raise ValueError(f"Layer type {type(hw_layer)} not supported.")
 
-    if not isinstance(hw_layer, Convolutional3DLayer):
+    if not (isinstance(hw_layer, Convolutional3DLayer) or isinstance(hw_layer, Pooling3DLayer)):
         return 0, dsp_util, initial_filters
     return bram_util, dsp_util, initial_filters
 

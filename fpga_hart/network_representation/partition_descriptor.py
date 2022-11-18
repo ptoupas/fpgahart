@@ -168,6 +168,10 @@ class PartitionDescriptor(ModelLayerDescriptor):
                 if list(layer_queue_operations) == layer_type_2:
                     final_layers.append(list(layer_queue))
             return final_layers
+        elif self.model_name == "c3d":
+            layers_list = list(layers.keys())
+            final_layers.append(layers_list)
+            return final_layers
         elif self.model_name == "r2plus1d":
             layer_type_1 = ["Conv", "Relu", "Conv", "Relu", "MaxPool", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
             layer_type_2 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
