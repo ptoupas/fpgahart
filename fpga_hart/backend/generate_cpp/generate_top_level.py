@@ -413,8 +413,8 @@ def generate_top_level_files(partition_name: str, model_name: str, branch_depth:
         if h_file.endswith(".hpp")
     ]
 
-    mem_input_nodes = partition_structure['input_nodes']
-    mem_output_nodes = partition_structure['output_nodes']
+    mem_input_nodes = sorted(partition_structure['input_nodes'])
+    mem_output_nodes = sorted(partition_structure['output_nodes'])
     input_nodes = []
     for node in mem_input_nodes:
         assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"

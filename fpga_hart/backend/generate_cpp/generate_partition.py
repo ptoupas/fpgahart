@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Tuple
 
 import pandas as pd
-from generate_tb import generate_tb_files
+from generate_tb import generate_tb_files_partition
 from generate_top_level import generate_top_level_files
 from layers.generate_conv import generate_conv_files
 from layers.generate_elemwise import generate_elemwise_files
@@ -110,15 +110,14 @@ def generate_partition_code(
     # Generate top level partition file
     generate_top_level_files(partition_name, model_name, branch_depth, partition_structure, layers_config)
 
+    # Generate testbench file
+    generate_tb_files_partition(partition_name, model_name, hls_project_path, branch_depth, partition_structure, layers_config)
+
     # Generate data files
     store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
     if not os.path.exists(store_path):
         os.makedirs(store_path)
     partition_3d(partition_name, partition_structure, layers_config, onnx_parser, file_format="bin", store_path=store_path)
-    return
-
-    # Generate testbench file
-    generate_tb_files(partition_name, prefix, hls_project_path, is_layer=False)
 
 
 def identify_streams_mismatches(layers_config, connections):
@@ -165,8 +164,7 @@ if __name__ == "__main__":
 
     for k, v in partition_configuration.items():
         print(f"Generating partition {k}")
-        if "part_26" in k:
-            if args.config_file:
-                generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
-            else:
-                generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)
+        if args.config_file:
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
+        else:
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)
