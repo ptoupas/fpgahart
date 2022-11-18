@@ -521,7 +521,7 @@ class SimulatedAnnealing(BaseLayer):
 
                     num_iterations = 0
                     timeout_tmr_start = time.time()
-                    while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
+                    while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 10.0:
                     # for _ in range(self.iterationPerTemp):
                         (
                             new_state,
@@ -1809,7 +1809,7 @@ class SimulatedAnnealing(BaseLayer):
 
             num_iterations = 0
             timeout_tmr_start = time.time()
-            while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 30.0:
+            while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 10.0:
             # for _ in range(self.iterationPerTemp):
                 if self.block_gen == 'post_while':
                     bblocks, lookuptable = self.generate_building_blocks()
