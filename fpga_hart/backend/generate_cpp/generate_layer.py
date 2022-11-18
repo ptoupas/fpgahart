@@ -209,6 +209,7 @@ def generate_layer_code(
         shape_kernel = [layers_config["kernel_depth"],
                         layers_config["kernel_height"],
                         layers_config["kernel_width"]]
+        shape_bias = layers_config["shape_bias"]
         padding = [layers_config["pad_depth"],
                    layers_config["pad_height"],
                      layers_config["pad_width"]]
@@ -223,7 +224,7 @@ def generate_layer_code(
         conv_3d(
             input_shape=shape_in,
             kernel_shape=shape_kernel,
-            bias=False,
+            bias=False if shape_bias == 0 else True,
             filters=filters,
             padding=padding,
             stride=stride,
@@ -279,6 +280,7 @@ def generate_layer_code(
                     layers_config["features_in"]]
         shape_out = [layers_config["batch_size"],
                      layers_config["features_out"]]
+        shape_bias = layers_config["shape_bias"]
         coarse_in_factor = layers_config["coarse_in_factor"]
         coarse_out_factor = layers_config["coarse_out_factor"]
         gemm(
@@ -286,7 +288,7 @@ def generate_layer_code(
             output_shape=shape_out,
             coarse_in=coarse_in_factor,
             coarse_out=coarse_out_factor,
-            bias=False,
+            bias=False if shape_bias == 0 else True,
             file_format="bin",
             store_path=store_path,
             layer_name = layer_name.lower(),

@@ -463,7 +463,7 @@ class SimulatedAnnealing(BaseLayer):
                 print("No configuration found after 90 seconds. Aborting...")
                 return None, None, None
 
-        return config, cost, dp_info
+        return config, cost, dp_info, mem_bw
 
     def run_optimizer(self):
         # if has_gap(self.graph) and self.branch_bram_util > self.max_BRAM_util:
@@ -1051,12 +1051,13 @@ class SimulatedAnnealing(BaseLayer):
                 if wr_factor == 1:
                     return None
 
-        config, cost, dp_info = self.initialize_optimizer_layer(layer, wr_factor=wr_factor)
+        config, cost, dp_info, mem_bw = self.initialize_optimizer_layer(layer, wr_factor=wr_factor)
         if config == None:
             return None
 
         prev_state = config
         solution_dp = dp_info
+        solution_mem = mem_bw
         prev_cost = cost
 
         current_temp = self.t_max

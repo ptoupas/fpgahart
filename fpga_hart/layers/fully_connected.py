@@ -36,6 +36,9 @@ class FCLayer(BaseLayer):
         self.weights_shape[1] = self.dim_out
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
+        if self.bias_shape:
+            self.bias_shape = [self.filters]
+
     def update_layer(self):
         self.full_rate_in = []
         self.full_rate_out = []

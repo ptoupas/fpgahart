@@ -76,7 +76,8 @@ class Convolutional3DLayer(BaseLayer):
         self.cols_out = self.output_shape[4]
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
-        self.bias_shape = [self.filters]
+        if self.bias_shape:
+            self.bias_shape = [self.filters]
         if self.depthwise:
             self.input_shape[1] = self.filters
             self.channels = self.filters

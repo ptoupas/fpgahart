@@ -392,6 +392,42 @@ def transform_weights_fc(
     # return transformed weights
     return weights
 
+def transform_biases(
+        biases_raw, coarse_out, wr_factor=1, coarse_group=1, groups=1
+):
+    # parameters
+    num_filters = int(biases_raw.shape[0] / (groups * coarse_out * wr_factor))
+    print(
+        f"num_filters={num_filters}"
+    )
+    # correct output shape for biases
+    biases = np.ndarray(
+        shape=(
+            wr_factor,
+            coarse_group,
+            coarse_out,
+            int(groups / coarse_group),
+            num_filters,
+        ),
+        dtype=np.float32,
+        order="C",
+    )
+
+    # transform biases raw shape
+    for index,_ in np.ndenumerate(biases):
+        biases[index] = biases_raw[index[3]*coarse_group*num_filters*wr_factor*coarse_out+index[1]*num_filters*wr_factor*coarse_out+index[4]*wr_factor*coarse_out+index[0]*coarse_out+index[2]]
+
+    print("*" * 30)
+    print(biases.shape)
+
+    biases = np.reshape(biases,[wr_factor,coarse_out*coarse_group, int(groups/coarse_group)*num_filters])
+
+    print(biases.shape)
+    print("*" * 30)
+
+    # return transformed biases
+    return biases
+
 def create_host_binary(data, fp_int_part, fp_frac_part, coarse_factor, dma_width) -> list:
     # create host binary
     word_bytes = (fp_int_part + fp_frac_part) // 8
@@ -485,6 +521,19 @@ def gemm(
 
     if bias:
         bias = gemm.bias.detach().numpy()
+        print(
+            f"bias shape: {bias.shape}. Size in KB: {(bias.size * 2) / 1024:.4f}"
+        )
+        bias = transform_biases(bias, coarse_out)
+        if file_format == "bin":
+            bias.tofile(store_path + "/bias.bin")
+        elif file_format == "txt":
+            np.savetxt(
+                store_path + "/bias.txt", bias.flatten(), fmt="%.8f"
+            )
+        else:
+            raise Exception("Format not supported")
+
     out = gemm(x)
 
     write_out_binary = out.detach().numpy()
@@ -904,6 +953,40 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
             else:
                 raise Exception(f"Layer type {self.layer_type} is not supported")
 
+    def transform_store_biases_onnx(biases, node_name, layers_config, store_path, file_format):
+        node = layers_config[node_name]
+
+        coarse_out = node["coarse_out_factor"]
+        depthwise = node["depthwise"] if "depthwise" in node else False
+
+        wr = node["wr_factor"]
+        groups = node["groups"] if "groups" in node else 1
+
+        if not depthwise:
+            print(
+                "biases_{}_cout{}:".format(node_name.lower(), coarse_out),
+                biases.shape,
+            )
+            biases_transformed = transform_biases(
+                biases, coarse_out, 1, 1, 1
+            )
+            with open(store_path + "/biases_{}_cout{}.csv".format(node_name.lower(), coarse_out), "w",) as f:
+                f.write(array_init(biases_transformed[0]))
+        else:
+            print(
+                "biases_{}_cout{}:".format(node_name.lower(), coarse_out),
+                biases.shape,
+            )
+            biases_transformed = transform_biases(
+                biases,
+                1,
+                1,
+                coarse_group=coarse_out,
+                groups=groups,
+            )
+            with open(store_path + "/biases_{}_cout{}.csv".format(node_name.lower(), coarse_out), "w",) as f:
+                f.write(array_init(biases_transformed[0]))
+
     def transform_store_weights_onnx(weights, node_name, layers_config, store_path, file_format):
         node = layers_config[node_name]
 
@@ -1047,8 +1130,7 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
             weights, biases = onnx_parser.get_node_weight_bias(layer)
             transform_store_weights_onnx(weights, layer, layers_config, store_path, file_format)
             if biases is not None:
-                pass
-                # transform_store_biases_onnx(biases, layer, layers_config, store_path)
+                transform_store_biases_onnx(biases, layer, layers_config, store_path, file_format)
 
     return
     inputs = []
@@ -1306,6 +1388,10 @@ def conv_3d(
     out = conv(x)
 
     write_weights_binary = weights.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
+    if bias:
+        biases = conv.bias
+        print(f"bias shape: {biases.detach().numpy().shape}")
+        write_biases_binary = biases.detach().numpy()  # .transpose(1, 0, 2, 3, 4)
     # if file_format == "bin":
     # 	write_weights_binary.tofile(store_path + "/weights.bin")
     # elif file_format == "txt":
@@ -1336,6 +1422,28 @@ def conv_3d(
         "w",
     ) as f:
         f.write(array_init(weights_transformed[0]))
+    if bias:
+        if depthwise:
+            biases_transformed = transform_biases(
+                biases_raw=write_biases_binary,
+                coarse_out=1,
+                wr_factor=1,
+                coarse_group=coarse_out,
+                groups=groups,
+            )
+        else:
+            biases_transformed = transform_biases(
+                biases_raw=write_biases_binary,
+                coarse_out=coarse_out,
+                wr_factor=1,
+                coarse_group=1,
+                groups=1,
+            )
+        with open(
+            f"{store_path}/biases_{layer_name}_cout{coarse_out}.csv",
+            "w",
+        ) as f:
+            f.write(array_init(biases_transformed[0]))
 
     print("=" * 40)
     print("=" * 40)

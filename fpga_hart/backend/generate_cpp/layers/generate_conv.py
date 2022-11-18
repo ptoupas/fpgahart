@@ -16,6 +16,7 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
     kd = config["kernel_depth"]
     kh = config["kernel_height"]
     kw = config["kernel_width"]
+    bias = config["shape_bias"]
     pad_d = config["pad_depth"]
     pad_h = config["pad_height"]
     pad_w = config["pad_width"]
@@ -140,6 +141,16 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
             cpp("#pragma HLS STREAM variable=accum_out")
             cpp(
                 "#pragma HLS ARRAY_PARTITION variable=accum_out complete dim=0",
+                newlines=2,
+            )
+
+        if bias != 0:
+            cpp(
+                f"stream_t({layer_name_lower}_data_t) glue_out[{layer_name_upper}_COARSE_OUT];"
+            )
+            cpp("#pragma HLS STREAM variable=glue_out")
+            cpp(
+                "#pragma HLS ARRAY_PARTITION variable=glue_out complete dim=0",
                 newlines=2,
             )
 
@@ -301,37 +312,86 @@ def generate_conv_cpp(name: str, config: dict, model_name: str, partition_name: 
                     newlines=2,
                 )
         if not depthwise:
-            cpp(
-                f"glue_3d<\n\
-                {layer_name_upper}_GLUE_BATCH_SIZE,\n\
-                {layer_name_upper}_GLUE_FILTERS,\n\
-                {layer_name_upper}_GLUE_HEIGHT,\n\
-                {layer_name_upper}_GLUE_WIDTH,\n\
-                {layer_name_upper}_GLUE_DEPTH,\n\
-                {layer_name_upper}_GLUE_COARSE_IN,\n\
-                {layer_name_upper}_GLUE_COARSE_OUT,\n\
-                accum_data_t,\n\
-                {layer_name_lower}_data_t\n\
-            >(accum_out,out);",
-                newlines=2,
-            )
+            if bias != 0:
+                cpp(
+                    f"glue_3d<\n\
+                    {layer_name_upper}_GLUE_BATCH_SIZE,\n\
+                    {layer_name_upper}_GLUE_FILTERS,\n\
+                    {layer_name_upper}_GLUE_HEIGHT,\n\
+                    {layer_name_upper}_GLUE_WIDTH,\n\
+                    {layer_name_upper}_GLUE_DEPTH,\n\
+                    {layer_name_upper}_GLUE_COARSE_IN,\n\
+                    {layer_name_upper}_GLUE_COARSE_OUT,\n\
+                    accum_data_t,\n\
+                    {layer_name_lower}_data_t\n\
+                >(accum_out,glue_out);",
+                    newlines=2,
+                )
+            else:
+                cpp(
+                    f"glue_3d<\n\
+                    {layer_name_upper}_GLUE_BATCH_SIZE,\n\
+                    {layer_name_upper}_GLUE_FILTERS,\n\
+                    {layer_name_upper}_GLUE_HEIGHT,\n\
+                    {layer_name_upper}_GLUE_WIDTH,\n\
+                    {layer_name_upper}_GLUE_DEPTH,\n\
+                    {layer_name_upper}_GLUE_COARSE_IN,\n\
+                    {layer_name_upper}_GLUE_COARSE_OUT,\n\
+                    accum_data_t,\n\
+                    {layer_name_lower}_data_t\n\
+                >(accum_out,out);",
+                    newlines=2,
+                )
         else:
-            cpp(
-                f"glue_dw_3d<\n\
-                {layer_name_upper}_GLUE_BATCH_SIZE,\n\
-                {layer_name_upper}_GLUE_CHANNELS,\n\
-                {layer_name_upper}_GLUE_FILTERS,\n\
-                {layer_name_upper}_GLUE_HEIGHT,\n\
-                {layer_name_upper}_GLUE_WIDTH,\n\
-                {layer_name_upper}_GLUE_DEPTH,\n\
-                {layer_name_upper}_GLUE_GROUPS,\n\
-                {layer_name_upper}_GLUE_COARSE_IN,\n\
-                {layer_name_upper}_GLUE_COARSE_OUT,\n\
-                accum_data_t,\n\
-                {layer_name_lower}_data_t\n\
-            >(conv_out,out);",
-                newlines=2,
-            )
+            if bias != 0:
+                cpp(
+                    f"glue_dw_3d<\n\
+                    {layer_name_upper}_GLUE_BATCH_SIZE,\n\
+                    {layer_name_upper}_GLUE_CHANNELS,\n\
+                    {layer_name_upper}_GLUE_FILTERS,\n\
+                    {layer_name_upper}_GLUE_HEIGHT,\n\
+                    {layer_name_upper}_GLUE_WIDTH,\n\
+                    {layer_name_upper}_GLUE_DEPTH,\n\
+                    {layer_name_upper}_GLUE_GROUPS,\n\
+                    {layer_name_upper}_GLUE_COARSE_IN,\n\
+                    {layer_name_upper}_GLUE_COARSE_OUT,\n\
+                    accum_data_t,\n\
+                    {layer_name_lower}_data_t\n\
+                >(conv_out,glue_out);",
+                    newlines=2,
+                )
+            else:
+                cpp(
+                    f"glue_dw_3d<\n\
+                    {layer_name_upper}_GLUE_BATCH_SIZE,\n\
+                    {layer_name_upper}_GLUE_CHANNELS,\n\
+                    {layer_name_upper}_GLUE_FILTERS,\n\
+                    {layer_name_upper}_GLUE_HEIGHT,\n\
+                    {layer_name_upper}_GLUE_WIDTH,\n\
+                    {layer_name_upper}_GLUE_DEPTH,\n\
+                    {layer_name_upper}_GLUE_GROUPS,\n\
+                    {layer_name_upper}_GLUE_COARSE_IN,\n\
+                    {layer_name_upper}_GLUE_COARSE_OUT,\n\
+                    accum_data_t,\n\
+                    {layer_name_lower}_data_t\n\
+                >(conv_out,out);",
+                    newlines=2,
+                )
+        if bias != 0:
+            with cpp.block(f"for(int i=0; i<{layer_name_upper}_COARSE_OUT; i++)"):
+                cpp("#pragma HLS unroll", newlines=2)
+                cpp(
+                    f"bias_3d<\n\
+                    {layer_name_upper}_BIAS_BATCH_SIZE,\n\
+                    {layer_name_upper}_BIAS_DEPTH,\n\
+                    {layer_name_upper}_BIAS_HEIGHT,\n\
+                    {layer_name_upper}_BIAS_WIDTH,\n\
+                    {layer_name_upper}_BIAS_FILTERS,\n\
+                    {layer_name_lower}_data_t,\n\
+                    {layer_name_lower}_data_t\n\
+                >(glue_out[i],biases_custom_conv_layer[i],out[i]);",
+                    newlines=2,
+                )
     cpp.close()
 
 
@@ -348,6 +408,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
     kd = config["kernel_depth"]
     kh = config["kernel_height"]
     kw = config["kernel_width"]
+    bias = config["shape_bias"]
     pad_d = config["pad_depth"]
     pad_h = config["pad_height"]
     pad_w = config["pad_width"]
@@ -367,6 +428,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
 
     if partition_name != '':
         weights_file_path = os.path.join(hls_project_path, partition_name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
+        biases_file_path = os.path.join(hls_project_path, partition_name, "data", f"biases_{layer_name_lower}_cout{coarse_out_factor}.csv")
 
         hpp = CppFile(
             os.path.join(
@@ -375,6 +437,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
         )
     else:
         weights_file_path = os.path.join(hls_project_path, partition_name, name, "data", f"weights_{layer_name_lower}_cin{coarse_in_factor}_cout{coarse_out_factor}.csv")
+        biases_file_path = os.path.join(hls_project_path, partition_name, name, "data", f"biases_{layer_name_lower}_cout{coarse_out_factor}.csv")
 
         hpp = CppFile(
             os.path.join(
@@ -388,6 +451,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
     hpp('#include "fork_3d_.hpp"')
     hpp('#include "conv_3d_.hpp"')
     hpp('#include "accum_3d_.hpp"')
+    hpp('#include "bias_3d_.hpp"')
     hpp('#include "glue_3d_.hpp"', newlines=2)
 
     hpp(f"#define {layer_name_upper}_DEPTHWISE {depthwise}")
@@ -561,6 +625,13 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
             newlines=2,
         )
 
+    if bias != 0:
+        hpp(f"#define {layer_name_upper}_BIAS_BATCH_SIZE \t{layer_name_upper}_BATCH_SIZE")
+        hpp(f"#define {layer_name_upper}_BIAS_DEPTH \t{layer_name_upper}_DEPTH_OUT")
+        hpp(f"#define {layer_name_upper}_BIAS_HEIGHT \t{layer_name_upper}_HEIGHT_OUT")
+        hpp(f"#define {layer_name_upper}_BIAS_WIDTH \t{layer_name_upper}_WIDTH_OUT")
+        hpp(f"#define {layer_name_upper}_BIAS_FILTERS \tDIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT)", newlines=2)
+
     hpp(
         f"typedef ap_fixed<16,8,AP_RND, AP_SAT> \t{layer_name_lower}_data_t;",
         newlines=2,
@@ -568,7 +639,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
 
     if depthwise:
         hpp(
-            f'static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
+            f'const static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
                                         [{layer_name_upper}_COARSE_OUT_INNER]\n\
                                         [DIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)]\n\
                                         [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT_INNER*{layer_name_upper}_GROUPS)]\n\
@@ -580,7 +651,7 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
         )
     else:
         hpp(
-            f'static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
+            f'const static {layer_name_lower}_data_t weights_{layer_name_lower} [{layer_name_upper}_COARSE_IN]\n\
                                             [{layer_name_upper}_COARSE_OUT]\n\
                                             [DIVIDE({layer_name_upper}_CHANNELS_IN, {layer_name_upper}_COARSE_IN)]\n\
                                             [DIVIDE({layer_name_upper}_FILTERS, {layer_name_upper}_COARSE_OUT*{layer_name_upper}_GROUPS)]\n\
@@ -588,6 +659,14 @@ def generate_conv_hpp(name: str, config: dict, model_name: str, partition_name: 
                                             [{layer_name_upper}_KERNEL_SIZE_WIDTH]\n\
                                             [{layer_name_upper}_KERNEL_SIZE_DEPTH] = {{\n\
                                             #include "{weights_file_path}"\n}};',
+            newlines=3,
+        )
+
+    if bias != 0:
+        hpp(
+            f'const static {layer_name_lower}_data_t biases_{layer_name_lower} [{layer_name_upper}_COARSE_OUT]\n\
+                                        [{layer_name_upper}_BIAS_FILTERS] = {{\n\
+                                        #include "{biases_file_path}"\n}};',
             newlines=3,
         )
 
