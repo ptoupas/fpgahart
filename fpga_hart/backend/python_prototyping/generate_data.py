@@ -1103,6 +1103,7 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
 
     for i, n_in in enumerate(inter_input_nodes):
         data = int_in_data[n_in]
+        print(f"Generating input_{i} data for {n_in} with shape {data.shape}")
         if len(data.shape) == 5:
             data.transpose(0, 3, 4, 2, 1)
         if file_format == "bin":
@@ -1113,6 +1114,7 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
             raise Exception("Format not supported")
     for i, n_out in enumerate(output_nodes):
         data = out_data[n_out]
+        print(f"Generating output_{i} data for {n_out} with shape {data.shape}")
         if len(data.shape) == 5:
             data.transpose(0, 3, 4, 2, 1)
         if file_format == "bin":
