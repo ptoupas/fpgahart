@@ -136,7 +136,7 @@ class PartitionComposer(BaseLayer):
                     )
                     + 2
                 )
-                branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": final_depth}
+                branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": int(final_depth)}
             elif num_paths == 2:
                 longest_idx = np.argmax(depths)
                 shortest_idx = np.argmin(depths)
@@ -149,7 +149,7 @@ class PartitionComposer(BaseLayer):
                 )
                 assert paths[0][-1] == paths[1][-1], "Paths should end at the same node"
                 if paths[0][0] == paths[1][0] and not 'Mem_in' in paths[0][0]:
-                    branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": final_depth}
+                    branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": int(final_depth)}
                 else:
                     unconnected_branches[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[longest_idx][-2], "depth": depths[longest_idx], "path": paths[longest_idx]}
             else:
@@ -194,7 +194,7 @@ class PartitionComposer(BaseLayer):
                 assert end_p[0] == end_p[1], "Unconnected branches should end at the same point"
                 longest_idx = np.argmax(depths)
                 shortest_idx = np.argmin(depths)
-                branch_buffering[f"{start_p[shortest_idx]}_{end_p[shortest_idx]}"] = {"start": start_p[shortest_idx], "end": end_p[shortest_idx], "conn": conn_p[shortest_idx], "depth": depths[longest_idx]-depths[shortest_idx]}
+                branch_buffering[f"{start_p[shortest_idx]}_{end_p[shortest_idx]}"] = {"start": start_p[shortest_idx], "end": end_p[shortest_idx], "conn": conn_p[shortest_idx], "depth": int(depths[longest_idx]-depths[shortest_idx])}
         return branch_buffering
 
     @staticmethod
