@@ -107,12 +107,12 @@ class OnnxModelParser:
         onnx.checker.check_model(self.onnx_model)
 
         self.onnx_model.graph.value_info.append(self.onnx_model.graph.output[0])
-        self.get_config()
-        self.parse_layers()
         onnx.save(
             self.onnx_model,
             self.optimized_model_path,
         )
+        self.get_config()
+        self.parse_layers()
 
     def get_node_weight_bias(self, node_name: str) -> Tuple[np.ndarray, np.ndarray]:
         node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]

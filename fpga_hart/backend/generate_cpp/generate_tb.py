@@ -436,32 +436,32 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
                 cpp(f"stream_t(axi_stream_t) out_correct_{i}[{partition_name_upper}_STREAMS_OUT_{i}];")
 
         for i in range(len(coarse_factor_in)):
-            cpp(f"{partition_name_lower}_data_t* test_in_{i} = ({partition_name_lower}_data_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_IN_{i}*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i} * sizeof({partition_name_lower}_data_t));")
+            cpp(f"{partition_name_lower}_input_t* test_in_{i} = ({partition_name_lower}_input_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_IN_{i}*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i} * sizeof({partition_name_lower}_input_t));")
         for i in range(len(coarse_factor_out)):
             if i == len(coarse_factor_out) - 1:
-                cpp(f"{partition_name_lower}_data_t* test_out_{i} = ({partition_name_lower}_data_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_data_t));", newlines=2)
+                cpp(f"{partition_name_lower}_output_t* test_out_{i} = ({partition_name_lower}_output_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_output_t));", newlines=2)
             else:
-                cpp(f"{partition_name_lower}_data_t* test_out_{i} = ({partition_name_lower}_data_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_data_t));")
+                cpp(f"{partition_name_lower}_output_t* test_out_{i} = ({partition_name_lower}_output_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_output_t));")
 
         for i in range(len(coarse_factor_in)):
             cpp(
                 f"load_data<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN_{i},{partition_name_upper}_STREAMS_IN_{i})*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i},\n\
                     {partition_name_upper}_STREAMS_IN_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_input_t\n\
                 >(input_path_{i}, test_in_{i});")
         for i in range(len(coarse_factor_out)):
             if i == len(coarse_factor_out) - 1:
                 cpp(f"load_data<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_output_t\n\
                 >(output_path_{i}, test_out_{i});", newlines=2)
             else:
                 cpp(f"load_data<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_output_t\n\
                 >(output_path_{i}, test_out_{i});")
 
         for i in range(len(coarse_factor_in)):
@@ -469,20 +469,23 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
                 f"to_axis_stream<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN_{i},{partition_name_upper}_STREAMS_IN_{i})*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i},\n\
                     {partition_name_upper}_STREAMS_IN_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_input_t,\n\
+                    axi_stream_t\n\
                 >(test_in_{i}, in_{i});")
         for i in range(len(coarse_factor_out)):
             if i == len(coarse_factor_out) - 1:
                 cpp(f"to_axis_stream<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_output_t,\n\
+                    axi_stream_t\n\
                 >(test_out_{i}, out_correct_{i});", newlines=2)
             else:
                 cpp(f"to_axis_stream<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
-                    {partition_name_lower}_data_t\n\
+                    {partition_name_lower}_output_t,\n\
+                    axi_stream_t\n\
                 >(test_out_{i}, out_correct_{i});")
 
         cpp(f"{partition_name_lower}_top(")
@@ -497,7 +500,7 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
         for i in range(len(coarse_factor_out)):
             with cpp.block(f"for(int i=0;i<{partition_name_upper}_STREAMS_OUT_{i};i++)"):
                 cpp(f'printf("TESTING OUTPUT {i} %d: ",i);')
-                cpp(f"err += checkAxisStreamEqual<{partition_name_lower}_data_t, axi_stream_t>(out_{i}[i], out_correct_{i}[i]);")
+                cpp(f"err += checkAxisStreamEqual<{partition_name_lower}_output_t, axi_stream_t>(out_{i}[i], out_correct_{i}[i]);")
                 cpp(
                     'printf("stream:%d -> %s\\n",i, (err==0) ? "passed" : "failed");',
                     newlines=2,

@@ -4,13 +4,17 @@ FPGAHART_PATH=$PWD
 EXECUTION_TYPE="layer"
 TARGET="throughput"
 MODEL_NAME="x3d_m"
-LAYER_FOLDER="custom_layers"
+LAYER_FOLDER="x3d_m"
 CONFIG_FILE="/home/ptoupas/Development/fpga-hart/fpga_modeling_reports/custom_layers/Conv/Conv_layers.json"
 HLS_PARENT_DIR="/data/HLS_projects/fpga-hart-hls/$LAYER_FOLDER/layers"
 
 python main.py $MODEL_NAME $EXECUTION_TYPE $TARGET
 
-python fpga_hart/backend/generate_cpp/generate_layer.py $MODEL_NAME $TARGET $HLS_PARENT_DIR --config_file $CONFIG_FILE
+if [ "$CONFIG_FILE" == "" ]; then
+    python fpga_hart/backend/generate_cpp/generate_layer.py $MODEL_NAME $TARGET $HLS_PARENT_DIR
+else
+    python fpga_hart/backend/generate_cpp/generate_layer.py $MODEL_NAME $TARGET $HLS_PARENT_DIR --config_file $CONFIG_FILE
+fi
 
 for layer in generated_files/$LAYER_FOLDER/*;
 do

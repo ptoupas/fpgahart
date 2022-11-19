@@ -304,12 +304,12 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
                 cpp(f"#pragma HLS ARRAY_PARTITION variable=out_{i} complete dim=0")
 
         for i in range(len(coarse_factor_in)):
-            cpp(f"stream_t({partition_name_lower}_data_t) in_{i}_stream[{partition_name_upper}_STREAMS_IN_{i}];")
+            cpp(f"stream_t({partition_name_lower}_input_t) in_{i}_stream[{partition_name_upper}_STREAMS_IN_{i}];")
         for i in range(len(coarse_factor_out)):
             if i == len(coarse_factor_out) - 1:
-                cpp(f"stream_t({partition_name_lower}_data_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];", newlines=2)
+                cpp(f"stream_t({partition_name_lower}_output_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];", newlines=2)
             else:
-                cpp(f"stream_t({partition_name_lower}_data_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];")
+                cpp(f"stream_t({partition_name_lower}_output_t) out_{i}_stream[{partition_name_upper}_STREAMS_OUT_{i}];")
 
         for i in range(len(coarse_factor_in)):
             cpp(f"#pragma HLS ARRAY_PARTITION variable=in_{i}_stream complete dim=0")
@@ -331,7 +331,7 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
         cpp("#pragma HLS DATAFLOW", newlines=2)
 
         for i in range(len(coarse_factor_in)):
-            cpp(f"axis_to_stream<pixel_loop_in_{i}, {partition_name_upper}_STREAMS_IN_{i}, {partition_name_lower}_data_t, axi_stream_t>(in_{i}, in_{i}_stream);")
+            cpp(f"axis_to_stream<pixel_loop_in_{i}, {partition_name_upper}_STREAMS_IN_{i}, {partition_name_lower}_input_t, axi_stream_t>(in_{i}, in_{i}_stream);")
 
         cpp(f"{partition_name_lower}(")
         for i in range(len(coarse_factor_in)):
@@ -343,7 +343,7 @@ def generate_top_level_cpp(partition_name: str, model_name: str, layers_config: 
                 cpp(f"\tout_{i}_stream,")
 
         for i in range(len(coarse_factor_out)):
-            cpp(f"stream_to_axis<pixel_loop_out_{i}, {partition_name_upper}_STREAMS_OUT_{i}, {partition_name_lower}_data_t, axi_stream_t>(out_{i}_stream, out_{i});")
+            cpp(f"stream_to_axis<pixel_loop_out_{i}, {partition_name_upper}_STREAMS_OUT_{i}, {partition_name_lower}_output_t, axi_stream_t>(out_{i}_stream, out_{i});")
 
     cpp.close()
 
