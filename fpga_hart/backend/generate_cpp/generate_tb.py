@@ -384,14 +384,9 @@ def generate_tb_files(layer_name: str, model_name: str, hls_project_path: str, p
     generate_tb_cpp(layer_name, model_name, partition_name, hls_project_path, is_layer, dynamic_reconfig, elem_bc)
 
 
-def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_path: str, branch_depth: dict, partition_structure: dict, layers_config: dict, input_nodes: list, output_nodes: list):
-    coarse_factor_in = []
-    for node in input_nodes:
-        coarse_factor_in.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_in_factor"])
-
-    coarse_factor_out = []
-    for node in output_nodes:
-        coarse_factor_out.append(layers_config[node]["coarse_factor"] if "coarse_factor" in layers_config[node] else layers_config[node]["coarse_out_factor"])
+def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_path: str, branch_depth: dict, partition_structure: dict, layers_config: dict, input_nodes: dict, output_nodes: dict):
+    num_inputs = len(input_nodes)
+    num_outputs = len(output_nodes)
 
     partition_name_lower = partition_name.lower()
     partition_name_upper = partition_name.upper()
@@ -417,41 +412,41 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
     with cpp.block("int main()"):
         cpp("int err = 0;", newlines=2)
 
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(f'std::string input_path_{i}  = std::string(DATA_DIR)+"/input_{i}.bin";')
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f'std::string output_path_{i} = std::string(DATA_DIR)+"/output_{i}.bin";', newlines=2)
             else:
                 cpp(f'std::string output_path_{i} = std::string(DATA_DIR)+"/output_{i}.bin";')
 
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(f"stream_t(axi_stream_t) in_{i}[{partition_name_upper}_STREAMS_IN_{i}];")
-        for i in range(len(coarse_factor_out)):
+        for i in range(num_outputs):
             cpp(f"stream_t(axi_stream_t) out_{i}[{partition_name_upper}_STREAMS_OUT_{i}];")
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f"stream_t(axi_stream_t) out_correct_{i}[{partition_name_upper}_STREAMS_OUT_{i}];", newlines=2)
             else:
                 cpp(f"stream_t(axi_stream_t) out_correct_{i}[{partition_name_upper}_STREAMS_OUT_{i}];")
 
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(f"{partition_name_lower}_input_t* test_in_{i} = ({partition_name_lower}_input_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_IN_{i}*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i} * sizeof({partition_name_lower}_input_t));")
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f"{partition_name_lower}_output_t* test_out_{i} = ({partition_name_lower}_output_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_output_t));", newlines=2)
             else:
                 cpp(f"{partition_name_lower}_output_t* test_out_{i} = ({partition_name_lower}_output_t*)malloc({partition_name_upper}_BATCH_SIZE*{partition_name_upper}_CHANNELS_OUT_{i}*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i} * sizeof({partition_name_lower}_output_t));")
 
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(
                 f"load_data<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN_{i},{partition_name_upper}_STREAMS_IN_{i})*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i},\n\
                     {partition_name_upper}_STREAMS_IN_{i},\n\
                     {partition_name_lower}_input_t\n\
                 >(input_path_{i}, test_in_{i});")
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f"load_data<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
@@ -464,7 +459,7 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
                     {partition_name_lower}_output_t\n\
                 >(output_path_{i}, test_out_{i});")
 
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(
                 f"to_axis_stream<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_IN_{i},{partition_name_upper}_STREAMS_IN_{i})*{partition_name_upper}_DEPTH_IN_{i}*{partition_name_upper}_HEIGHT_IN_{i}*{partition_name_upper}_WIDTH_IN_{i},\n\
@@ -472,8 +467,8 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
                     {partition_name_lower}_input_t,\n\
                     axi_stream_t\n\
                 >(test_in_{i}, in_{i});")
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f"to_axis_stream<\n\
                     {partition_name_upper}_BATCH_SIZE*DIVIDE({partition_name_upper}_CHANNELS_OUT_{i},{partition_name_upper}_STREAMS_OUT_{i})*{partition_name_upper}_DEPTH_OUT_{i}*{partition_name_upper}_HEIGHT_OUT_{i}*{partition_name_upper}_WIDTH_OUT_{i},\n\
                     {partition_name_upper}_STREAMS_OUT_{i},\n\
@@ -489,15 +484,15 @@ def generate_tb_partition_cpp(partition_name: str, model_name: str, hls_project_
                 >(test_out_{i}, out_correct_{i});")
 
         cpp(f"{partition_name_lower}_top(")
-        for i in range(len(coarse_factor_in)):
+        for i in range(num_inputs):
             cpp(f"\tin_{i},")
-        for i in range(len(coarse_factor_out)):
-            if i == len(coarse_factor_out) - 1:
+        for i in range(num_outputs):
+            if i == num_outputs - 1:
                 cpp(f"\tout_{i});\n")
             else:
                 cpp(f"\tout_{i},")
 
-        for i in range(len(coarse_factor_out)):
+        for i in range(num_outputs):
             with cpp.block(f"for(int i=0;i<{partition_name_upper}_STREAMS_OUT_{i};i++)"):
                 cpp(f'printf("TESTING OUTPUT {i} %d: ",i);')
                 cpp(f"err += checkAxisStreamEqual<{partition_name_lower}_output_t, axi_stream_t>(out_{i}[i], out_correct_{i}[i]);")
@@ -512,19 +507,33 @@ def generate_tb_files_partition(partition_name: str, model_name: str, hls_projec
 
     mem_input_nodes = sorted(partition_structure['input_nodes'])
     mem_output_nodes = sorted(partition_structure['output_nodes'])
-    input_nodes = []
+    input_nodes = {}
     for node in mem_input_nodes:
         assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
-        input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
-    output_nodes = []
+        node_idx = int(node.split("Mem_in")[-1]) - 1
+        ref_node = partition_structure['layers'][node]['out_nodes'][0]
+        cin = layers_config[ref_node]["channels_in"] if "channels_in" in layers_config[ref_node] else layers_config[ref_node]["features_in"]
+        din = layers_config[ref_node]["depth_in"] if "depth_in" in layers_config[ref_node] else 1
+        hin = layers_config[ref_node]["height_in"] if "height_in" in layers_config[ref_node] else 1
+        win = layers_config[ref_node]["width_in"] if "width_in" in layers_config[ref_node] else 1
+        cfin = layers_config[ref_node]["coarse_factor"] if "coarse_factor" in layers_config[ref_node] else layers_config[ref_node]["coarse_in_factor"]
+        input_nodes[node_idx] = {'name': ref_node, 'cin': cin, 'din': din, 'hin': hin, 'win': win, 'cfin': cfin}
+    output_nodes = {}
     for node in mem_output_nodes:
         in_nodes = partition_structure['layers'][node]['in_nodes']
         assert len(in_nodes) == 1, "Memory output node should have only one input node"
+        node_idx = int(node.split("Mem_out")[-1]) - 1
         if partition_structure['layers'][in_nodes[0]]['type'] == "Split":
-            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer'])
+            ref_node = partition_structure['layers'][in_nodes[0]]['ref_layer']
         elif partition_structure['layers'][in_nodes[0]]['type'] == "Squeeze":
-            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
+            ref_node = partition_structure['layers'][in_nodes[0]]['ref_layer_out']
         else:
-            output_nodes.append(in_nodes[0])
+            ref_node = in_nodes[0]
+        cout = layers_config[ref_node]["channels_out"] if "channels_out" in layers_config[ref_node] else layers_config[ref_node]["features_out"]
+        dout = layers_config[ref_node]["depth_out"] if "depth_out" in layers_config[ref_node] else 1
+        hout = layers_config[ref_node]["height_out"] if "height_out" in layers_config[ref_node] else 1
+        wout = layers_config[ref_node]["width_out"] if "width_out" in layers_config[ref_node] else 1
+        cfout = layers_config[ref_node]["coarse_factor"] if "coarse_factor" in layers_config[ref_node] else layers_config[ref_node]["coarse_out_factor"]
+        output_nodes[node_idx] = {'name': ref_node, 'cout': cout, 'dout': dout, 'hout': hout, 'wout': wout, 'cfout': cfout}
 
     generate_tb_partition_cpp(partition_name, model_name, hls_project_path, branch_depth, partition_structure, layers_config, input_nodes, output_nodes)
