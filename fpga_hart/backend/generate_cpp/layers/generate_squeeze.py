@@ -87,7 +87,7 @@ def generate_squeeze_hpp(name: str, config: dict, model_name: str, partition_nam
     node_in_coarse_factor = config['coarse_in_factor']
     node_out_coarse_factor = config['coarse_out_factor']
 
-    squeeze_buffer = np.lcm(node_in_coarse_factor, node_out_coarse_factor)
+    squeeze_buffer = channels # np.lcm(node_in_coarse_factor, node_out_coarse_factor)
 
     layer_name_lower = name.replace("GlobalAveragePool", "GAP").lower()
     layer_name_upper = name.replace("GlobalAveragePool", "GAP").upper()
