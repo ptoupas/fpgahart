@@ -238,13 +238,13 @@ class OnnxModelParser:
         for n, v in zip(self.onnx_model.graph.node, self.onnx_model.graph.value_info):
             if n.op_type in self.supported_operations:
                 if self.model_name == "x3d_m":
-                    if n.name == "Gemm_401":
+                    if n.name == "Gemm_399":
                         layers_outputs[n.input[0]] = [1, 432]
                 if self.model_name == "slowonly":
-                    if n.name == "Gemm_181":
+                    if n.name == "Gemm_179":
                         layers_outputs[n.input[0]] = [1, 2048]
                 if self.model_name == "r2plus1d":
-                    if n.name == "Gemm_239":
+                    if n.name == "Gemm_237":
                         layers_outputs[n.input[0]] = [1, 512]
                 if self.model_name == "c3d":
                     if n.name == "Gemm_32":
