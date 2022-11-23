@@ -1353,7 +1353,7 @@ class SimulatedAnnealing(BaseLayer):
         else:
             bb_setup = dict()
 
-        for bb in bblocks:
+        for bb in random.shuffle(bblocks):
             if not bb in bb_setup.keys():
                 bb_setup[bb] = dict()
 
