@@ -598,87 +598,47 @@ class PartitionParser(PartitionDescriptor):
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 
-    def model_custom_partition(self):
+    def model_custom_partition(self, name: str):
+        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", "custom_partitions", name)):
+            os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", "custom_partitions", name))
         self.partition_model_file = os.path.join(
-            os.getcwd(),
-            "fpga_modeling_reports", self.model_name,
-            self.model_name + "_custom_partitions.csv",
+            os.getcwd(), "fpga_modeling_reports", "custom_partitions", name, f"{name}_layers.json"
         )
-
-        with open(self.partition_model_file, mode="w") as partition_dp:
-            csv_writer = csv.writer(
-                partition_dp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL
-            )
-            csv_writer.writerow(
-                [
-                    "Part",
-                    "Latency(C)-No-Depth",
-                    "Latency(C)",
-                    "Latency(S)",
-                    "GOP/s",
-                    "GOPs",
-                    "volumes/s",
-                    "DSP(%)",
-                    "BRAM(%)",
-                    "RateIn",
-                    "RateOut",
-                    "Depth",
-                    "Branch Depth",
-                    "Muls",
-                    "Adds",
-                    "Mem(W)",
-                    "Mem(KB)",
-                    "DataSizeIn(MB)",
-                    "DataSizeOut(MB)",
-                    "MemBoundIn",
-                    "MemBoundOut",
-                    "config",
-                    "memconfig",
-                ]
-            )
+        if os.path.exists(self.partition_model_file):
+            os.remove(self.partition_model_file)
 
         # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90']
         # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90', 'Mul_91', 'Swish_92']
         # custom_partition = ['Relu_80', 'Conv_81', 'Relu_83', 'Conv_84', 'GlobalAveragePool_86', 'Conv_87', 'Relu_88', 'Conv_89', 'Sigmoid_90', 'Mul_91', 'Swish_92', 'Conv_94']
-        custom_partition = ["Swish_92", "Conv_94"]
+        # custom_partition = ["Swish_92", "Conv_94"]
 
-        extra_reconfig = self.model_partition(custom_partition, name="Sequential")
-        return
+        # extra_reconfig = self.model_partition(custom_partition, name=name)
+        # return
 
-        custom_partition = ["Custom_Conv_1"]
-        # self.layers['Custom_Gap_1'] = {'operation': 'GlobalAveragePool',
-        #                                                 'shape_in': [[1, 24, 16, 32, 32]],
-        #                                                 'shape_out': [1, 24, 1, 1, 1],
-        #                                                 'node_in': ['606'],
-        #                                                 'node_out': '608',
-        #                                                 'branching': False}
-        # self.layers['Custom_Conv_1'] = {'operation': 'Conv',
-        #                                                         'shape_in': [[1, 12, 8, 16, 16]],
-        #                                                         'shape_out': [1, 12, 8, 16, 16],
-        #                                                         'node_in': ['2'],
-        #                                                         'node_out': '3',
-        #                                                         'branching': False,
-        #                                                         'kernel': [12, 1, 3, 3, 3],
-        #                                                         'bias': [],
-        #                                                         'padding': [1, 1, 1],
-        #                                                         'stride': [1, 1, 1],
-        #                                                         'groups': 12,
-        #                                                         'dilation': [1, 1, 1]}
-        self.layers["Custom_Conv_2"] = {
+        custom_partition = ["custom_Conv_1", "custom_Relu_1"] # "custom_Conv_1", "custom_Relu_1"
+        self.layers["custom_Conv_1"] = {
             "operation": "Conv",
-            "shape_in": [[1, 12, 8, 16, 16]],
-            "shape_out": [1, 24, 8, 16, 16],
-            "node_in": ["2"],
-            "node_out": "3",
+            "shape_in": [[1, 6, 4, 4, 4]],
+            "shape_out": [1, 12, 4, 4, 4],
+            "node_in": ["1"],
+            "node_out": "2",
             "branching": False,
-            "kernel": [24, 12, 1, 1, 1],
-            "bias": [],
-            "padding": [0, 0, 0],
-            "stride": [1, 2, 2],
+            "kernel": [12, 6, 1, 3, 3],
+            "bias": [12],
+            "padding": [0, 1, 1],
+            "stride": [1, 1, 1],
             "groups": 1,
             "dilation": [1, 1, 1],
         }
-        extra_reconfig = self.model_partition(custom_partition, name="Single_Layer")
+        self.layers["custom_Relu_1"] = {
+            "operation": "Relu",
+            "shape_in": [[1, 12, 4, 4, 4]],
+            "shape_out": [1, 12, 4, 4, 4],
+            "node_in": ["2"],
+            "node_out": "3",
+            "branching": False,
+        }
+        extra_reconfig = self.model_partition(custom_partition, name=name)
         return
 
         custom_partition = [
@@ -739,7 +699,7 @@ class PartitionParser(PartitionDescriptor):
             "node_out": "5",
             "branching": False,
         }
-        # extra_reconfig = self.model_partition(custom_partition, name="Single_Layer_Branch")
+        # extra_reconfig = self.model_partition(custom_partition, name=name)
         # return
 
         custom_partition = [
@@ -785,7 +745,7 @@ class PartitionParser(PartitionDescriptor):
         ]
         self.layers["Add_32"]["shape_out"] = [1, 8, 6, 12, 12]
 
-        extra_reconfig = self.model_partition(custom_partition, name="X3D_M_Layer_Type_3_RS")
+        extra_reconfig = self.model_partition(custom_partition, name=name)
 
         custom_partition = [
             "Relu_33",
@@ -866,7 +826,7 @@ class PartitionParser(PartitionDescriptor):
         ]
         self.layers["Add_49"]["shape_out"] = [1, 8, 6, 12, 12]
 
-        extra_reconfig = self.model_partition(custom_partition, name="X3D_M_Layer_Type_2_RS")
+        extra_reconfig = self.model_partition(custom_partition, name=name)
 
         custom_partition = [
             "Relu_50",
@@ -952,4 +912,4 @@ class PartitionParser(PartitionDescriptor):
         ]
         self.layers["Add_68"]["shape_out"] = [1, 10, 6, 6, 6]
 
-        extra_reconfig = self.model_partition(custom_partition, name="X3D_M_Layer_Type_1_RS")
+        extra_reconfig = self.model_partition(custom_partition, name=name)

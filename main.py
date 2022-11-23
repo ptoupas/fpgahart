@@ -137,7 +137,7 @@ def optimizer() -> None:
 
         if args.target == "throughput":
             partition_parser.parse()
-            # partition_parser.model_custom_partition()
+            # partition_parser.model_custom_partition(name="conv_relu_seq")
         elif args.target == "latency":
             # partition_parser.find_common_layers(groupping=3)
             partition_parser.latency_driven_design()
