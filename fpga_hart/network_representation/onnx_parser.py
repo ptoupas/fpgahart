@@ -87,6 +87,7 @@ class OnnxModelParser:
         self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
 
         onnx.checker.check_model(self.onnx_model)
+        onnx.helper.strip_doc_string(self.onnx_model)
         self.onnx_model, check = simplify(self.onnx_model)
         assert check, "Simplified ONNX model could not be validated"
 
