@@ -277,6 +277,7 @@ class PartitionParser(PartitionDescriptor):
                 )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
+            # TODO: use the LAYER_TYPE enum for the layer type param
             graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
         _logger.info("*" * 40)
 

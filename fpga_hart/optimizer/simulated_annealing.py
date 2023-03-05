@@ -849,6 +849,7 @@ class SimulatedAnnealing(BaseLayer):
         else:
             config = {}
 
+        # keep_percentage = 0.95
         for node in config_nodes:
             if slowest_nodes is not None and node not in slowest_nodes:
                 continue

@@ -117,7 +117,10 @@ def generate_partition_code(
     store_path = os.path.join(os.getcwd(), "generated_files", model_name, partition_name, "data")
     if not os.path.exists(store_path):
         os.makedirs(store_path)
-    partition_3d(partition_name, partition_structure, layers_config, onnx_parser, file_format="bin", store_path=store_path)
+    if model_name == "custom_partitions":
+        partition_3d(partition_name, partition_structure, layers_config, None, file_format="bin", store_path=store_path)
+    else:
+        partition_3d(partition_name, partition_structure, layers_config, onnx_parser, file_format="bin", store_path=store_path)
 
 
 def identify_streams_mismatches(layers_config, connections):

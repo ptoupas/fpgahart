@@ -1038,98 +1038,168 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
         else:
             raise Exception("Weights shape not supported")
 
-    model_input_nodes = onnx_parser.get_model_input_nodes()
-    mem_input_nodes = sorted(partition_structure['input_nodes'])
-    mem_output_nodes = sorted(partition_structure['output_nodes'])
-    input_nodes = []
-    for node in mem_input_nodes:
-        assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
-        input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
+    if onnx_parser is None:
+        mem_input_nodes = sorted(partition_structure['input_nodes'])
+        mem_output_nodes = sorted(partition_structure['output_nodes'])
+        input_nodes = []
+        for node in mem_input_nodes:
+            assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
+            input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
 
-    for i, node in enumerate(input_nodes):
-        if "Swish" in node:
-            input_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
+        output_nodes = []
+        for node in mem_output_nodes:
+            in_nodes = partition_structure['layers'][node]['in_nodes']
+            assert len(in_nodes) == 1, "Memory output node should have only one input node"
+            if partition_structure['layers'][in_nodes[0]]['type'] == "Split":
+                output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer'])
+            elif partition_structure['layers'][in_nodes[0]]['type'] == "Squeeze":
+                output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
+            else:
+                output_nodes.append(in_nodes[0])
 
-    output_nodes = []
-    for node in mem_output_nodes:
-        in_nodes = partition_structure['layers'][node]['in_nodes']
-        assert len(in_nodes) == 1, "Memory output node should have only one input node"
-        if partition_structure['layers'][in_nodes[0]]['type'] == "Split":
-            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer'])
-        elif partition_structure['layers'][in_nodes[0]]['type'] == "Squeeze":
-            output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
-        else:
-            output_nodes.append(in_nodes[0])
+        input_shape = [layers_config[input_nodes[0]]['batch_size'],
+                       layers_config[input_nodes[0]]['channels_in'],
+                       layers_config[input_nodes[0]]['depth_in'],
+                       layers_config[input_nodes[0]]['height_in'],
+                       layers_config[input_nodes[0]]['width_in']]
+        x = torch.randn(input_shape)
+        write_input_binary = x.numpy().transpose(0, 3, 4, 2, 1)
+        write_input_binary.tofile(store_path + f"/input_{0}.bin")
 
-    for i, node in enumerate(output_nodes):
-        if "Swish" in node:
-            output_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
+        kernel_shape = [layers_config[input_nodes[0]]['kernel_depth'],
+                        layers_config[input_nodes[0]]['kernel_height'],
+                        layers_config[input_nodes[0]]['kernel_width']]
+        stride = [layers_config[input_nodes[0]]['stride_depth'],
+                  layers_config[input_nodes[0]]['stride_height'],
+                  layers_config[input_nodes[0]]['stride_width']]
+        padding = [layers_config[input_nodes[0]]['pad_depth'],
+                   layers_config[input_nodes[0]]['pad_height'],
+                   layers_config[input_nodes[0]]['pad_width']]
 
-    inter_input_nodes = []
-    for i_n in input_nodes:
-        if i_n not in onnx_parser.initial_model_inputs:
-            prev_nodes = onnx_parser.get_prev_nodes_from_node(i_n)
-            for p_n in prev_nodes:
-                if p_n not in onnx_parser.initial_model_inputs and p_n.name not in partition_structure['layers']:
-                        inter_input_nodes.append(p_n.name)
+        conv = torch.nn.Conv3d(
+            x.shape[1],
+            layers_config[input_nodes[0]]['channels_out'],
+            kernel_shape,
+            stride=stride,
+            padding=padding,
+            groups=layers_config[input_nodes[0]]['groups'],
+            bias=True if layers_config[input_nodes[0]]['shape_bias'] != 0 else False,
+        )
+        weights = conv.weight
+        weights_transformed = transform_weights(
+                    weights, layers_config[input_nodes[0]]['coarse_in_factor'], layers_config[input_nodes[0]]['coarse_out_factor'], 1, 1, groups=layers_config[input_nodes[0]]['groups']
+                )
+        with open(store_path + "/weights_{}_cin{}_cout{}.csv".format(input_nodes[0].lower(), layers_config[input_nodes[0]]['coarse_in_factor'], layers_config[input_nodes[0]]['coarse_out_factor']), "w",) as f:
+            f.write(array_init(weights_transformed[0]))
 
-    updated_output_nodes = deepcopy(output_nodes)
-    for i_n in inter_input_nodes:
-        if i_n not in output_nodes:
-            updated_output_nodes.append(i_n)
+        if layers_config[input_nodes[0]]['shape_bias'] != 0:
+            biases = conv.bias
+            biases_transformed = transform_biases(
+                biases, layers_config[input_nodes[0]]['coarse_out_factor'], 1, 1, 1
+            )
+            with open(store_path + "/biases_{}_cout{}.csv".format(input_nodes[0].lower(), layers_config[input_nodes[0]]['coarse_out_factor']), "w",) as f:
+                f.write(array_init(biases_transformed[0]))
 
-    onnx_parser.add_outputs_to_model(updated_output_nodes)
+        relu = torch.nn.ReLU()
 
-    in_shapes = onnx_parser.get_model_input_shapes()
+        out = conv(x)
+        out = relu(out)
 
-    assert len(in_shapes) == len(onnx_parser.initial_model_inputs), "Number of input nodes and input shapes should be same"
-    in_data = {}
-    for name, shape in zip(onnx_parser.initial_model_inputs, in_shapes):
-        in_data[name] = np.random.random_sample(shape).astype(np.float32)
-    out, out_names = onnx_parser.onnx_forward(in_data)
+        write_output_binary = out.detach().numpy().transpose(0, 3, 4, 2, 1)
+        write_output_binary.tofile(store_path + f"/output_{0}.bin")
+    else:
+        model_input_nodes = onnx_parser.get_model_input_nodes()
+        mem_input_nodes = sorted(partition_structure['input_nodes'])
+        mem_output_nodes = sorted(partition_structure['output_nodes'])
+        input_nodes = []
+        for node in mem_input_nodes:
+            assert len(partition_structure['layers'][node]['out_nodes']) == 1, "Memory input node should have only one output node"
+            input_nodes.append(partition_structure['layers'][node]['out_nodes'][0])
 
-    int_in_data = {}
-    if input_nodes == model_input_nodes and len(input_nodes) == 1:
-        int_in_data[input_nodes[0]] = in_data[onnx_parser.initial_model_inputs[0]]
-        inter_input_nodes.append(input_nodes[0])
-    for o, o_n in zip(out, out_names):
-        if o_n in inter_input_nodes:
-            int_in_data[o_n] = o
+        for i, node in enumerate(input_nodes):
+            if "Swish" in node:
+                input_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
 
-    out_data = {}
-    for o, o_n in zip(out, out_names):
-        if o_n in output_nodes:
-            out_data[o_n] = o
+        output_nodes = []
+        for node in mem_output_nodes:
+            in_nodes = partition_structure['layers'][node]['in_nodes']
+            assert len(in_nodes) == 1, "Memory output node should have only one input node"
+            if partition_structure['layers'][in_nodes[0]]['type'] == "Split":
+                output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer'])
+            elif partition_structure['layers'][in_nodes[0]]['type'] == "Squeeze":
+                output_nodes.append(partition_structure['layers'][in_nodes[0]]['ref_layer_out'])
+            else:
+                output_nodes.append(in_nodes[0])
 
-    for i, n_in in enumerate(inter_input_nodes):
-        data = int_in_data[n_in]
-        print(f"Generating input_{i} data for {n_in} with shape {data.shape}")
-        if len(data.shape) == 5:
-            data.transpose(0, 3, 4, 2, 1)
-        if file_format == "bin":
-            data.tofile(store_path + f"/input_{i+1}.bin")
-        elif file_format == "txt":
-            np.savetxt(store_path + f"/input_{i+1}.txt", data.flatten(), fmt="%.8f")
-        else:
-            raise Exception("Format not supported")
-    for i, n_out in enumerate(output_nodes):
-        data = out_data[n_out]
-        print(f"Generating output_{i} data for {n_out} with shape {data.shape}")
-        if len(data.shape) == 5:
-            data.transpose(0, 3, 4, 2, 1)
-        if file_format == "bin":
-            data.tofile(store_path + f"/output_{i+1}.bin")
-        elif file_format == "txt":
-            np.savetxt(store_path + f"/output_{i+1}.txt", data.flatten(), fmt="%.8f")
-        else:
-            raise Exception("Format not supported")
+        for i, node in enumerate(output_nodes):
+            if "Swish" in node:
+                output_nodes[i] = f'Mul_{int(node.split("Swish_")[-1]) + 1}'
 
-    for layer, config in partition_structure['layers'].items():
-        if config['type'] in ["Conv", "Gemm", "BatchNormalization"]:
-            weights, biases = onnx_parser.get_node_weight_bias(layer)
-            transform_store_weights_onnx(weights, layer, layers_config, store_path, file_format)
-            if biases is not None:
-                transform_store_biases_onnx(biases, layer, layers_config, store_path, file_format)
+        inter_input_nodes = []
+        for i_n in input_nodes:
+            if i_n not in onnx_parser.initial_model_inputs:
+                prev_nodes = onnx_parser.get_prev_nodes_from_node(i_n)
+                for p_n in prev_nodes:
+                    if p_n not in onnx_parser.initial_model_inputs and p_n.name not in partition_structure['layers']:
+                            inter_input_nodes.append(p_n.name)
+
+        updated_output_nodes = deepcopy(output_nodes)
+        for i_n in inter_input_nodes:
+            if i_n not in output_nodes:
+                updated_output_nodes.append(i_n)
+
+        onnx_parser.add_outputs_to_model(updated_output_nodes)
+
+        in_shapes = onnx_parser.get_model_input_shapes()
+
+        assert len(in_shapes) == len(onnx_parser.initial_model_inputs), "Number of input nodes and input shapes should be same"
+        in_data = {}
+        for name, shape in zip(onnx_parser.initial_model_inputs, in_shapes):
+            in_data[name] = np.random.random_sample(shape).astype(np.float32)
+        out, out_names = onnx_parser.onnx_forward(in_data)
+
+        int_in_data = {}
+        if input_nodes == model_input_nodes and len(input_nodes) == 1:
+            int_in_data[input_nodes[0]] = in_data[onnx_parser.initial_model_inputs[0]]
+            inter_input_nodes.append(input_nodes[0])
+        for o, o_n in zip(out, out_names):
+            if o_n in inter_input_nodes:
+                int_in_data[o_n] = o
+
+        out_data = {}
+        for o, o_n in zip(out, out_names):
+            if o_n in output_nodes:
+                out_data[o_n] = o
+
+        for i, n_in in enumerate(inter_input_nodes):
+            data = int_in_data[n_in]
+            print(f"Generating input_{i} data for {n_in} with shape {data.shape}")
+            if len(data.shape) == 5:
+                data.transpose(0, 3, 4, 2, 1)
+            if file_format == "bin":
+                data.tofile(store_path + f"/input_{i+1}.bin")
+            elif file_format == "txt":
+                np.savetxt(store_path + f"/input_{i+1}.txt", data.flatten(), fmt="%.8f")
+            else:
+                raise Exception("Format not supported")
+        for i, n_out in enumerate(output_nodes):
+            data = out_data[n_out]
+            print(f"Generating output_{i} data for {n_out} with shape {data.shape}")
+            if len(data.shape) == 5:
+                data.transpose(0, 3, 4, 2, 1)
+            if file_format == "bin":
+                data.tofile(store_path + f"/output_{i+1}.bin")
+            elif file_format == "txt":
+                np.savetxt(store_path + f"/output_{i+1}.txt", data.flatten(), fmt="%.8f")
+            else:
+                raise Exception("Format not supported")
+
+        for layer, config in partition_structure['layers'].items():
+            if config['type'] in ["Conv", "Gemm", "BatchNormalization"]:
+                weights, biases = onnx_parser.get_node_weight_bias(layer)
+                transform_store_weights_onnx(weights, layer, layers_config, store_path, file_format)
+                if biases is not None:
+                    transform_store_biases_onnx(biases, layer, layers_config, store_path, file_format)
 
     return
     inputs = []
