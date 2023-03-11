@@ -132,6 +132,8 @@ def optimizer() -> None:
             batch_size=config.batch_size,
             num_reconfig_points=config.num_reconfig_points,
             allowed_reconfig_layers=config.allowed_reconfig_layers,
+            min_partition_layers=config.min_partition_layers,
+            max_partition_layers=config.max_partition_layers,
             config=config,
             enable_wandb=args.enable_wandb,
         )

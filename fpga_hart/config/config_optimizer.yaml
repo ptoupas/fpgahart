@@ -17,3 +17,5 @@ height_dist_thresh: 60
 batch_size: 1
 num_reconfig_points: 10
 allowed_reconfig_layers: ['Conv', 'GlobalAveragePool', 'Mul', 'Add', 'Gemm']
+min_partition_layers: 5
+max_partition_layers: 40
