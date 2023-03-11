@@ -14,3 +14,6 @@ use_previous_config: True
 chan_dist_thresh: 60
 depth_dist_thresh: 30
 height_dist_thresh: 60
+batch_size: 1
+num_reconfig_points: 10
+allowed_reconfig_layers: ['Conv', 'GlobalAveragePool', 'Mul', 'Add', 'Gemm']

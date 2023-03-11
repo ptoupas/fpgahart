@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import re
 from copy import deepcopy
 from ctypes import c_int
 from functools import reduce
@@ -33,6 +34,10 @@ from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
+
+# helper function to perform sort
+def num_sort(test_string):
+    return list(map(int, re.findall(r'\d+', test_string)))[0]
 
 def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
     """

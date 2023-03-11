@@ -21,16 +21,8 @@ class ModelLayerDescriptor(OnnxModelParser):
         if self.se_block:
             se_module = deque(maxlen=6)
         swish_module = deque(maxlen=2)
-        prev_output_id = -1
 
         for k in self.torch_layers.keys():
-
-            # curr_output_id = int(self.torch_layers[k]["output_id"])
-            # if not prev_output_id == -1:
-            #     assert (
-            #         curr_output_id >= prev_output_id + 1
-            #     ), "Modules are not in the correct order. Revise the graph creation"
-            # prev_output_id = curr_output_id
 
             name = k
             if "Flatten" in name:
