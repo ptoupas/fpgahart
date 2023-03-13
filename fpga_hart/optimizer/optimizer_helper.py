@@ -5,12 +5,12 @@ import networkx as nx
 import numpy as np
 
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.utils import utils
 
@@ -30,12 +30,12 @@ def get_minimum_resource_utilization(hw_layer):
         fine_min = 1 / np.prod(np.array(hw_layer.kernel_shape))
         dsp_util, bram_util = hw_layer.get_resource_util(f_fine = fine_min,
                                         f_coarse_inout = coarseinout_min)
-    elif isinstance(hw_layer, ActivationLayer):
+    elif isinstance(hw_layer, Activation3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
         dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [hw_layer.op_type])
-    elif isinstance(hw_layer, ElementWiseLayer):
+    elif isinstance(hw_layer, ElementWise3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels_1)
         dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
@@ -46,7 +46,7 @@ def get_minimum_resource_utilization(hw_layer):
         coarseout_min = 1 / np.int32(hw_layer.dim_out)
         dsp_util, bram_util = hw_layer.get_resource_util(f_coarseIn = coarsein_min,
                                                          f_coarseOut= coarseout_min)
-    elif isinstance(hw_layer, GAPLayer):
+    elif isinstance(hw_layer, GAP3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
         dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
@@ -84,7 +84,7 @@ def update_nodes_shapes(graph, wr_f, old_filters, old_layer):
             new_shape_out = deepcopy(hw.output_shape)
             new_shape_out[1] = new_filters
             assert (new_filters*wr_f + old_filters%wr_f) == old_filters, f"All nodes in a graph with weights reloading should have the same number of filters. {new_filters*wr_f} + {old_filters%wr_f} != {old_filters} on layer {layer}"
-            if isinstance(hw, ElementWiseLayer):
+            if isinstance(hw, ElementWise3DLayer):
                 new_shape_in_1 = deepcopy(hw.input_shape_1)
                 new_shape_in_1[1] = new_shape_out[1]
                 new_shape_in_2 = deepcopy(hw.input_shape_2)

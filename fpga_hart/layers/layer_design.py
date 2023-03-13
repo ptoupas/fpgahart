@@ -8,12 +8,12 @@ import numpy as np
 from dotmap import DotMap
 
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
@@ -554,7 +554,7 @@ def gap_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    gap = GAPLayer(config.max_dsp_util, config.max_bram_util, description)
+    gap = GAP3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     # coarse_inout = utils.get_factors(gap.channels) / np.int32(gap.channels)
 
@@ -689,7 +689,7 @@ def activation_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    activ = ActivationLayer(config.max_dsp_util, config.max_bram_util, description)
+    activ = Activation3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     # coarse_inout = utils.get_factors(activ.channels) / np.int32(activ.channels)
 
@@ -829,7 +829,7 @@ def se_design_points(
     # layers_in_shape = []
     # layers_out_shape = []
     # for layers in se.sequencial.values():
-    #     if isinstance(layers, ElementWiseLayer):
+    #     if isinstance(layers, ElementWise3DLayer):
     #         layers_in_shape.append(layers.input_shape_1)
     #     else:
     #         layers_in_shape.append(layers.input_shape)
@@ -1015,7 +1015,7 @@ def elemwise_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    elem = ElementWiseLayer(config.max_dsp_util, config.max_bram_util, description)
+    elem = ElementWise3DLayer(config.max_dsp_util, config.max_bram_util, description)
 
     # coarse_inout = utils.get_factors(elem.channels_1) / np.int32(elem.channels_1)
 

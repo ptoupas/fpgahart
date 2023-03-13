@@ -14,12 +14,12 @@ import seaborn as sns
 
 import wandb
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.parser.partition_descriptor import \
@@ -192,7 +192,7 @@ class PartitionParser(PartitionDescriptor):
             # if not 'Gemm_401' in partition:
             #     self.reduce_node_shapes(layer, channels_reduction_rate=4, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1)
             if self.layers[layer]["operation"] == "GlobalAveragePool":
-                hw_layer = GAPLayer(
+                hw_layer = GAP3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
@@ -217,7 +217,7 @@ class PartitionParser(PartitionDescriptor):
                 or self.layers[layer]["operation"] == "Sigmoid"
                 or self.layers[layer]["operation"] == "Swish"
             ):
-                hw_layer = ActivationLayer(
+                hw_layer = Activation3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
@@ -227,7 +227,7 @@ class PartitionParser(PartitionDescriptor):
                 self.layers[layer]["operation"] == "Mul"
                 or self.layers[layer]["operation"] == "Add"
             ):
-                hw_layer = ElementWiseLayer(
+                hw_layer = ElementWise3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],

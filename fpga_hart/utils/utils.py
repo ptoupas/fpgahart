@@ -19,12 +19,12 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
 
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
@@ -596,7 +596,7 @@ def generate_supportive_layer_config(layers, layers_config):
 def generate_layer_config(layer, config, wr_factor=1):
 
     layer_config = {}
-    if isinstance(layer, GAPLayer):
+    if isinstance(layer, GAP3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
         coarse_factor = math.ceil(config[0] * layer.channels)
@@ -686,7 +686,7 @@ def generate_layer_config(layer, config, wr_factor=1):
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_factor"] = coarse_factor
         layer_config["wr_factor"] = wr_factor
-    elif isinstance(layer, ActivationLayer):
+    elif isinstance(layer, Activation3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
         coarse_factor = math.ceil(config[0] * layer.channels)
@@ -703,7 +703,7 @@ def generate_layer_config(layer, config, wr_factor=1):
         layer_config["coarse_factor"] = coarse_factor
         layer_config["op_type"] = layer.op_type
         layer_config["wr_factor"] = wr_factor
-    elif isinstance(layer, ElementWiseLayer):
+    elif isinstance(layer, ElementWise3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.input_shape
         broadcasting = 1 if layer.broadcasting else 0
@@ -850,13 +850,13 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
         layer_config = generate_layer_config(layer_hw, result_dict["config"], wr_factor=result_dict["wr_factor"])
     elif isinstance(layer_hw, Pooling3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, GAPLayer):
+    elif isinstance(layer_hw, GAP3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     elif isinstance(layer_hw, FCLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, ElementWiseLayer):
+    elif isinstance(layer_hw, ElementWise3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, ActivationLayer):
+    elif isinstance(layer_hw, Activation3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     else:
         raise ValueError("Layer type {} not supported".format(layer_type))
@@ -908,19 +908,19 @@ def check_configuration_validation(config, layers):
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][0])
             input_streams.append(streams_in)
-        elif isinstance(layer["layer"], GAPLayer):
+        elif isinstance(layer["layer"], GAP3DLayer):
             streams_in, streams_out = layer["layer"].get_num_streams()
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][1])
             input_streams.append(streams_in)
-        elif isinstance(layer["layer"], ActivationLayer):
+        elif isinstance(layer["layer"], Activation3DLayer):
             streams_in, streams_out = layer["layer"].get_num_streams()
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][0])
             input_streams.append(streams_in)
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
             print("config for layer (not supported) {} -> {}".format(layer, config))
-        elif isinstance(layer["layer"], ElementWiseLayer):
+        elif isinstance(layer["layer"], ElementWise3DLayer):
             streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
             streams_in1 = math.ceil(streams_in1 * config[i][0])
             streams_in2 = math.ceil(streams_in2 * config[i][1])

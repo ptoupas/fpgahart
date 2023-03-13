@@ -9,7 +9,7 @@ import numpy as np
 from fpga_hart import _logger
 
 
-class BaseLayer:
+class BaseLayer3D:
     def __init__(self, max_DSP_util=95.0, max_BRAM_util=95.0, data_format="NHWDC"):
         assert (
             data_format == "NHWDC" or data_format == "NCHWD"

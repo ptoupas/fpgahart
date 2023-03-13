@@ -2,11 +2,11 @@ import math
 
 import numpy as np
 
-from fpga_hart.layers.activation import ActivationLayer
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -14,7 +14,7 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class SqueezeExcitationLayer(BaseLayer):
+class SqueezeExcitationLayer(BaseLayer3D):
     def __init__(self, max_DSP_util, max_BRAM_util, description):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 
@@ -27,17 +27,17 @@ class SqueezeExcitationLayer(BaseLayer):
         self.sequencial = {}
         for n_se, l_se in description["primitive_ops"].items():
             if l_se["operation"] == "GlobalAveragePool":
-                self.sequencial[n_se] = GAPLayer(max_DSP_util, max_BRAM_util, l_se)
+                self.sequencial[n_se] = GAP3DLayer(max_DSP_util, max_BRAM_util, l_se)
             elif l_se["operation"] == "Conv":
                 self.sequencial[n_se] = Convolutional3DLayer(
                     max_DSP_util, max_BRAM_util, l_se
                 )
             elif l_se["operation"] == "Relu" or l_se["operation"] == "Sigmoid":
-                self.sequencial[n_se] = ActivationLayer(
+                self.sequencial[n_se] = Activation3DLayer(
                     max_DSP_util, max_BRAM_util, l_se
                 )
             elif l_se["operation"] == "Mul":
-                self.sequencial[n_se] = ElementWiseLayer(
+                self.sequencial[n_se] = ElementWise3DLayer(
                     max_DSP_util, max_BRAM_util, l_se
                 )
         self.num_layers = len(self.sequencial) + 2
@@ -153,7 +153,7 @@ class SqueezeExcitationLayer(BaseLayer):
             else:
                 curr_layer_rate = 10000000
 
-            if isinstance(l, GAPLayer):
+            if isinstance(l, GAP3DLayer):
                 dp_info = l.get_design_point(
                     f_gap_coarsein, f_gap_coarseout, prev_layer_rate, curr_layer_rate
                 )
@@ -175,7 +175,7 @@ class SqueezeExcitationLayer(BaseLayer):
                         prev_layer_rate,
                         curr_layer_rate,
                     )
-            elif isinstance(l, ActivationLayer):
+            elif isinstance(l, Activation3DLayer):
                 if l.op_type == "Relu":
                     dp_info = l.get_design_point(
                         f_relu_cinout, prev_layer_rate, curr_layer_rate
@@ -184,7 +184,7 @@ class SqueezeExcitationLayer(BaseLayer):
                     dp_info = l.get_design_point(
                         f_sigm_cinout, prev_layer_rate, curr_layer_rate
                     )
-            elif isinstance(l, ElementWiseLayer):
+            elif isinstance(l, ElementWise3DLayer):
                 dp_info = l.get_design_point(
                     f_mul_coarsein1,
                     f_mul_coarsein2,
@@ -194,7 +194,7 @@ class SqueezeExcitationLayer(BaseLayer):
                     curr_layer_rate,
                 )
 
-            if isinstance(l, ElementWiseLayer):
+            if isinstance(l, ElementWise3DLayer):
                 (
                     full_rate_in_1,
                     full_rate_in_2,
@@ -384,7 +384,7 @@ class SqueezeExcitationLayer(BaseLayer):
                     np.array(self.sequencial[l].output_shape[1:])
                 )
 
-            if isinstance(self.sequencial[l], ElementWiseLayer):
+            if isinstance(self.sequencial[l], ElementWise3DLayer):
                 # workload_matrix[0, n+1] = np.prod(np.array(self.sequencial[l].input_shape_1[1:]))
                 workload_matrix[n, n + 1] = np.prod(
                     np.array(self.sequencial[l].input_shape_2[1:])

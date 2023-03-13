@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 
 import wandb
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.utils import utils
 
@@ -16,7 +16,7 @@ def has_gap(graph: nx.DiGraph) -> bool:
     result = False
     for node in graph.nodes:
         hw = graph.nodes[node]["hw"]
-        if isinstance(hw, GAPLayer):
+        if isinstance(hw, GAP3DLayer):
             result = True
             break
     return result

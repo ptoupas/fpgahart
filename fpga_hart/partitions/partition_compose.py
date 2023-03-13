@@ -4,13 +4,13 @@ from collections import deque
 import networkx as nx
 import numpy as np
 
-from fpga_hart.layers.activation import ActivationLayer
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils import graph_manipulation, utils
@@ -22,7 +22,7 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class PartitionComposer(BaseLayer):
+class PartitionComposer(BaseLayer3D):
     def __init__(self, max_DSP_util, max_BRAM_util):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
         self.preliminary_branch_depth = {}
@@ -311,7 +311,7 @@ class PartitionComposer(BaseLayer):
                     f"Node: {node} has more than 2 predecessors. This kind of connection is not yet supported."
                 )
 
-            if isinstance(hw, GAPLayer):
+            if isinstance(hw, GAP3DLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
@@ -339,7 +339,7 @@ class PartitionComposer(BaseLayer):
                     ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
-            elif isinstance(hw, ActivationLayer):
+            elif isinstance(hw, Activation3DLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
@@ -347,7 +347,7 @@ class PartitionComposer(BaseLayer):
                     ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
-            elif isinstance(hw, ElementWiseLayer):
+            elif isinstance(hw, ElementWise3DLayer):
                 if hw.broadcasting:
                     prev_nodes = [pn for pn in graph.predecessors(node)]
                     prev_nodes_out_shapes = [
@@ -408,7 +408,7 @@ class PartitionComposer(BaseLayer):
             else:
                 assert False, "Not supported layer"
 
-            if isinstance(hw, ElementWiseLayer):
+            if isinstance(hw, ElementWise3DLayer):
                 if not dp_info["config"]:
                     self.update_layer()
                     if DEBUG:
@@ -710,7 +710,7 @@ class PartitionComposer(BaseLayer):
                 workload_matrix[pn, n] = np.prod(np.array(hw.input_shape[1:]))
                 continue
 
-            if isinstance(hw, ElementWiseLayer):
+            if isinstance(hw, ElementWise3DLayer):
                 cp1 = graph_idx[list(graph.in_edges(node))[0][0]]
                 cp2 = graph_idx[list(graph.in_edges(node))[1][0]]
                 workload_matrix[cp1, n] = np.prod(np.array(hw.input_shape_1[1:]))

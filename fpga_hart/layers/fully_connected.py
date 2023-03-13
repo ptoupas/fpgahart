@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -11,7 +11,7 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class FCLayer(BaseLayer):
+class FCLayer(BaseLayer3D):
     def __init__(self, max_DSP_util, max_BRAM_util, description):
         super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
 

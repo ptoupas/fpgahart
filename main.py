@@ -134,6 +134,7 @@ def optimizer() -> None:
             allowed_reconfig_layers=config.allowed_reconfig_layers,
             min_partition_layers=config.min_partition_layers,
             max_partition_layers=config.max_partition_layers,
+            gap_approx=args.gap_approx,
             config=config,
             enable_wandb=args.enable_wandb,
         )
