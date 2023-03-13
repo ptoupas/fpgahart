@@ -2,6 +2,7 @@ import os
 import random
 from copy import deepcopy
 from dataclasses import dataclass
+import configparser
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -11,18 +12,21 @@ import seaborn as sns
 
 import wandb
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.parser.model_descriptor import \
     ModelLayerDescriptor
 from fpga_hart.utils.graph_manipulation import visualize_graph
-from fpga_hart.utils.utils import get_conv_type, get_pool_type, num_sort
-
+from fpga_hart.utils.utils import get_conv_type, get_pool_type, num_sort, get_worst_case_buffering
+from fpga_hart.partitions.partition_compose import PartitionComposer
+from fpga_hart.optimizer.optimizer_helper import get_minimum_resource_utilization, get_extra_mem_connections
+from fpga_hart.utils.graph_manipulation import add_off_chip_connections
+                                                
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
@@ -38,12 +42,37 @@ class NetworkParser(ModelLayerDescriptor):
     allowed_reconfig_layers: list
     min_partition_layers: int
     max_partition_layers: int
+    gap_approx: bool
     config: wandb.Config
     enable_wandb: bool
 
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
+        
+        self.get_fpga_config()
+
+        self.partition_composer = PartitionComposer(
+            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util
+        )
+
+    def get_fpga_config(self):
+        config = configparser.ConfigParser()
+        config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
+
+        self.word_length = int(config.get("FPGA Specifications", "word_length"))
+        self.word_bytes = self.word_length / 8
+        self.clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
+        self.cycles_per_sec = self.clock_freq * 1e6
+        self.bram = int(config.get("FPGA Specifications", "bram"))
+        self.bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
+        self.dsp = int(config.get("FPGA Specifications", "dsp"))
+        self.mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
+        self.mem_bandwidth = self.mem_bw * 1e9
+        self.mem_words_per_cycle = (
+            self.mem_bandwidth / self.word_length
+        ) / self.cycles_per_sec
+        self.fpga_device = config.get("FPGA Specifications", "fpga_device")
 
     def get_reconfig_points(self):
         available_reconfig_points = [layer for layer in self.layers if self.layers[layer]['operation'] in self.allowed_reconfig_layers]
@@ -103,14 +132,29 @@ class NetworkParser(ModelLayerDescriptor):
             graph_partition = self.create_graph(partition)
             name = "partition_{}".format(i)
 
-            if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/model_graphs/"):
-                os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/model_graphs/")
+            # mem_in, mem_out = [], []
+            # read_points, write_points = add_off_chip_connections(
+            #     graph_partition, mem_in, mem_out, gap_approx=self.gap_approx
+            # )
+            if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
+                os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
             visualize_graph(
                 graph_partition,
-                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/model_graphs/" + name,
+                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + name,
                 self.enable_wandb,
                 name,
             )
+            _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.mem_words_per_cycle, self.word_bytes, self.bram_Kbytes, self.bram, self.gap_approx)
+            print(f"Buffering BRAM utilization: {min_bram_util}")
+            
+            layers_bram_util = 0
+            for layer in nx.topological_sort(graph_partition):
+                bram_util, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"])
+                layers_bram_util += bram_util
+            print(f"Layers BRAM utilization: {layers_bram_util}")
+
+            print(f"Total BRAM utilization: {min_bram_util + layers_bram_util}")
+
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
         # TODO: When spliting we should also check and add the extra inputs that may be needed because of either spliting on branches or because of the ElementWise layers.
@@ -121,7 +165,7 @@ class NetworkParser(ModelLayerDescriptor):
         for layer in partition:
             _logger.info("Adding {} layer to graph...".format(layer))
             if self.layers[layer]["operation"] == "GlobalAveragePool":
-                hw_layer = GAPLayer(
+                hw_layer = GAP3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
@@ -146,7 +190,7 @@ class NetworkParser(ModelLayerDescriptor):
                 or self.layers[layer]["operation"] == "Sigmoid"
                 or self.layers[layer]["operation"] == "Swish"
             ):
-                hw_layer = ActivationLayer(
+                hw_layer = Activation3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
@@ -156,7 +200,7 @@ class NetworkParser(ModelLayerDescriptor):
                 self.layers[layer]["operation"] == "Mul"
                 or self.layers[layer]["operation"] == "Add"
             ):
-                hw_layer = ElementWiseLayer(
+                hw_layer = ElementWise3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
