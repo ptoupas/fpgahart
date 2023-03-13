@@ -14,7 +14,7 @@ import torch
 from fpbinary import FpBinary
 from torch import nn
 
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.parser.onnx_parser import OnnxModelParser
 from fpga_hart.utils.utils import get_branch_start_end_points
 
 random.seed(0)

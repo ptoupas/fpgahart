@@ -18,7 +18,7 @@ from fpga_hart.layers.elemwise import ElementWiseLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap import GAPLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
-from fpga_hart.network_representation.model_descriptor import \
+from fpga_hart.parser.model_descriptor import \
     ModelLayerDescriptor
 from fpga_hart.utils.graph_manipulation import visualize_graph
 from fpga_hart.utils.utils import get_conv_type, get_pool_type, num_sort
@@ -32,7 +32,7 @@ def multithreaded_modeling(operation, input, pool):
 
 
 @dataclass
-class ModelParser(ModelLayerDescriptor):
+class NetworkParser(ModelLayerDescriptor):
     batch_size: int
     num_reconfig_points: int
     allowed_reconfig_layers: list

@@ -14,7 +14,7 @@ from dotmap import DotMap
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_parser import LayerParser
-from fpga_hart.model.model_parser import ModelParser
+from fpga_hart.network.network_parser import NetworkParser
 from fpga_hart.partitions.partition_parser import PartitionParser
 
 sns.set(rc={"figure.figsize": (15, 8)})
@@ -34,7 +34,7 @@ def parse_args():
     )
     parser.add_argument(
         "type",
-        choices=["model", "partition", "layer"],
+        choices=["network", "partition", "layer"],
         type=str,
         help="type of processing to be performed",
     )
@@ -125,8 +125,8 @@ def optimizer() -> None:
     else:
         config = DotMap(config_dictionary)
 
-    if args.type == "model":
-        model_parser = ModelParser(
+    if args.type == "network":
+        network_parser = NetworkParser(
             model_name=args.model_name,
             se_block=args.se_block,
             batch_size=config.batch_size,
@@ -139,7 +139,7 @@ def optimizer() -> None:
         )
 
         if args.target == "throughput":
-            model_parser.parse()
+            network_parser.parse()
         elif args.target == "latency":
             pass
     elif args.type == "partition":

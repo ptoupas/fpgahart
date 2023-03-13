@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from fpga_hart import _logger
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.parser.onnx_parser import OnnxModelParser
 
 
 @dataclass

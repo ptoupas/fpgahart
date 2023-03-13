@@ -20,7 +20,7 @@ from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
 
 from fpga_hart.backend.python_prototyping.generate_data import partition_3d
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.parser.onnx_parser import OnnxModelParser
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 

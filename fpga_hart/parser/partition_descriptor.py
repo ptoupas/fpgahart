@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.network_representation.model_descriptor import \
+from fpga_hart.parser.model_descriptor import \
     ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
