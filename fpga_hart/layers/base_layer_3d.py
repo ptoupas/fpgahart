@@ -433,10 +433,10 @@ class BaseLayer3D:
 
         assert abs(matrix[0, branch_node]) == abs(
             matrix[branch_node - 1, branch_node]
-        ), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
+        ), "Problem with the graph balancing"
         assert abs(matrix[0, branch_node]) == abs(
             matrix[branch_node, branch_node]
-        ), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
+        ), "Problem with the graph balancing"
 
         return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
 
