@@ -1,5 +1,4 @@
 import configparser
-import csv
 import json
 import os
 import time
@@ -22,8 +21,8 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.parser.partition_descriptor import \
-    PartitionDescriptor
+from fpga_hart.parser.model_descriptor import \
+    ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
@@ -37,15 +36,18 @@ def multithreaded_modeling(operation, input, pool):
 
 
 @dataclass
-class PartitionParser(PartitionDescriptor):
+class PartitionParser(ModelLayerDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
     config: wandb.Config
     enable_wandb: bool
 
+    from fpga_hart.partitions.partition_descriptor import create_partitions
+
     def __post_init__(self) -> None:
-        PartitionDescriptor.__post_init__(self)  # Initialize the parent class
+        ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
+        self.partitions = self.create_partitions(self.layers)
         # _logger.setLevel(level=logging.DEBUG)
 
         columns = [
