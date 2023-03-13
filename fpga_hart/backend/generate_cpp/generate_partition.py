@@ -141,20 +141,6 @@ def identify_streams_mismatches(layers_config, connections):
             squeeze_layers.append([in_node, out_node])
     return squeeze_layers
 
-def get_fpga_specs() -> Tuple[str, int, int, int, float]:
-    config = configparser.ConfigParser()
-    config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-    word_length = int(config.get("FPGA Specifications", "word_length"))
-    clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
-    bram = int(config.get("FPGA Specifications", "bram"))
-    bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
-    dsp = int(config.get("FPGA Specifications", "dsp"))
-    mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
-    fpga_device = config.get("FPGA Specifications", "fpga_device")
-
-    return fpga_device, clock_freq, dsp, bram, mem_bw
-
 if __name__ == "__main__":
     args = parse_args()
 

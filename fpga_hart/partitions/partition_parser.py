@@ -21,9 +21,9 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.parser.model_descriptor import \
-    ModelLayerDescriptor
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
+from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 
@@ -47,8 +47,10 @@ class PartitionParser(ModelLayerDescriptor):
 
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
-        self.partitions = self.create_partitions(self.layers)
         # _logger.setLevel(level=logging.DEBUG)
+
+        self.partitions = self.create_partitions(self.layers)
+        self.platform = Platform()
 
         columns = [
             "Partition Name",
@@ -94,18 +96,6 @@ class PartitionParser(ModelLayerDescriptor):
             self.layer_model_file_par = os.path.join(
                 os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_pareto.json"
             )
-
-        self.get_fpga_specs()
-
-    def get_fpga_specs(self):
-        specs = configparser.ConfigParser()
-        specs.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-        self.clock_frequency = int(specs.get("FPGA Specifications", "clock_freq"))
-        self.total_dsp = int(specs.get("FPGA Specifications", "dsp"))
-        self.reconfiguration_time = float(
-            specs.get("FPGA Specifications", "reconfiguration_time")
-        )
 
     def is_partition_input(self, partition, node_ids):
         if len(node_ids) > 1:
@@ -500,7 +490,7 @@ class PartitionParser(ModelLayerDescriptor):
                 os.makedirs(log_results_path)
 
         batch_size = np.arange(1, 500, 1)
-        lat_sec = ((self.model_avg_metrics["latency(C) Sum"] - self.model_avg_metrics["depth Sum"]) * batch_size + self.model_avg_metrics["depth Sum"]) / (self.clock_frequency * 1e6) + (self.reconfiguration_time * num_dev_reconfig)
+        lat_sec = ((self.model_avg_metrics["latency(C) Sum"] - self.model_avg_metrics["depth Sum"]) * batch_size + self.model_avg_metrics["depth Sum"]) / (self.platform.clock_freq * 1e6) + (self.platform.reconfiguration_time * num_dev_reconfig)
         plt.plot(batch_size, lat_sec)
         plt.xlabel("Batch Size")
         plt.ylabel("Seconds")
@@ -531,7 +521,7 @@ class PartitionParser(ModelLayerDescriptor):
             wandb.log({"Throughput (Volumes/s) vs Batch Size": plt})
         else:
             plt.savefig(os.path.join(log_results_path, "throughput_vols_vs_batch_size.png"))
-        gops_sec_dsp = through_gops_sec / self.total_dsp
+        gops_sec_dsp = through_gops_sec / self.platform.dsp
         plt.cla()
         plt.clf()
         plt.plot(batch_size, gops_sec_dsp)
@@ -542,7 +532,7 @@ class PartitionParser(ModelLayerDescriptor):
             wandb.log({"Throughput (GOPs/s/DSP) vs Batch Size": plt})
         else:
             plt.savefig(os.path.join(log_results_path, "throughput_gops_dsp_vs_batch_size.png"))
-        gops_sec_dsp_cycle = (gops_sec_dsp / self.clock_frequency) * 1e3
+        gops_sec_dsp_cycle = (gops_sec_dsp / self.platform.clock_freq) * 1e3
         plt.cla()
         plt.clf()
         plt.plot(batch_size, gops_sec_dsp_cycle)

@@ -16,6 +16,7 @@ from fpga_hart import _logger
 from fpga_hart.layers.layer_parser import LayerParser
 from fpga_hart.network.network_parser import NetworkParser
 from fpga_hart.partitions.partition_parser import PartitionParser
+from fpga_hart.platform.platform import Platform
 
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
@@ -81,44 +82,30 @@ def parse_args():
     )
     return parser.parse_args()
 
-
-def get_fpga_specs() -> Tuple[str, int, int, int, float]:
-    config = configparser.ConfigParser()
-    config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-    word_length = int(config.get("FPGA Specifications", "word_length"))
-    clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
-    bram = int(config.get("FPGA Specifications", "bram"))
-    bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
-    dsp = int(config.get("FPGA Specifications", "dsp"))
-    mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
-    fpga_device = config.get("FPGA Specifications", "fpga_device")
-
-    return fpga_device, clock_freq, dsp, bram, mem_bw
-
 def optimizer() -> None:
     args = parse_args()
+
+    platform = Platform()
 
     project_name = f"fpga-hart-{args.model_name}-{args.type}-{args.target}"
 
     with open("fpga_hart/config/config_optimizer.yaml", "r") as yaml_file:
         config_dictionary = yaml.load(yaml_file, Loader=yaml.FullLoader)
-        fpga_device, clock_freq, dsp, bram, mem_bw = get_fpga_specs()
-        config_dictionary['device'] = fpga_device
-        config_dictionary['clock_frequency'] = clock_freq
-        config_dictionary['total_dsps'] = dsp
-        config_dictionary['total_brams'] = bram
-        config_dictionary['total_mem_bw'] = mem_bw
+        config_dictionary['device'] = platform.fpga_device
+        config_dictionary['clock_frequency'] = platform.clock_freq
+        config_dictionary['total_dsps'] = platform.dsp
+        config_dictionary['total_brams'] = platform.bram
+        config_dictionary['total_mem_bw'] = platform.mem_bw
 
     if args.enable_wandb:
         if args.sweep:
             wandb.init()
             config = wandb.config
-            config.update({'device': fpga_device})
-            config.update({'clock_frequency': clock_freq})
-            config.update({'total_dsps': dsp})
-            config.update({'total_brams': bram})
-            config.update({'total_mem_bw': mem_bw})
+            config.update({'device': platform.fpga_device})
+            config.update({'clock_frequency': platform.clock_freq})
+            config.update({'total_dsps': platform.dsp})
+            config.update({'total_brams': platform.bram})
+            config.update({'total_mem_bw': platform.mem_bw})
         else:
             wandb.init(config=config_dictionary, project=project_name)
             config = wandb.config

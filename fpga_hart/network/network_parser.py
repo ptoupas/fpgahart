@@ -2,12 +2,8 @@ import os
 import random
 from copy import deepcopy
 from dataclasses import dataclass
-import configparser
 
-import matplotlib.pyplot as plt
 import networkx as nx
-import numpy as np
-import pandas as pd
 import seaborn as sns
 
 import wandb
@@ -19,14 +15,16 @@ from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
-from fpga_hart.parser.model_descriptor import \
-    ModelLayerDescriptor
-from fpga_hart.utils.graph_manipulation import visualize_graph
-from fpga_hart.utils.utils import get_conv_type, get_pool_type, num_sort, get_worst_case_buffering
+from fpga_hart.optimizer.optimizer_helper import (
+    get_extra_mem_connections, get_minimum_resource_utilization)
+from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
 from fpga_hart.partitions.partition_compose import PartitionComposer
-from fpga_hart.optimizer.optimizer_helper import get_minimum_resource_utilization, get_extra_mem_connections
-from fpga_hart.utils.graph_manipulation import add_off_chip_connections
-                                                
+from fpga_hart.platform.platform import Platform
+from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
+                                                visualize_graph)
+from fpga_hart.utils.utils import (get_conv_type, get_pool_type,
+                                   get_worst_case_buffering, num_sort)
+
 sns.set(rc={"figure.figsize": (15, 8)})
 sns.set_style("whitegrid")
 
@@ -49,30 +47,12 @@ class NetworkParser(ModelLayerDescriptor):
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
-        
-        self.get_fpga_config()
+
+        self.platform = Platform()
 
         self.partition_composer = PartitionComposer(
             max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util
         )
-
-    def get_fpga_config(self):
-        config = configparser.ConfigParser()
-        config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-        self.word_length = int(config.get("FPGA Specifications", "word_length"))
-        self.word_bytes = self.word_length / 8
-        self.clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
-        self.cycles_per_sec = self.clock_freq * 1e6
-        self.bram = int(config.get("FPGA Specifications", "bram"))
-        self.bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
-        self.dsp = int(config.get("FPGA Specifications", "dsp"))
-        self.mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
-        self.mem_bandwidth = self.mem_bw * 1e9
-        self.mem_words_per_cycle = (
-            self.mem_bandwidth / self.word_length
-        ) / self.cycles_per_sec
-        self.fpga_device = config.get("FPGA Specifications", "fpga_device")
 
     def get_reconfig_points(self):
         available_reconfig_points = [layer for layer in self.layers if self.layers[layer]['operation'] in self.allowed_reconfig_layers]
@@ -144,9 +124,9 @@ class NetworkParser(ModelLayerDescriptor):
                 self.enable_wandb,
                 name,
             )
-            _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.mem_words_per_cycle, self.word_bytes, self.bram_Kbytes, self.bram, self.gap_approx)
+            _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
             print(f"Buffering BRAM utilization: {min_bram_util}")
-            
+
             layers_bram_util = 0
             for layer in nx.topological_sort(graph_partition):
                 bram_util, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"])
