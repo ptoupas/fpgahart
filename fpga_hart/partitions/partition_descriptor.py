@@ -9,6 +9,7 @@ from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 
+
 def create_partitions(self, layers: dict) -> list:
     final_layers = []
 
@@ -311,6 +312,7 @@ def latency_driven_design(
     optimizer = SimulatedAnnealing(
         graph,
         config=self.config,
+        platform=self.platform,
         cnn_model_name=self.model_name,
         enable_wandb=self.enable_wandb,
     )

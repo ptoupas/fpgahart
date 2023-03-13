@@ -300,10 +300,11 @@ class PartitionParser(ModelLayerDescriptor):
         )
 
         _logger.info("Partition: {}: ".format(name))
-        # optimizer = SimulatedAnnealing(graph, config=self.config, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx, enable_wandb=self.enable_wandb, cnn_model_name=self.model_name)
+        # optimizer = SimulatedAnnealing(graph, config=self.config, platform=self.platform, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx, enable_wandb=self.enable_wandb, cnn_model_name=self.model_name)
         optimizer = SimulatedAnnealing(
             graph,
             config=self.config,
+            platform=self.platform,
             partition_name=name,
             gap_approx=self.gap_approx,
             enable_wandb=self.enable_wandb,

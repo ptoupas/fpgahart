@@ -17,6 +17,7 @@ from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 
 
@@ -29,25 +30,27 @@ def layer_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
 ) -> None:
+    platform = Platform()
     if description["operation"] == "Conv":
         conv_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "MaxPool" or description["operation"] == "AveragePool":
         pooling_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "BatchNormalization":
         batchnorm_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "GlobalAveragePool":
         gap_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif (
         description["operation"] == "Relu"
@@ -55,19 +58,19 @@ def layer_design_points(
         or description["operation"] == "Swish"
     ):
         activation_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "SqueezeExcitation":
         se_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Add" or description["operation"] == "Mul":
         elemwise_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     elif description["operation"] == "Gemm" or description["operation"] == "MatMul":
         fc_design_points(
-            name, description, config, model_file, report_dict, singlethreaded
+            name, description, config, platform, model_file, report_dict, singlethreaded
         )
     else:
         assert False, "{} operation in layer {} is not supported".format(
@@ -92,6 +95,7 @@ def conv_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -256,7 +260,7 @@ def conv_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=conv)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -268,6 +272,7 @@ def pooling_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -403,7 +408,7 @@ def pooling_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=pool)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -415,6 +420,7 @@ def batchnorm_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -537,7 +543,7 @@ def batchnorm_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=bn)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -550,6 +556,7 @@ def gap_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -672,7 +679,7 @@ def gap_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=gap)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -685,6 +692,7 @@ def activation_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -807,7 +815,7 @@ def activation_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=activ)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -820,6 +828,7 @@ def se_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -1011,6 +1020,7 @@ def elemwise_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -1138,7 +1148,7 @@ def elemwise_design_points(
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=elem)
 
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
@@ -1150,6 +1160,7 @@ def fc_design_points(
     name: str,
     description: dict,
     config: DotMap,
+    platform: Platform,
     model_file: str,
     report_dict: dict,
     singlethreaded: bool,
@@ -1179,7 +1190,7 @@ def fc_design_points(
             name
         )
     )
-    optimizer = SimulatedAnnealing(graph, config)
+    optimizer = SimulatedAnnealing(graph, config, platform)
     res = optimizer.run_optimizer_layer(name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))

@@ -13,7 +13,6 @@ import scipy.constants as sc
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.activation_3d import Activation3DLayer
-from fpga_hart.layers.base_layer_3d import BaseLayer3D
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
@@ -31,11 +30,12 @@ from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
                                                 visualize_graph)
 
 
-class SimulatedAnnealing(BaseLayer3D):
+class SimulatedAnnealing():
     def __init__(
         self,
         graph,
         config,
+        platform,
         branch_mem=0,
         partition_name="",
         gap_approx=False,
@@ -44,6 +44,7 @@ class SimulatedAnnealing(BaseLayer3D):
     ):
         self.cnn_model_name = cnn_model_name
         self.config = config
+        self.platform = platform
         self.enable_wandb = enable_wandb
         super().__init__(
             max_DSP_util = self.config.max_dsp_util,
@@ -56,9 +57,9 @@ class SimulatedAnnealing(BaseLayer3D):
 
         self.graph = graph
 
-        mem_kb = (branch_mem * self.word_bytes) / 1e3
-        mem_bram = math.ceil(mem_kb / self.bram_Kbytes)
-        self.branch_bram_util = (mem_bram / self.bram) * 100
+        mem_kb = (branch_mem * self.platform.word_bytes) / 1e3
+        mem_bram = math.ceil(mem_kb / self.platform.bram_Kbytes)
+        self.branch_bram_util = (mem_bram / self.platform.bram) * 100
         self.branch_mem = branch_mem
 
         # Simulate Annealing Variables
@@ -108,7 +109,7 @@ class SimulatedAnnealing(BaseLayer3D):
             mem_in_2,
             mem_out_2,
         ) = split_graph(
-            self.graph, self.word_bytes, self.bram_Kbytes, self.bram, self.max_BRAM_util
+            self.graph, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.max_BRAM_util
         )
 
         nIN1 = len(mem_in_1)
@@ -154,9 +155,9 @@ class SimulatedAnnealing(BaseLayer3D):
                     mem_out_2,
                 ) = split_graph(
                     self.graph,
-                    self.word_bytes,
-                    self.bram_Kbytes,
-                    self.bram,
+                    self.platform.word_bytes,
+                    self.platform.bram_Kbytes,
+                    self.platform.bram,
                     self.max_BRAM_util,
                 )
 
@@ -224,9 +225,9 @@ class SimulatedAnnealing(BaseLayer3D):
                         mem_out_2,
                     ) = split_graph(
                         self.graph,
-                        self.word_bytes,
-                        self.bram_Kbytes,
-                        self.bram,
+                        self.platform.word_bytes,
+                        self.platform.bram_Kbytes,
+                        self.platform.bram,
                         self.max_BRAM_util,
                     )
 
@@ -363,7 +364,7 @@ class SimulatedAnnealing(BaseLayer3D):
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r")
 
         print(
-            f"\n\nLatency: {prev_cost}. volumes/s: {1/prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.mem_words_per_cycle)}."
+            f"\n\nLatency: {prev_cost}. volumes/s: {1/prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.platform.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.platform.mem_words_per_cycle)}."
         )
         print(
             "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
@@ -407,7 +408,7 @@ class SimulatedAnnealing(BaseLayer3D):
         )
         print("*" * 60)
         return (
-            self.mem_words_per_cycle,
+            self.platform.mem_words_per_cycle,
             [solution_mem_1, solution_mem_2],
             [solution_dp_1, solution_dp_2],
             0
@@ -470,7 +471,7 @@ class SimulatedAnnealing(BaseLayer3D):
         #     return self.run_optimizer_double_graph()
 
         #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
-        sub_partitions = check_partition_fitting(self.graph, self.partition_composer, 70, self.word_bytes, self.bram_Kbytes, self.bram, self.mem_words_per_cycle, [], gap_approx=self.gap_approx)
+        sub_partitions = check_partition_fitting(self.graph, self.partition_composer, 70, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.mem_words_per_cycle, [], gap_approx=self.gap_approx)
         extra_reconfigurations = len(sub_partitions) - 1
         print(f'Splitting original partition into {len(sub_partitions)} sub-partitions. A number of {extra_reconfigurations} extra reconfiguration(s) will be added.')
 
@@ -589,7 +590,7 @@ class SimulatedAnnealing(BaseLayer3D):
             wr_list.append(weights_reloading)
 
             print(
-                f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.mem_words_per_cycle)}."
+                f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.platform.mem_words_per_cycle)}."
             )
             print(
                 "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
@@ -615,7 +616,7 @@ class SimulatedAnnealing(BaseLayer3D):
                 )
             )
             print("*" * 60)
-        return self.mem_words_per_cycle, mem_bw_list, dp_info_list, extra_reconfigurations, wr_list
+        return self.platform.mem_words_per_cycle, mem_bw_list, dp_info_list, extra_reconfigurations, wr_list
 
     def get_cost(
         self,
@@ -1099,7 +1100,7 @@ class SimulatedAnnealing(BaseLayer3D):
             print(f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r")
 
         print(
-            f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.mem_words_per_cycle)}."
+            f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.platform.mem_words_per_cycle)}."
         )
         print(
             "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
