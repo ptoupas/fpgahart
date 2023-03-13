@@ -42,15 +42,11 @@ class SimulatedAnnealing():
         cnn_model_name="",
         enable_wandb=False,
     ):
+        # _logger.setLevel(level=logging.DEBUG)
         self.cnn_model_name = cnn_model_name
         self.config = config
         self.platform = platform
         self.enable_wandb = enable_wandb
-        super().__init__(
-            max_DSP_util = self.config.max_dsp_util,
-            max_BRAM_util = self.config.max_bram_util,
-        )
-        # _logger.setLevel(level=logging.DEBUG)
 
         self.gap_approx = gap_approx
         self.part_name = partition_name
@@ -81,7 +77,7 @@ class SimulatedAnnealing():
         self.freeze_param = False
 
         self.partition_composer = PartitionComposer(
-            max_DSP_util=self.max_DSP_util, max_BRAM_util=self.max_BRAM_util
+            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util
         )
 
     def validate_configs(self, graph_1_dp, graph_2_dp):
@@ -91,9 +87,9 @@ class SimulatedAnnealing():
         g_1_bram_util = graph_1_dp["BRAM"]
         g_2_bram_util = graph_2_dp["BRAM"]
 
-        if g_1_dsp_util + g_2_dsp_util >= self.max_DSP_util:
+        if g_1_dsp_util + g_2_dsp_util >= self.config.max_dsp_util:
             return False
-        if g_1_bram_util + g_2_bram_util >= self.max_BRAM_util:
+        if g_1_bram_util + g_2_bram_util >= self.config.max_bram_util:
             return False
 
         return True
@@ -158,7 +154,7 @@ class SimulatedAnnealing():
                     self.platform.word_bytes,
                     self.platform.bram_Kbytes,
                     self.platform.bram,
-                    self.max_BRAM_util,
+                    self.config.max_bram_util,
                 )
 
                 nIN1 = len(mem_in_1)
@@ -228,7 +224,7 @@ class SimulatedAnnealing():
                         self.platform.word_bytes,
                         self.platform.bram_Kbytes,
                         self.platform.bram,
-                        self.max_BRAM_util,
+                        self.config.max_bram_util,
                     )
 
                 prev_state_1 = self.fix_inconsistent_config(prev_state_1, graph_1)
@@ -467,7 +463,7 @@ class SimulatedAnnealing():
         return config, cost, dp_info, mem_bw
 
     def run_optimizer(self):
-        # if has_gap(self.graph) and self.branch_bram_util > self.max_BRAM_util:
+        # if has_gap(self.graph) and self.branch_bram_util > self.config.max_bram_util:
         #     return self.run_optimizer_double_graph()
 
         #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
@@ -1035,7 +1031,7 @@ class SimulatedAnnealing():
                                             f_coarseIn = coarsein_min,
                                             f_coarseOut= coarseout_min)
             print("Initial BRAM utilization: ", bram_util)
-            if bram_util > self.max_BRAM_util:
+            if bram_util > self.config.max_bram_util:
                 _logger.warning(f"Layer's ({layer}) minimum BRAM utilization is above the device's maximum on chip memory resources.\nSplit the layer execution into multiple instances (weights reloading).")
                 for f in utils.get_factors(initial_filters)[1:]:
                     new_out_shape = deepcopy(hw.output_shape)
@@ -1047,7 +1043,7 @@ class SimulatedAnnealing():
                     _, bram_util = hw.get_resource_util(f_fine = fine_min,
                                                     f_coarseIn = coarsein_min,
                                                     f_coarseOut= coarseout_min)
-                    if bram_util < self.max_BRAM_util:
+                    if bram_util < self.config.max_bram_util:
                         wr_factor = f
                         break
                 if wr_factor == 1:
@@ -1361,8 +1357,8 @@ class SimulatedAnnealing():
 
             dsp_util, bram_util = 100, 100
             stop_counter = 0
-            while dsp_util > (self.max_DSP_util - total_dsp) or bram_util > (
-                self.max_BRAM_util - total_bram
+            while dsp_util > (self.config.max_dsp_util - total_dsp) or bram_util > (
+                self.config.max_bram_util - total_bram
             ):
                 if self.use_arbitrary_shape:
                     shape_in, shape_out = utils.get_random_arbitrary_shape(
@@ -1400,27 +1396,27 @@ class SimulatedAnnealing():
 
                 if "Conv" in bb:
                     bb_setup[bb]["hw"] = Convolutional3DLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
                 if "Pooling" in bb:
                     bb_setup[bb]["hw"] = Pooling3DLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
                 elif bb == "Activation":
                     bb_setup[bb]["hw"] = Activation3DLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
                 elif bb == "GlobalAveragePool":
                     bb_setup[bb]["hw"] = GAP3DLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
                 elif bb == "ElementWise":
                     bb_setup[bb]["hw"] = ElementWise3DLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
                 elif bb == "Gemm":
                     bb_setup[bb]["hw"] = FCLayer(
-                        self.max_DSP_util, self.max_BRAM_util, bb_descriptor
+                        self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
                     )
 
                 if "Conv" in bb:
