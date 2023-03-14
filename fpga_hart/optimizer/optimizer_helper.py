@@ -22,35 +22,35 @@ def get_minimum_resource_utilization(hw_layer):
         coarsein_min = 1 / np.int32(hw_layer.channels)
         coarseout_min = 1 / np.int32(hw_layer.filters)
         fine_min = 1 / np.prod(np.array(hw_layer.kernel_shape))
-        dsp_util, bram_util = hw_layer.get_resource_util(f_fine = fine_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_fine = fine_min,
                                         f_coarseIn = coarsein_min,
                                         f_coarseOut= coarseout_min)
     elif isinstance(hw_layer, Pooling3DLayer):
         initial_filters = deepcopy(hw_layer.channels)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
         fine_min = 1 / np.prod(np.array(hw_layer.kernel_shape))
-        dsp_util, bram_util = hw_layer.get_resource_util(f_fine = fine_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_fine = fine_min,
                                         f_coarse_inout = coarseinout_min)
     elif isinstance(hw_layer, Activation3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
-        dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [hw_layer.op_type])
     elif isinstance(hw_layer, ElementWise3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels_1)
-        dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [hw_layer.op_type])
     elif isinstance(hw_layer, FCLayer):
         initial_filters = deepcopy(hw_layer.dim_out)
         coarsein_min = 1 / np.int32(hw_layer.dim_in)
         coarseout_min = 1 / np.int32(hw_layer.dim_out)
-        dsp_util, bram_util = hw_layer.get_resource_util(f_coarseIn = coarsein_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarseIn = coarsein_min,
                                                          f_coarseOut= coarseout_min)
     elif isinstance(hw_layer, GAP3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
-        dsp_util, bram_util = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [])
     else:
         raise ValueError(f"Layer type {type(hw_layer)} not supported.")

@@ -98,6 +98,8 @@ class FCLayer(BaseLayer3D):
         f_coarseOut: np.float64,
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+
         muls = math.ceil(
             self.dim_out * f_coarseOut
         )  # math.ceil(self.dim_in * f_coarseIn)
@@ -119,7 +121,7 @@ class FCLayer(BaseLayer3D):
             coarse_out=math.ceil(self.dim_out * f_coarseOut),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_num_streams(self):
         self.max_streams_in = self.dim_in

@@ -49,7 +49,7 @@ def run_optimizer_layer(self, layer):
         coarsein_min = 1 / np.int32(hw.channels)
         coarseout_min = 1 / np.int32(hw.filters)
         fine_min = 1 / np.prod(np.array(hw.kernel_shape))
-        _, bram_util = hw.get_resource_util(f_fine = fine_min,
+        _, bram_util, _ = hw.get_resource_util(f_fine = fine_min,
                                         f_coarseIn = coarsein_min,
                                         f_coarseOut= coarseout_min)
         print("Initial BRAM utilization: ", bram_util)
@@ -62,7 +62,7 @@ def run_optimizer_layer(self, layer):
                 coarsein_min = 1 / np.int32(hw.channels)
                 coarseout_min = 1 / np.int32(hw.filters)
                 fine_min = 1 / np.prod(np.array(hw.kernel_shape))
-                _, bram_util = hw.get_resource_util(f_fine = fine_min,
+                _, bram_util, _ = hw.get_resource_util(f_fine = fine_min,
                                                 f_coarseIn = coarsein_min,
                                                 f_coarseOut= coarseout_min)
                 if bram_util < self.config.max_bram_util:

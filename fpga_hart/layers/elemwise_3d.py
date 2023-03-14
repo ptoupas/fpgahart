@@ -157,6 +157,8 @@ class ElementWise3DLayer(BaseLayer3D):
         supported_ops: list
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+
         final_channel = self.input_shape[1]
         final_depth = self.input_shape[2]
 
@@ -200,7 +202,7 @@ class ElementWise3DLayer(BaseLayer3D):
             coarse_inout=math.ceil(final_channel * f_coarse_inout),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}

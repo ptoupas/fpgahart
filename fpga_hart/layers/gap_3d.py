@@ -74,7 +74,17 @@ class GAP3DLayer(BaseLayer3D):
         f_coarse_inout: np.float64,
         supported_ops: list
     ) -> Tuple[float, float]:
-
+        
+        if self.gap_approx:
+            pipeline_depth = 2
+        else:
+            pipeline_depth = (
+                math.ceil(1 / f_coarse_inout)
+                * self.depth_in
+                * self.rows_in
+                * self.cols_in
+            )
+        
         muls = math.ceil(self.channels * f_coarse_inout * 2)
         adds = math.ceil(self.channels * f_coarse_inout)
 
@@ -91,7 +101,7 @@ class GAP3DLayer(BaseLayer3D):
             coarse_inout=math.ceil(self.channels * f_coarse_inout),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}

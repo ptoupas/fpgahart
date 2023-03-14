@@ -91,6 +91,13 @@ class Activation3DLayer(BaseLayer3D):
         supported_ops: list
     ) -> Tuple[float, float]:
 
+        if self.op_type == "Relu":
+            pipeline_depth = 2
+        elif self.op_type == "Sigmoid":
+            pipeline_depth = 28  # 28 cycles is the delay for the execution of math for sigmoid. This value came up from some experiments on HLS.
+        elif self.op_type == "Swish":
+            pipeline_depth = 33  # 33 cycles is the delay for the execution of math for swish. This value came up from some experiments on HLS.
+
         muls_relu = 0
         adds_relu = 0
         muls_sigmoid = math.ceil(self.channels * f_coarse_inout * 3)
@@ -115,7 +122,7 @@ class Activation3DLayer(BaseLayer3D):
         bram_util = 0
         dsps_util = (muls / self.dsp) * 100
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}

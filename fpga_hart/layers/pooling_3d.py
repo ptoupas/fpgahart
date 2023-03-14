@@ -134,6 +134,22 @@ class Pooling3DLayer(BaseLayer3D):
         f_coarse_inout: np.float64,
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+        pipeline_depth += (
+            math.ceil(1 / f_coarse_inout)
+            * (self.cols_in + 2 * self.padding[2])
+            * (self.depth_in + 2 * self.padding[0])
+            * (self.kh - 1)
+            + math.ceil(1 / f_coarse_inout)
+            * (self.depth_in + 2 * self.padding[0])
+            * (self.kw - 1)
+            + math.ceil(1 / f_coarse_inout) * (self.kd - 1)
+        )
+        pipeline_depth += math.ceil(1 / f_coarse_inout) * (
+            (self.kh - 1) * self.kw * self.kd + (self.kw - 1) * self.kd + (self.kd - 1)
+        )
+        pipeline_depth += math.ceil(1 / f_fine) + 1
+
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         layer_fifos_arrays = {
@@ -191,7 +207,7 @@ class Pooling3DLayer(BaseLayer3D):
             fine=math.ceil(kernel_elems * f_fine),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_design_point(
         self,

@@ -364,7 +364,7 @@ def generate_building_blocks_config(
                 assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
                 assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
                 # TODO: Add fine factor random generation for Conv3D ops
-                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
                     f_fine=1, f_coarseIn=coarse_in, f_coarseOut=coarse_out
                 )
             elif "Pooling" in bb:
@@ -382,7 +382,7 @@ def generate_building_blocks_config(
                     )
                 assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
                 # TODO: Add fine factor random generation for Pooling3D ops
-                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
                     f_fine=1, f_coarse_inout=coarse_inout
                 )
             elif bb in ["Activation", "GlobalAveragePool", "ElementWise"]:
@@ -406,7 +406,7 @@ def generate_building_blocks_config(
                 elif bb == "GlobalAveragePool":
                     supported_ops = []
 
-                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
                     f_coarse_inout=coarse_inout, supported_ops=supported_ops
                 )
             elif bb == "Gemm":
@@ -434,7 +434,7 @@ def generate_building_blocks_config(
                     )
                 assert coarse_in > 0 and coarse_in <= 1, "Invalid coarse in."
                 assert coarse_out > 0 and coarse_out <= 1, "Invalid coarse out."
-                dsp_util, bram_util = bb_setup[bb]["hw"].get_resource_util(
+                dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
                     f_coarseIn=coarse_in, f_coarseOut=coarse_out
                 )
             stop_counter += 1
