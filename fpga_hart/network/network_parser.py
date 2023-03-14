@@ -130,7 +130,7 @@ class NetworkParser(ModelLayerDescriptor):
 
             layers_bram_util = 0
             for layer in nx.topological_sort(graph_partition):
-                bram_util, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"])
+                bram_util, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"], gap_approx=self.gap_approx)
                 layers_bram_util += bram_util
             print(f"Layers BRAM utilization: {layers_bram_util}")
 

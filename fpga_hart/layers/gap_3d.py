@@ -72,10 +72,11 @@ class GAP3DLayer(BaseLayer3D):
     def get_resource_util(
         self,
         f_coarse_inout: np.float64,
-        supported_ops: list
+        supported_ops: list,
+        gap_approx: bool, 
     ) -> Tuple[float, float]:
         
-        if self.gap_approx:
+        if gap_approx:
             pipeline_depth = 2
         else:
             pipeline_depth = (

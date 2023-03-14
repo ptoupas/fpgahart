@@ -399,16 +399,19 @@ def generate_building_blocks_config(
                         / channels_in_dim
                     )
                 assert coarse_inout > 0 and coarse_inout <= 1, "Invalid coarse factor."
-                if bb == "Activation":
-                    supported_ops = deepcopy(activations_list)
-                elif bb == "ElementWise":
-                    supported_ops = deepcopy(elementwise_list)
-                elif bb == "GlobalAveragePool":
-                    supported_ops = []
 
-                dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
-                    f_coarse_inout=coarse_inout, supported_ops=supported_ops
-                )
+                if bb == "GlobalAveragePool":
+                    dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
+                        f_coarse_inout=coarse_inout, supported_ops=[], gap_approx=self.gap_approx
+                    )
+                else:
+                    if bb == "Activation":
+                        supported_ops = deepcopy(activations_list)
+                    elif bb == "ElementWise":
+                        supported_ops = deepcopy(elementwise_list)
+                    dsp_util, bram_util, _ = bb_setup[bb]["hw"].get_resource_util(
+                        f_coarse_inout=coarse_inout, supported_ops=supported_ops
+                    )
             elif bb == "Gemm":
                 if alignedfactors:
                     coarse_in = (

@@ -16,7 +16,7 @@ from fpga_hart.utils.graph_manipulation import (get_split_points,
                                                 get_output_nodes,
                                                 add_off_chip_connections)
 
-def get_minimum_resource_utilization(hw_layer):
+def get_minimum_resource_utilization(hw_layer, gap_approx=False):
     if isinstance(hw_layer, Convolutional3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarsein_min = 1 / np.int32(hw_layer.channels)
@@ -51,7 +51,8 @@ def get_minimum_resource_utilization(hw_layer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
         dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
-                                                         supported_ops = [])
+                                                         supported_ops = [],
+                                                         gap_approx = gap_approx)
     else:
         raise ValueError(f"Layer type {type(hw_layer)} not supported.")
 
