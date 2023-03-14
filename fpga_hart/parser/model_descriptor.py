@@ -40,9 +40,12 @@ class ModelLayerDescriptor(OnnxModelParser):
             if self.model_name == "slowonly":
                 if name == "Gemm_181":
                     input_node = [self.torch_layers["GlobalAveragePool_172"]["output_id"]]
-            if self.model_name == "r2plus1d":
-                if name == "Gemm_239":
-                    input_node = [self.torch_layers["GlobalAveragePool_230"]["output_id"]]
+            if self.model_name == "r2plus1d_18":
+                if name == "Gemm_89":
+                    input_node = [self.torch_layers["GlobalAveragePool_80"]["output_id"]]
+            if self.model_name == "r2plus1d_34":
+                if name == "Gemm_161":
+                    input_node = [self.torch_layers["GlobalAveragePool_152"]["output_id"]]
             if self.model_name == "c3d":
                 if name == "Gemm_32":
                     input_node = [self.torch_layers["Relu_25"]["output_id"]]

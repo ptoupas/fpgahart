@@ -242,10 +242,13 @@ class OnnxModelParser:
                     if n.name == "Gemm_401":
                         layers_outputs[n.input[0]] = [1, 432]
                 if self.model_name == "slowonly":
-                    if n.name == "Gemm_179":
+                    if n.name == "Gemm_181":
                         layers_outputs[n.input[0]] = [1, 2048]
-                if self.model_name == "r2plus1d":
-                    if n.name == "Gemm_237":
+                if self.model_name == "r2plus1d_18":
+                    if n.name == "Gemm_89":
+                        layers_outputs[n.input[0]] = [1, 512]
+                if self.model_name == "r2plus1d_34":
+                    if n.name == "Gemm_161":
                         layers_outputs[n.input[0]] = [1, 512]
                 if self.model_name == "c3d":
                     if n.name == "Gemm_32":
