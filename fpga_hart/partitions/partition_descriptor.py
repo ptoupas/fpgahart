@@ -5,7 +5,7 @@ import networkx as nx
 from matplotlib import pyplot as plt
 
 from fpga_hart import _logger
-from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.optimizer.simulated_annealing.sa import SimulatedAnnealing
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph, get_nodes_sorted
 
@@ -316,4 +316,4 @@ def latency_driven_design(
         cnn_model_name=self.model_name,
         enable_wandb=self.enable_wandb,
     )
-    optimizer.run_optimizer_latency(alignedfactors=self.config.alignedfactors)
+    optimizer.run_solver(mode="latency", alignedfactors=self.config.alignedfactors)

@@ -16,7 +16,7 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.optimizer.simulated_annealing.sa import SimulatedAnnealing
 from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 
@@ -261,7 +261,7 @@ def conv_design_points(
     graph.add_node(name, type=description["operation"], hw=conv)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 60)
@@ -409,7 +409,7 @@ def pooling_design_points(
     graph.add_node(name, type=description["operation"], hw=pool)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 60)
@@ -544,7 +544,7 @@ def batchnorm_design_points(
     graph.add_node(name, type=description["operation"], hw=bn)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
@@ -680,7 +680,7 @@ def gap_design_points(
     graph.add_node(name, type=description["operation"], hw=gap)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
@@ -816,7 +816,7 @@ def activation_design_points(
     graph.add_node(name, type=description["operation"], hw=activ)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
@@ -1149,7 +1149,7 @@ def elemwise_design_points(
     graph.add_node(name, type=description["operation"], hw=elem)
 
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
@@ -1191,7 +1191,7 @@ def fc_design_points(
         )
     )
     optimizer = SimulatedAnnealing(graph, config, platform)
-    res = optimizer.run_optimizer_layer(name)
+    res = optimizer.run_solver(mode="layer", layer=name)
     if res == None:
         raise Exception("No solution found for layer {}.".format(name))
     print("*" * 40)
