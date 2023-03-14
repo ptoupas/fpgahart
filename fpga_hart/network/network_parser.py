@@ -139,6 +139,7 @@ class NetworkParser(ModelLayerDescriptor):
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
         # TODO: When spliting we should also check and add the extra inputs that may be needed because of either spliting on branches or because of the ElementWise layers.
+        # TODO: Instead of setting a fixed number of partitions we can start with a valid model partitioning and then we can have a transform that merges or splits partitions based on the available resources and performance.
 
     def create_graph(self, partition: list) -> nx.DiGraph:
         graph = nx.DiGraph()
