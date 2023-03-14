@@ -15,14 +15,15 @@ from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
-from fpga_hart.optimizer.optimizer_helper import (
-    get_extra_mem_connections, get_minimum_resource_utilization, get_worst_case_buffering)
+from fpga_hart.optimizer.optimizer_helper import (get_minimum_resource_utilization,
+                                                  get_worst_case_buffering)
 from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.platform.platform import Platform
 from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
                                                 visualize_graph)
-from fpga_hart.utils.utils import (get_conv_type, get_pool_type,
+from fpga_hart.utils.utils import (get_conv_type,
+                                   get_pool_type,
                                    num_sort)
 
 sns.set(rc={"figure.figsize": (15, 8)})

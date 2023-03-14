@@ -9,7 +9,6 @@ import numpy as np
 import wandb
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.memory_interface import MemoryNode
-from fpga_hart.utils import utils
 
 
 def has_gap(graph: nx.DiGraph) -> bool:
@@ -20,7 +19,6 @@ def has_gap(graph: nx.DiGraph) -> bool:
             result = True
             break
     return result
-
 
 def split_graph(
     graph: nx.DiGraph,

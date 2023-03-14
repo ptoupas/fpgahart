@@ -6,11 +6,9 @@ import os
 import random
 import re
 from copy import deepcopy
-from ctypes import c_int
 from functools import reduce
 from typing import Tuple
 
-import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
