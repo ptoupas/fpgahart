@@ -1,4 +1,3 @@
-import csv
 import itertools
 import os
 from multiprocessing import Pool
@@ -76,20 +75,6 @@ def layer_design_points(
         assert False, "{} operation in layer {} is not supported".format(
             description["operation"], name
         )
-
-
-def contains_list(part, whole):
-    for p in part:
-        for i in range(len(p)):
-            if p[i] == whole[i]:
-                continue
-            else:
-                return False
-    if part:
-        return True
-    else:
-        return False
-
 
 def conv_design_points(
     name: str,
