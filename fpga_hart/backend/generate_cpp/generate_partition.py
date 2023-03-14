@@ -1,9 +1,6 @@
 import argparse
-import configparser
-import json
 import os
 from copy import deepcopy
-from typing import Tuple
 
 import pandas as pd
 from generate_tb import generate_tb_files_partition
@@ -22,7 +19,6 @@ from layers.generate_swish import generate_swish_files
 from fpga_hart.backend.python_prototyping.generate_data import partition_3d
 from fpga_hart.parser.onnx_parser import OnnxModelParser
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import visualize_graph
 
 
 def parse_args():

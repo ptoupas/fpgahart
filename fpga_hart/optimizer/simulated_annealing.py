@@ -24,10 +24,12 @@ from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.optimizer.optimizer_helper import check_partition_fitting
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
+from fpga_hart.utils.shapes import get_random_arbitrary_shape, get_random_shape
 from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
                                                 get_input_nodes,
                                                 get_output_nodes, split_graph,
-                                                visualize_graph)
+                                                visualize_graph,
+                                                get_nodes_sorted)
 
 
 class SimulatedAnnealing():
@@ -1252,7 +1254,7 @@ class SimulatedAnnealing():
         can execute the complete network graph.
         """
 
-        nodes = utils.get_nodes_sorted(self.graph)
+        nodes = get_nodes_sorted(self.graph)
         _logger.info(msg=f"Validating building blocks setup... {bblocks}")
         for n in nodes:
             bb = self.graph.nodes[n]["hw_type"]
@@ -1361,11 +1363,11 @@ class SimulatedAnnealing():
                 self.config.max_bram_util - total_bram
             ):
                 if self.use_arbitrary_shape:
-                    shape_in, shape_out = utils.get_random_arbitrary_shape(
+                    shape_in, shape_out = get_random_arbitrary_shape(
                         self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=self.chan_dist_thresh, depth_dist_thresh=self.depth_dist_thresh, height_dist_thresh=self.height_dist_thresh
                     )
                 else:
-                    shape_in, shape_out = utils.get_random_shape(
+                    shape_in, shape_out = get_random_shape(
                         self.graph, bb, lookuptable, previous_config=previous_config, chan_dist_thresh=self.chan_dist_thresh, depth_dist_thresh=self.depth_dist_thresh,height_dist_thresh=self.height_dist_thresh
                     )
                 if bb != "Gemm":

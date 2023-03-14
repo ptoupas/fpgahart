@@ -118,8 +118,8 @@ def split_graph(
         if phase_2_graph.out_degree[node] == 0:
             mem_out_2.append(node)
 
-    branch_edges_1 = utils.get_branch_edges(phase_1_graph)
-    branch_edges_2 = utils.get_branch_edges(phase_2_graph)
+    branch_edges_1 = get_branch_edges(phase_1_graph)
+    branch_edges_2 = get_branch_edges(phase_2_graph)
     # Worst case scenario
     branch_buffer_1 = 0
     for edge in branch_edges_1:
@@ -315,23 +315,6 @@ def add_off_chip_connections(
         write_points.append(con_out)
         mem_out_count += 1
 
-    # if gap_approx:
-    #     next_nodes = []
-    #     gap_nodes = []
-    #     for n in graph.nodes():
-    #         if graph.nodes[n]['type'] == 'GlobalAveragePool':
-    #             next_nodes.append(list(graph.successors(n))[0])
-    #             gap_nodes.append(n)
-    #             graph.remove_edge(n, list(graph.successors(n))[0])
-
-    #     for n, g in zip(next_nodes, gap_nodes):
-    #         read_points.append(n)
-    #         add_node_to_position(G=graph, new_node='Mem_in{}'.format(mem_in_count), connect_node=n, connect_pos='pre')
-    #         mem_in_count += 1
-    #         write_points.append(g)
-    #         add_node_to_position(G=graph, new_node='Mem_out{}'.format(mem_out_count), connect_node=g, connect_pos='post')
-    #         mem_out_count += 1
-
     return read_points, write_points
 
 def get_graph_structure(graph: nx.DiGraph, config: dict) -> dict:
@@ -455,11 +438,127 @@ def update_graph_structure_squeeze_layers(graph_structure: dict) -> None:
 
     graph_structure["layers"] |= squeeze_nodes
 
-def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str) -> None:
-    PG = nx.nx_pydot.to_pydot(graph)
-    PG.write_png(path + ".png")
-    if enable_wandb:
-        wandb.log({graph_name: wandb.Image(path + ".png")})
+def update_graph(graph, split_points=None, squeeze_layers=None):
+    if split_points is None and squeeze_layers is None:
+        return graph
+
+    if split_points is not None:
+        new_nodes = []
+        new_edges = []
+        for sp in split_points:
+            new_node_name = "Split_" + sp
+            new_nodes.append(new_node_name)
+
+            next_nodes = list(graph.successors(sp))
+
+            edges_out = list(graph.out_edges(sp))
+
+            assert (
+                len(next_nodes) > 1 and len(edges_out) > 1
+            ), "Split point {} cannot have only one successor".format(sp)
+
+            graph.remove_edges_from(edges_out)
+
+            edge = (sp, new_node_name)
+            new_edges.append(edge)
+            for nd in next_nodes:
+                edge = (new_node_name, nd)
+                new_edges.append(edge)
+
+        if new_nodes or new_edges:
+            graph.update(edges=new_edges, nodes=new_nodes)
+
+    if squeeze_layers is not None:
+        new_nodes = []
+        new_edges = []
+        for sl in squeeze_layers:
+            new_node_name = "Squeeze_" + sl[0] + "_" + sl[1]
+            new_nodes.append(new_node_name)
+
+            prev_nodes = list(graph.predecessors(sl[1]))
+
+            edges_in = list(graph.in_edges(sl[1]))
+
+            for ei in edges_in:
+                if sl[0] in ei[0] and sl[1] in ei[1]:
+                    graph.remove_edge(ei[0], ei[1])
+
+            edge = (new_node_name, sl[1])
+            new_edges.append(edge)
+            for pn in prev_nodes:
+                if sl[0] in pn:
+                    edge = (pn, new_node_name)
+                    new_edges.append(edge)
+
+        if new_nodes or new_edges:
+            graph.update(edges=new_edges, nodes=new_nodes)
+
+    return graph
+
+def get_branch_start_end_points(graph):
+    result = []
+    def traverse_branch_bw(graph, mp, result):
+        for pred in graph.predecessors(mp):
+            prev_node = pred
+            while True:
+                if graph.out_degree[prev_node] > 1:
+                    if (prev_node, mp) not in result:
+                        result.append((prev_node, mp))
+                    break
+
+                if graph.in_degree[prev_node] == 1:
+                    prev_node = list(graph.predecessors(prev_node))[0]
+                elif graph.in_degree[prev_node] > 1:
+                    prev_node = traverse_branch_bw(graph, prev_node, result)
+                    assert len(list(graph.predecessors(prev_node))) == 1, "Split layer before split layer is not supported"
+                    prev_node = list(graph.predecessors(prev_node))[0]
+                elif graph.in_degree[prev_node] == 0:
+                    if (prev_node, mp) not in result:
+                        result.append((prev_node, mp))
+                    break
+        if "Mem_in" in prev_node and prev_node in list(graph.predecessors(mp)):
+            assert len(list(graph.predecessors(mp))) == 2, f"If prev_node is a mem_in node {mp} should have atleast 2 predecessors since it is a merge point"
+            predecessors = list(graph.predecessors(mp))
+            predecessors.remove(prev_node)
+            prev_node = predecessors[0]
+        return prev_node
+
+    merge_points = get_merge_points(graph)
+    for mp in merge_points:
+        traverse_branch_bw(graph, mp, result)
+
+    return result
+
+    # split_points = get_split_points(graph)
+    # for sp in split_points:
+    #     merge_point = None
+    #     next_node = sp
+    #     extra_split_points = 0
+    #     while True:
+    #         if graph.out_degree[next_node] == 1:
+    #             next_node = list(graph.successors(next_node))[0]
+    #         elif graph.out_degree[next_node] > 1:
+    #             extra_split_points += 1
+    #             next_node = list(graph.successors(next_node))[0]
+    #         else:
+    #             break
+
+    #         if graph.in_degree[next_node] > 1:
+    #             extra_split_points -= 1
+    #             if extra_split_points == 0:
+    #                 merge_point = next_node
+    #                 break
+    #     result.append((sp, merge_point))
+
+def get_nodes_sorted(graph):
+    g_sorted = nx.topological_sort(graph)
+    return list(g_sorted)
+
+def get_out_streams(layer_graph, node_out):
+    for v in layer_graph.values():
+        if v["node_out"] == node_out:
+            return v["streams_out"]
+    assert False, "Cannot find node {} in the layer graph.".format(node_out)
 
 def get_input_nodes(graph):
     input_nodes = []
@@ -474,3 +573,35 @@ def get_output_nodes(graph):
         if graph.out_degree[node] == 0:
             output_nodes.append(node)
     return output_nodes
+
+def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str) -> None:
+    PG = nx.nx_pydot.to_pydot(graph)
+    PG.write_png(path + ".png")
+    if enable_wandb:
+        wandb.log({graph_name: wandb.Image(path + ".png")})
+
+
+def get_split_points(graph):
+    split_points = []
+    for node in nx.topological_sort(graph):
+        if graph.out_degree[node] > 1:
+            split_points.append(node)
+        if graph.nodes[node]["type"] == "GlobalAveragePool":
+            split_points.insert(0, node)
+    return split_points
+
+def get_merge_points(graph):
+    merge_points = []
+    for node in nx.topological_sort(graph):
+        if graph.in_degree[node] > 1:
+            merge_points.append(node)
+    return merge_points
+
+def get_branch_edges(graph):
+    merge_points = get_merge_points(graph)
+
+    branch_edges = []
+    for mrg in merge_points:
+        branch_edges.append(list(graph.in_edges(mrg)))
+
+    return branch_edges

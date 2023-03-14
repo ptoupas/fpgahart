@@ -104,7 +104,7 @@ class PartitionComposer(BaseLayer3D):
     @staticmethod
     def calculate_branch_buffering(graph):
         branch_buffering = {}
-        branch_edges = utils.get_branch_start_end_points(graph)
+        branch_edges = graph_manipulation.get_branch_start_end_points(graph)
         if branch_edges and (branch_edges[0][0] == None or branch_edges[0][1] == None):
             return branch_buffering
         unconnected_branches = {}

@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from fpga_hart import _logger
 from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import visualize_graph
+from fpga_hart.utils.graph_manipulation import visualize_graph, get_nodes_sorted
 
 
 def create_partitions(self, layers: dict) -> list:
@@ -198,7 +198,7 @@ def create_partitions(self, layers: dict) -> list:
         return final_layers
 
 def update_hw_pe(self, graph: nx.DiGraph, groupping: int = 1) -> None:
-    nodes = utils.get_nodes_sorted(graph)
+    nodes = get_nodes_sorted(graph)
     for i in range(0, len(nodes), groupping):
         node_type = ""
         for j in range(groupping):
@@ -214,7 +214,7 @@ def schedule_ops(
 ) -> list:
 
     static_schedule = []
-    nodes = utils.get_nodes_sorted(graph)
+    nodes = get_nodes_sorted(graph)
     for i in range(0, len(nodes), groupping):
         hw_op = ""
         for j in range(groupping):
@@ -247,7 +247,7 @@ def schedule_ops(
 
 def update_layer_types(self, graph: nx.DiGraph, plot_types: bool = False) -> None:
     layer_channels = []
-    for node in utils.get_nodes_sorted(graph):
+    for node in get_nodes_sorted(graph):
         if graph.nodes[node]["hw_type"] == "Gemm":
             break
         layer_channels.append(graph.nodes[node]["hw"].input_shape[1])
@@ -258,7 +258,7 @@ def update_layer_types(self, graph: nx.DiGraph, plot_types: bool = False) -> Non
     )
 
     layer_types = []
-    for node in utils.get_nodes_sorted(graph):
+    for node in get_nodes_sorted(graph):
         if graph.nodes[node]["hw_type"] == "Gemm":
             break
         channels_curr = graph.nodes[node]["hw"].input_shape[1]

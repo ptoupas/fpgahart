@@ -6,14 +6,15 @@ import numpy as np
 
 from fpga_hart import _logger
 from fpga_hart.layers.activation_3d import Activation3DLayer
-from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
 from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
-from fpga_hart.utils import utils
-
+from fpga_hart.utils.graph_manipulation import (get_split_points,
+                                                get_input_nodes,
+                                                get_output_nodes,
+                                                add_off_chip_connections)
 
 def get_minimum_resource_utilization(hw_layer):
     if isinstance(hw_layer, Convolutional3DLayer):
@@ -120,9 +121,9 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
         original_graph = deepcopy(graph)
     sort_order = list(nx.topological_sort(original_graph))
 
-    _, min_bram_util = utils.get_worst_case_buffering(deepcopy(graph), partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx)
+    _, min_bram_util = get_worst_case_buffering(deepcopy(graph), partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx)
     if min_bram_util > max_BRAM_util:
-        for sp in reversed(utils.get_split_points(graph)):
+        for sp in reversed(get_split_points(graph)):
             ancestors = list(nx.ancestors(graph, sp))
             ancestors.sort(key=lambda val: sort_order.index(val))
             subgraph_nodes = deepcopy(ancestors)
@@ -145,7 +146,7 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
             graph_1 = graph.subgraph(subgraph_nodes).copy()
             graph_2 = graph.copy()
             graph_2.remove_nodes_from(graph_1.nodes())
-            _, min_bram_util = utils.get_worst_case_buffering(deepcopy(graph_2), partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx)
+            _, min_bram_util = get_worst_case_buffering(deepcopy(graph_2), partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx)
 
             if min_bram_util <= max_BRAM_util:
                 extra_inputs, extra_outputs = get_extra_mem_connections(original_graph, subgraph_nodes)
@@ -188,7 +189,7 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
                             if "GlobalAveragePool" in descendant or "Conv" in descendant:
                                 break
                             if "Add" in descendant or "Mul" in descendant:
-                                split_points = utils.get_split_points(graph)
+                                split_points = get_split_points(graph)
                                 if not split_points:
                                     subgraph_nodes.append(descendant)
                                 else:
@@ -227,3 +228,80 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
             result.append([graph, extra_inputs, extra_outputs, weights_reloading])
 
     return result
+
+def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx):
+    # branch_edges = get_branch_start_end_points(graph)
+
+    # branch_buffer = 0
+    # for (splt, mrg) in branch_edges:
+    #     all_paths = [p for p in nx.all_simple_paths(graph, splt, mrg)]
+    #     num_sub_branches = len(all_paths) - 2
+
+    #     shortest_path = nx.shortest_path(graph, splt, mrg)
+    #     merge_node = shortest_path[-1]
+    #     pre_merge_node = shortest_path[-2]
+    #     assert (graph.nodes[pre_merge_node]["hw"].output_shape
+    #                 == graph.nodes[merge_node]["hw"].input_shape
+    #             ), "Layers input and output shapes does not match"
+    #     #TODO: This is the work case scenario for buffering the whole feature map. A more accurate design would be to calculate the depths for each layer in each branch and accumulate the depths to get the total buffer depth which will be the minimum between the work case scenario and the actual buffer depth.
+    #     branch_buffer += np.prod(np.array(graph.nodes[pre_merge_node]["hw"].output_shape))
+    # branch_buffer *= 0.5
+
+    comb_config = {}
+    for node in nx.topological_sort(graph):
+        op_type = graph.nodes[node]['type']
+        if op_type == "GlobalAveragePool":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            comb_config[node] = [1/channels]
+        elif op_type == "Conv":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            filters = graph.nodes[node]["hw"].output_shape[1]
+            kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
+            comb_config[node] = [1/kernel_size, 1/channels, 1/filters]
+        elif op_type == "Pooling":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
+            comb_config[node] = [1/kernel_size, 1/channels]
+        elif op_type == "Activation":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            comb_config[node] = [1/channels]
+        elif op_type == "ElementWise":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            comb_config[node] = [1/channels]
+        elif op_type == "BatchNormalization":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            comb_config[node] = [1/channels]
+        elif op_type == "Gemm":
+            channels = graph.nodes[node]["hw"].input_shape[1]
+            filters = graph.nodes[node]["hw"].output_shape[1]
+            comb_config[node] = [1/channels, 1/filters]
+        else:
+            assert False, "Not supported layer"
+        comb_config[node]
+
+    nodes_in = get_input_nodes(graph)
+    nodes_out = get_output_nodes(graph)
+    num_mem_connections = len(nodes_in) + len(nodes_out)
+    mem_bw_in = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_in))]
+    mem_bw_out = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_out))]
+    read_points, write_points = add_off_chip_connections(
+                graph, nodes_in, nodes_out, gap_approx)
+    dp_info = partition_composer.get_design_point(
+        graph.copy(),
+        comb_config,
+        mem_bw_in,
+        mem_bw_out,
+        read_points,
+        write_points,
+        gap_approx=gap_approx
+    )
+
+    branch_buffer_new = 0
+    for k, v in partition_composer.preliminary_branch_depth.items():
+        branch_buffer_new += v['depth']
+    bram_util = ((branch_buffer_new * word_bytes / (bram_type * 1024) ) / brams_total) * 100
+
+    if not dp_info['config'] and bram_util <= 90.0:
+        return 0, 0
+
+    return branch_buffer_new, bram_util
