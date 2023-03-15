@@ -208,7 +208,7 @@ def run_optimizer_partition(self):
         print("*" * 60)
     return self.platform.mem_words_per_cycle, mem_bw_list, dp_info_list, extra_reconfigurations, wr_list
 
-def get_cost(
+def get_cost_partition(
     self,
     config,
     mem_bw,
@@ -265,7 +265,7 @@ def get_cost(
         # return -dp_info['GOP/s'], dp_info
     return None, None
 
-def generate_random_config(
+def generate_random_config_partition(
         self,
         target_graph=None,
         neighbours=False,
