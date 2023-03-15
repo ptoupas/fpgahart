@@ -7,6 +7,7 @@ import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
 from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
+from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 
 
@@ -20,6 +21,8 @@ class LayerParser(ModelLayerDescriptor):
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
+
+        self.platform = Platform()
 
         if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)):
             os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name))
@@ -45,6 +48,7 @@ class LayerParser(ModelLayerDescriptor):
             layer,
             layer_description,
             self.config,
+            self.platform,
             self.layer_model_file,
             self.report_dict,
             self.singlethreaded,
@@ -90,14 +94,14 @@ class LayerParser(ModelLayerDescriptor):
             name = "custom_Pool_layer"
             layer_descriptor = {
                 "operation": op_type,
-                "shape_in": [[1, 3, 8, 16, 16]],
-                "shape_out": [1, 3, 8, 8, 8],
+                "shape_in": [[1, 64, 16, 56, 56]],
+                "shape_out": [1, 64, 8, 28, 28],
                 "node_in": ["323"],
                 "node_out": "324",
                 "branching": False,
-                "kernel": [1, 3, 3],
-                "padding": [0, 1, 1],
-                "stride": [1, 2, 2],
+                "kernel": [3, 3, 3],
+                "padding": [1, 1, 1],
+                "stride": [2, 2, 2],
             }
         elif layer_type == "Activation":
             op_type = "Sigmoid"
