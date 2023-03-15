@@ -26,11 +26,12 @@ from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
                                                 get_output_nodes, split_graph,
                                                 visualize_graph)
 
-def initialize_optimizer(self, graph, read_points, write_points, wr_factor):
+
+def initialize_optimizer_partition(self, graph, read_points, write_points, wr_factor):
     self.freeze_param = True
 
-    config, mem_bw, _, _ = self.generate_random_config(target_graph=graph)
-    cost, dp_info = self.get_cost(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
+    config, mem_bw, _, _ = self.generate_random_config_partition(target_graph=graph)
+    cost, dp_info = self.get_cost_partition(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
     slowest_nodes = None
 
     if cost is None:
@@ -38,10 +39,10 @@ def initialize_optimizer(self, graph, read_points, write_points, wr_factor):
         while time.time() - start_time < 90.0:
             x = float(time.time() - start_time)
             perc = 1/(1+math.exp(-0.1*(x-45)))
-            config, mem_bw, _, _ = self.generate_random_config(
+            config, mem_bw, _, _ = self.generate_random_config_partition(
                 target_graph=graph,
                 keep_percentage=perc)
-            cost, dp_info = self.get_cost(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
+            cost, dp_info = self.get_cost_partition(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
 
             if cost is not None:
                 slowest_nodes = dp_info["slowestNodes"]
@@ -58,7 +59,7 @@ def initialize_optimizer(self, graph, read_points, write_points, wr_factor):
     return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
 def run_optimizer_partition(self):
-        
+
     #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
     sub_partitions = check_partition_fitting(self.graph, self.partition_composer, 70, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.mem_words_per_cycle, [], gap_approx=self.gap_approx)
     extra_reconfigurations = len(sub_partitions) - 1
@@ -87,7 +88,7 @@ def run_optimizer_partition(self):
             dp_info,
             mem_bw,
             slowest_nodes,
-            ) = self.initialize_optimizer(graph=graph, read_points=read_points, write_points=write_points, wr_factor=weights_reloading)
+            ) = self.initialize_optimizer_partition(graph=graph, read_points=read_points, write_points=write_points, wr_factor=weights_reloading)
 
             if config == None:
                 return None, None, None, None, None
@@ -118,13 +119,13 @@ def run_optimizer_partition(self):
                         new_mem_bw,
                         _,
                         _,
-                    ) = self.generate_random_config(
+                    ) = self.generate_random_config_partition(
                         neighbours=True,
                         prev_state=prev_state,
                         slowest_nodes=slowest_nodes,
                         target_graph=graph
                     )
-                    new_cost, new_dp_info = self.get_cost(new_state, new_mem_bw, read_points, write_points, target_graph=graph, wr_factor=weights_reloading)
+                    new_cost, new_dp_info = self.get_cost_partition(new_state, new_mem_bw, read_points, write_points, target_graph=graph, wr_factor=weights_reloading)
                     if new_cost is not None:
                         slowest_nodes = new_dp_info["slowestNodes"]
 
@@ -501,10 +502,10 @@ def run_optimizer_partition_double_graph(self):
     nIN1 = len(mem_in_1)
     nOUT1 = len(mem_out_1)
     assert nIN1 > 0 and nOUT1 > 0, "No memory in/out nodes found"
-    config_1, mem_bw_1 = self.generate_random_config(
+    config_1, mem_bw_1 = self.generate_random_config_partition(
         target_graph=graph_1, n_in=nIN1, n_out=nOUT1
     )
-    cost_1, dp_info_1 = self.get_cost(
+    cost_1, dp_info_1 = self.get_cost_partition(
         config_1,
         mem_bw_1,
         len(mem_in_1),
@@ -516,10 +517,10 @@ def run_optimizer_partition_double_graph(self):
     nIN2 = len(mem_in_2)
     nOUT2 = len(mem_out_2)
     assert nIN2 > 0 and nOUT2 > 0, "No memory in/out nodes found"
-    config_2, mem_bw_2 = self.generate_random_config(
+    config_2, mem_bw_2 = self.generate_random_config_partition(
         target_graph=graph_2, n_in=nIN2, n_out=nOUT2
     )
-    cost_2, dp_info_2 = self.get_cost(
+    cost_2, dp_info_2 = self.get_cost_partition(
         config_2,
         mem_bw_2,
         len(mem_in_2),
@@ -550,10 +551,10 @@ def run_optimizer_partition_double_graph(self):
             nIN1 = len(mem_in_1)
             nOUT1 = len(mem_out_1)
             assert nIN1 > 0 and nOUT1 > 0, "No memory in/out nodes found"
-            config_1, mem_bw_1 = self.generate_random_config(
+            config_1, mem_bw_1 = self.generate_random_config_partition(
                 target_graph=graph_1, n_in=nIN1, n_out=nOUT1
             )
-            cost_1, dp_info_1 = self.get_cost(
+            cost_1, dp_info_1 = self.get_cost_partition(
                 config_1,
                 mem_bw_1,
                 len(mem_in_1),
@@ -565,10 +566,10 @@ def run_optimizer_partition_double_graph(self):
             nIN2 = len(mem_in_2)
             nOUT2 = len(mem_out_2)
             assert nIN2 > 0 and nOUT2 > 0, "No memory in/out nodes found"
-            config_2, mem_bw_2 = self.generate_random_config(
+            config_2, mem_bw_2 = self.generate_random_config_partition(
                 target_graph=graph_2, n_in=nIN2, n_out=nOUT2
             )
-            cost_2, dp_info_2 = self.get_cost(
+            cost_2, dp_info_2 = self.get_cost_partition(
                 config_2,
                 mem_bw_2,
                 len(mem_in_2),
@@ -623,14 +624,14 @@ def run_optimizer_partition_double_graph(self):
             nIN1 = len(mem_in_1)
             nOUT1 = len(mem_out_1)
             assert nIN1 > 0 and nOUT1 > 0, "No memory in/out nodes found"
-            new_state_1, new_mem_bw_1 = self.generate_random_config(
+            new_state_1, new_mem_bw_1 = self.generate_random_config_partition(
                 target_graph=graph_1,
                 neighbours=True,
                 prev_state=prev_state_1,
                 n_in=nIN1,
                 n_out=nOUT1,
             )
-            new_cost_1, new_dp_info_1 = self.get_cost(
+            new_cost_1, new_dp_info_1 = self.get_cost_partition(
                 new_state_1,
                 new_mem_bw_1,
                 len(mem_in_1),
@@ -642,14 +643,14 @@ def run_optimizer_partition_double_graph(self):
             nIN2 = len(mem_in_2)
             nOUT2 = len(mem_out_2)
             assert nIN2 > 0 and nOUT2 > 0, "No memory in/out nodes found"
-            new_state_2, new_mem_bw_2 = self.generate_random_config(
+            new_state_2, new_mem_bw_2 = self.generate_random_config_partition(
                 target_graph=graph_2,
                 neighbours=True,
                 prev_state=prev_state_2,
                 n_in=nIN2,
                 n_out=nOUT2,
             )
-            new_cost_2, new_dp_info_2 = self.get_cost(
+            new_cost_2, new_dp_info_2 = self.get_cost_partition(
                 new_state_2,
                 new_mem_bw_2,
                 len(mem_in_2),

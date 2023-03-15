@@ -11,10 +11,11 @@ from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
-from fpga_hart.utils.graph_manipulation import (get_split_points,
+from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
                                                 get_input_nodes,
                                                 get_output_nodes,
-                                                add_off_chip_connections)
+                                                get_split_points)
+
 
 def get_minimum_resource_utilization(hw_layer, gap_approx=False):
     if isinstance(hw_layer, Convolutional3DLayer):
@@ -22,43 +23,43 @@ def get_minimum_resource_utilization(hw_layer, gap_approx=False):
         coarsein_min = 1 / np.int32(hw_layer.channels)
         coarseout_min = 1 / np.int32(hw_layer.filters)
         fine_min = 1 / np.prod(np.array(hw_layer.kernel_shape))
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_fine = fine_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_fine = fine_min,
                                         f_coarseIn = coarsein_min,
                                         f_coarseOut= coarseout_min)
     elif isinstance(hw_layer, Pooling3DLayer):
         initial_filters = deepcopy(hw_layer.channels)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
         fine_min = 1 / np.prod(np.array(hw_layer.kernel_shape))
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_fine = fine_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_fine = fine_min,
                                         f_coarse_inout = coarseinout_min)
     elif isinstance(hw_layer, Activation3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [hw_layer.op_type])
     elif isinstance(hw_layer, ElementWise3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels_1)
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [hw_layer.op_type])
     elif isinstance(hw_layer, FCLayer):
         initial_filters = deepcopy(hw_layer.dim_out)
         coarsein_min = 1 / np.int32(hw_layer.dim_in)
         coarseout_min = 1 / np.int32(hw_layer.dim_out)
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarseIn = coarsein_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_coarseIn = coarsein_min,
                                                          f_coarseOut= coarseout_min)
     elif isinstance(hw_layer, GAP3DLayer):
         initial_filters = deepcopy(hw_layer.filters)
         coarseinout_min = 1 / np.int32(hw_layer.channels)
-        dsp_util, bram_util, _ = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
+        dsp_util, bram_util, pipeline_depth = hw_layer.get_resource_util(f_coarse_inout = coarseinout_min,
                                                          supported_ops = [],
                                                          gap_approx = gap_approx)
     else:
         raise ValueError(f"Layer type {type(hw_layer)} not supported.")
 
-    if not (isinstance(hw_layer, Convolutional3DLayer) or isinstance(hw_layer, Pooling3DLayer)):
-        return 0, dsp_util, initial_filters
-    return bram_util, dsp_util, initial_filters
+    # if not (isinstance(hw_layer, Convolutional3DLayer) or isinstance(hw_layer, Pooling3DLayer)):
+    #     return 0, dsp_util, initial_filters
+    return bram_util, dsp_util, pipeline_depth, initial_filters
 
 def get_extra_mem_connections(graph, node_list):
     extra_inputs, extra_outputs = [], []
@@ -103,13 +104,13 @@ def calculate_wr_factor(graph, max_BRAM_util):
     weights_reloading = 1
     for layer in nx.topological_sort(graph):
         hw = graph.nodes[layer]["hw"]
-        bram_util, _, _ = get_minimum_resource_utilization(hw)
+        bram_util, _, _, _ = get_minimum_resource_utilization(hw)
         if bram_util > max_BRAM_util:
             initial_filters = deepcopy(hw.filters)
             for f in range(1,initial_filters):
             # for f in utils.get_factors(initial_filters)[1:]:
                 update_nodes_shapes(graph=graph, wr_f=f, old_filters=initial_filters, old_layer=layer)
-                bram_util_wr, _, _ = get_minimum_resource_utilization(hw)
+                bram_util_wr, _, _, _ = get_minimum_resource_utilization(hw)
                 if bram_util_wr < max_BRAM_util:
                     weights_reloading = f if initial_filters%f == 0 else (f+1)
                     break
@@ -162,7 +163,7 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
     else:
         for layer in nx.topological_sort(graph):
             hw = graph.nodes[layer]["hw"]
-            bram_util, _, _ = get_minimum_resource_utilization(hw)
+            bram_util, _, _, _ = get_minimum_resource_utilization(hw)
 
             min_bram_util += bram_util
             if min_bram_util > max_BRAM_util:

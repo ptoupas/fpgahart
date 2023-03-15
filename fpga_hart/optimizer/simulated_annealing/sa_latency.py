@@ -17,8 +17,9 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.utils import utils
-from fpga_hart.utils.shapes import get_random_arbitrary_shape, get_random_shape
 from fpga_hart.utils.graph_manipulation import get_nodes_sorted
+from fpga_hart.utils.shapes import get_random_arbitrary_shape, get_random_shape
+
 
 def run_optimizer_latency(self, alignedfactors: bool) -> None:
 
@@ -27,7 +28,7 @@ def run_optimizer_latency(self, alignedfactors: bool) -> None:
         bblocks, alignedfactors, lookuptable, initialization=True
     )
 
-    cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
+    cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_latency(
         bblocks_config, lookuptable
     )
 
@@ -37,7 +38,7 @@ def run_optimizer_latency(self, alignedfactors: bool) -> None:
             bblocks_config = self.generate_building_blocks_config(
                 bblocks, alignedfactors, lookuptable, initialization=True
             )
-            cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_e2e(
+            cost, scheduling, dsp_util, bram_util, bw_util = self.get_cost_latency(
                 bblocks_config, lookuptable
             )
             if cost is not None:
@@ -95,7 +96,7 @@ def run_optimizer_latency(self, alignedfactors: bool) -> None:
                 dsp_util,
                 bram_util,
                 bw_util,
-            ) = self.get_cost_e2e(new_state, lookuptable)
+            ) = self.get_cost_latency(new_state, lookuptable)
 
 
             cost_diff = prev_cost - new_cost
@@ -499,7 +500,7 @@ def generate_building_blocks_config(
 
     return bb_setup
 
-def get_cost_e2e(self, bblocks_config: dict, lookuptable: dict) -> float:
+def get_cost_latency(self, bblocks_config: dict, lookuptable: dict) -> float:
     if bblocks_config is None:
         return None, None, None, None, None
     cost = 0.0
