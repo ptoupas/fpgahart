@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+import scienceplots
 
 import wandb
 from fpga_hart import _logger
@@ -25,12 +26,7 @@ from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 
-import scienceplots
 plt.style.use(["science", "ieee", "grid"])
-
-def multithreaded_modeling(operation, input, pool):
-    results = pool.starmap(operation, input)
-    return results
 
 
 @dataclass

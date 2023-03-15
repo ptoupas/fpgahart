@@ -6,14 +6,8 @@ import yaml
 import wandb
 from fpga_hart import _logger
 from fpga_hart.layers.layer_design import layer_design_points
-from fpga_hart.parser.model_descriptor import \
-    ModelLayerDescriptor
+from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
 from fpga_hart.utils import utils
-
-
-def multithreaded_modeling(operation, input, pool):
-    results = pool.starmap(operation, input)
-    return results
 
 
 @dataclass
