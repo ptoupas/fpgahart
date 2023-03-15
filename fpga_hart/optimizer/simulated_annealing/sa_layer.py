@@ -18,6 +18,7 @@ from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils import utils
 
+
 def initialize_optimizer_layer(self, layer, wr_factor: int = 1):
     config, mem_bw = self.generate_random_config_layer(layer)
     cost, dp_info = self.get_cost_layer(config, mem_bw, layer, wr_factor=wr_factor)
@@ -232,7 +233,7 @@ def generate_random_config_layer(self, l: str, keep_percentage: float = -1):
         fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
         coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
         fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
-        config = [coarse_inout_factor, fine_factor]
+        config = [fine_factor, coarse_inout_factor]
     elif isinstance(hw, Activation3DLayer):
         channels = hw.channels
         coarse_inout_feasible = utils.get_factors(channels, keep_percentage=keep_percentage)
