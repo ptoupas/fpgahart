@@ -9,6 +9,8 @@ from fpga_hart.optimizer.simulated_annealing.sa import SimulatedAnnealing
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph, get_nodes_sorted
 
+import scienceplots
+plt.style.use(["science", "ieee", "grid"])
 
 def create_partitions(self, layers: dict) -> list:
     final_layers = []

@@ -10,3 +10,4 @@ pydot
 plotly
 dotmap
 onnxoptimizer<=0.2.7
+scienceplots

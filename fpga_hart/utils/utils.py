@@ -27,8 +27,8 @@ from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils.graph_manipulation import get_out_streams
 
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
+import scienceplots
+plt.style.use(["science", "ieee", "grid"])
 
 
 # helper function to perform sort
