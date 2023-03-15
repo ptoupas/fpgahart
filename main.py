@@ -1,13 +1,9 @@
 import argparse
-import configparser
 import cProfile
 import logging
-import os
 import pstats
 import time
-from typing import Tuple
 
-import seaborn as sns
 import yaml
 from dotmap import DotMap
 
@@ -17,9 +13,6 @@ from fpga_hart.layers.layer_parser import LayerParser
 from fpga_hart.network.network_parser import NetworkParser
 from fpga_hart.partitions.partition_parser import PartitionParser
 from fpga_hart.platform.platform import Platform
-
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
 
 
 def parse_args():

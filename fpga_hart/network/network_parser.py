@@ -3,8 +3,8 @@ import random
 from copy import deepcopy
 from dataclasses import dataclass
 
+import matplotlib.pyplot as plt
 import networkx as nx
-import seaborn as sns
 
 import wandb
 from fpga_hart import _logger
@@ -26,8 +26,8 @@ from fpga_hart.utils.utils import (get_conv_type,
                                    get_pool_type,
                                    num_sort)
 
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
+import scienceplots
+plt.style.use(["science", "ieee", "grid"])
 
 def multithreaded_modeling(operation, input, pool):
     results = pool.starmap(operation, input)
