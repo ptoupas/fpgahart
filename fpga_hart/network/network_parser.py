@@ -52,7 +52,7 @@ class NetworkParser(ModelLayerDescriptor):
     def get_reconfig_points(self):
         available_reconfig_points = [layer for layer in self.layers if self.layers[layer]['operation'] in self.allowed_reconfig_layers]
 
-        # Remove the input and output layers from the available reconfig points
+        # Remove the network input and output layers from the available reconfig points
         remove_io_nodes = []
         for rp in available_reconfig_points:
             if self.layers[rp]['node_in'][0] in self.initial_model_inputs or self.layers[rp]['node_out'] in self.initial_model_outputs:
@@ -99,41 +99,66 @@ class NetworkParser(ModelLayerDescriptor):
 
         return partitions
 
-    def parse(self):
-        initial_partitions = self.get_partitions()
+    def validate_partitions(self, partitions):
+        for i, part in enumerate(partitions):
+            part_name = "partition_{}".format(i)
 
-        for i, partition in enumerate(initial_partitions):
-            _logger.warning("Partition {} with {} number of layers:".format(i, len(partition)))
-            graph_partition = self.create_graph(partition)
-            name = "partition_{}".format(i)
-
-            # mem_in, mem_out = [], []
-            # read_points, write_points = add_off_chip_connections(
-            #     graph_partition, mem_in, mem_out, gap_approx=self.gap_approx
-            # )
+            part_graph = self.create_graph(part)
             if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
                 os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
             visualize_graph(
-                graph_partition,
-                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + name,
+                part_graph,
+                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + part_name,
                 self.enable_wandb,
-                name,
+                part_name,
             )
-            _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
-            print(f"Buffering BRAM utilization: {min_bram_util}")
 
-            layers_bram_util = 0
-            for layer in nx.topological_sort(graph_partition):
-                bram_util, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"], gap_approx=self.gap_approx)
-                layers_bram_util += bram_util
-            print(f"Layers BRAM utilization: {layers_bram_util}")
+            part_bram_util = 0
+            for layer in nx.topological_sort(part_graph):
+                bram_util, dsp_util, pipeline_depth, _ = get_minimum_resource_utilization(part_graph.nodes[layer]["hw"], gap_approx=self.gap_approx)
+                _logger.warning(f"Layer {layer}: BRAM utilization = {bram_util:.2f}, DSP utilization = {dsp_util:.2f}, Pipeline depth = {pipeline_depth}")
+                if part_bram_util := part_bram_util + bram_util > self.config.max_bram_util:
+                    _logger.warning(f"Partition {i} BRAM utilization {part_bram_util} exceeds the maximum allowed {self.config.max_bram_util}. Reconfiguring...")
+                    break
 
-            print(f"Total BRAM utilization: {min_bram_util + layers_bram_util}")
+
+    def parse(self):
+        initial_partitions = self.get_partitions()
+        valid_partitions = self.validate_partitions(initial_partitions)
+
+        # for i, partition in enumerate(valid_partitions):
+        #     _logger.warning("Partition {} with {} number of layers:".format(i, len(partition)))
+        #     graph_partition = self.create_graph(partition)
+        #     name = "partition_{}".format(i)
+
+        #     # mem_in, mem_out = [], []
+        #     # read_points, write_points = add_off_chip_connections(
+        #     #     graph_partition, mem_in, mem_out, gap_approx=self.gap_approx
+        #     # )
+        #     if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
+        #         os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
+        #     visualize_graph(
+        #         graph_partition,
+        #         os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + name,
+        #         self.enable_wandb,
+        #         name,
+        #     )
+        #     _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
+        #     print(f"Buffering BRAM utilization: {min_bram_util}")
+
+        #     layers_bram_util = 0
+        #     for layer in nx.topological_sort(graph_partition):
+        #         bram_util, _, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"], gap_approx=self.gap_approx)
+        #         layers_bram_util += bram_util
+        #     print(f"Layers BRAM utilization: {layers_bram_util}")
+
+        #     print(f"Total BRAM utilization: {min_bram_util + layers_bram_util}")
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
         # TODO: When spliting we should also check and add the extra inputs that may be needed because of either spliting on branches or because of the ElementWise layers.
         # TODO: Instead of setting a fixed number of partitions we can start with a valid model partitioning and then we can have a transform that merges or splits partitions based on the available resources and performance.
+        # TODO: I dont like the thing that layers partitions and network are not being connected somehow. It would be nice to have a way to connect them and build the network from the partitions and the partitions from the layers.
 
     def create_graph(self, partition: list) -> nx.DiGraph:
         graph = nx.DiGraph()
