@@ -86,16 +86,18 @@ class NetworkParser(ModelLayerDescriptor):
         reconfig_points = self.get_reconfig_points()
         model_layers = list(self.layers.keys())
 
-        partitions = []
-        for rp in reconfig_points:
+        partitions = dict()
+        for i, rp in enumerate(reconfig_points):
             current_partition = []
             for layer in model_layers:
                 if layer == rp:
                     break
                 current_partition.append(layer)
-            partitions.append(current_partition)
+            partition_name = f"part_{i}"
+            partitions[partition_name] = current_partition
             model_layers = model_layers[model_layers.index(rp):]
-        partitions.append(model_layers)
+        partition_name = f"part_{i}"
+        partitions[partition_name] = model_layers
 
         return partitions
 
@@ -111,14 +113,14 @@ class NetworkParser(ModelLayerDescriptor):
                 _logger.warning(f"Partition BRAM utilization = {total_bram_util:.2f}, DSP utilization = {total_dsp_util:.2f}")
                 return total_bram_util, total_dsp_util
         
+        # TODO: Do we want to use a copy of a graph here or not? In case we remove that we will alter the original graph by adding the off-chip memory connections
         _, min_bram_util = get_worst_case_buffering(deepcopy(graph), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
         total_bram_util += min_bram_util
 
         return total_bram_util, dsp_util
     
     def validate_partitions(self, partitions):
-        for i, part in enumerate(partitions):
-            part_name = "partition_{}".format(i)
+        for part_name, part in partitions.items():
 
             part_graph = self.create_graph(part)
             if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
@@ -138,10 +140,10 @@ class NetworkParser(ModelLayerDescriptor):
 
     def parse(self):
         initial_partitions = self.get_partitions()
-
         if not self.validate_partitions(initial_partitions):
             _logger.error("Invalid partitions. Exiting...")
-            exit(1)
+            self.rearrange_partitions(initial_partitions)
+            exit()
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
