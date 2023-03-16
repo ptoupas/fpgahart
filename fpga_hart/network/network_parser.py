@@ -99,6 +99,23 @@ class NetworkParser(ModelLayerDescriptor):
 
         return partitions
 
+    def get_partition_utilization(self, graph):
+        total_bram_util = 0
+        total_dsp_util = 0
+        for layer in nx.topological_sort(graph):
+            bram_util, dsp_util, pipeline_depth, _ = get_minimum_resource_utilization(graph.nodes[layer]["hw"], gap_approx=self.gap_approx)
+            _logger.debug(f"Layer {layer}: BRAM utilization = {bram_util:.2f}, DSP utilization = {dsp_util:.2f}, Pipeline depth = {pipeline_depth}")
+            total_bram_util += bram_util
+            total_dsp_util += dsp_util
+            if total_bram_util > self.config.max_bram_util or total_dsp_util > self.config.max_dsp_util:
+                _logger.warning(f"Partition BRAM utilization = {total_bram_util:.2f}, DSP utilization = {total_dsp_util:.2f}")
+                return total_bram_util, total_dsp_util
+        
+        _, min_bram_util = get_worst_case_buffering(deepcopy(graph), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
+        total_bram_util += min_bram_util
+
+        return total_bram_util, dsp_util
+    
     def validate_partitions(self, partitions):
         for i, part in enumerate(partitions):
             part_name = "partition_{}".format(i)
@@ -113,46 +130,18 @@ class NetworkParser(ModelLayerDescriptor):
                 part_name,
             )
 
-            part_bram_util = 0
-            for layer in nx.topological_sort(part_graph):
-                bram_util, dsp_util, pipeline_depth, _ = get_minimum_resource_utilization(part_graph.nodes[layer]["hw"], gap_approx=self.gap_approx)
-                _logger.warning(f"Layer {layer}: BRAM utilization = {bram_util:.2f}, DSP utilization = {dsp_util:.2f}, Pipeline depth = {pipeline_depth}")
-                if part_bram_util := part_bram_util + bram_util > self.config.max_bram_util:
-                    _logger.warning(f"Partition {i} BRAM utilization {part_bram_util} exceeds the maximum allowed {self.config.max_bram_util}. Reconfiguring...")
-                    break
-
+            bram_util, dsp_util = self.get_partition_utilization(part_graph)
+            if bram_util > self.config.max_bram_util or dsp_util > self.config.max_dsp_util:
+                return False
+        
+        return True
 
     def parse(self):
         initial_partitions = self.get_partitions()
-        valid_partitions = self.validate_partitions(initial_partitions)
 
-        # for i, partition in enumerate(valid_partitions):
-        #     _logger.warning("Partition {} with {} number of layers:".format(i, len(partition)))
-        #     graph_partition = self.create_graph(partition)
-        #     name = "partition_{}".format(i)
-
-        #     # mem_in, mem_out = [], []
-        #     # read_points, write_points = add_off_chip_connections(
-        #     #     graph_partition, mem_in, mem_out, gap_approx=self.gap_approx
-        #     # )
-        #     if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
-        #         os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
-        #     visualize_graph(
-        #         graph_partition,
-        #         os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + name,
-        #         self.enable_wandb,
-        #         name,
-        #     )
-        #     _, min_bram_util = get_worst_case_buffering(deepcopy(graph_partition), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
-        #     print(f"Buffering BRAM utilization: {min_bram_util}")
-
-        #     layers_bram_util = 0
-        #     for layer in nx.topological_sort(graph_partition):
-        #         bram_util, _, _, _ = get_minimum_resource_utilization(graph_partition.nodes[layer]["hw"], gap_approx=self.gap_approx)
-        #         layers_bram_util += bram_util
-        #     print(f"Layers BRAM utilization: {layers_bram_util}")
-
-        #     print(f"Total BRAM utilization: {min_bram_util + layers_bram_util}")
+        if not self.validate_partitions(initial_partitions):
+            _logger.error("Invalid partitions. Exiting...")
+            exit(1)
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
