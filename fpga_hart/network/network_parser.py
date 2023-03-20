@@ -290,15 +290,6 @@ class NetworkParser(ModelLayerDescriptor):
             graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type, layer_mode=layer_mode)
         _logger.info("*" * 40)
 
-        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
-            os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
-        visualize_graph(
-                graph,
-                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + "test",
-                self.enable_wandb,
-                "test",
-            )
-
         edges = []
         for name in graph.nodes():
             inputs = self.layers[name]["node_in"]
