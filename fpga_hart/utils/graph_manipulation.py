@@ -266,15 +266,20 @@ def add_off_chip_connections(
             output_nodes.append(n)
 
     for in_n in input_nodes:
-        read_points.append(in_n)
-        if not 'mem_in' in in_n.lower():
-            add_node_to_position(
-                G=graph,
-                new_node="Mem_in{}".format(mem_in_count),
-                connect_node=in_n,
-                connect_pos="pre",
-            )
-        mem_in_count += 1
+        repetitions = 1
+        # TODO: This only works with elementwise nodes accepting 2 inputs, need to be generalized for N inputs
+        if graph.nodes[in_n]["type"] == "ElementWise":
+            repetitions = 2
+        for _ in range(repetitions):
+            read_points.append(in_n)
+            if not 'mem_in' in in_n.lower():
+                add_node_to_position(
+                    G=graph,
+                    new_node="Mem_in{}".format(mem_in_count),
+                    connect_node=in_n,
+                    connect_pos="pre",
+                )
+            mem_in_count += 1
 
     for out_n in output_nodes:
         write_points.append(out_n)

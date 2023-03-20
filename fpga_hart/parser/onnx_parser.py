@@ -93,6 +93,7 @@ class OnnxModelParser:
 
         add_input_from_initializer(self.onnx_model)
         self.convert_matmul_to_gemm()
+        # self.fuse_mul_sigmoid_into_hardswish()
         self.onnx_model = onnx.shape_inference.infer_shapes(self.onnx_model)
         passes = [
             "extract_constant_to_initializer",
@@ -546,3 +547,47 @@ class OnnxModelParser:
                 self.onnx_model.graph.node.insert(index, new_node)
                 if transpose_connection:
                     self.onnx_model.graph.node.remove(input_node)
+
+    def fuse_mul_sigmoid_into_hardswish(self):
+
+        # iterate over nodes in the graph
+        for index, node in enumerate(self.onnx_model.graph.node):
+
+            # find a mul node
+            if node.op_type != "Mul":
+                continue
+
+            # check only two inputs
+            if len(node.input) != 2:
+                continue
+
+            # get previous nodes
+            prev_node_a = next(filter(lambda x: x.output[0] == node.input[0], self.onnx_model.graph.node))
+            prev_node_b = next(filter(lambda x: x.output[0] == node.input[1], self.onnx_model.graph.node))
+
+            # # check prev node a has two outputs
+            # if len(prev_node_a.input) != 2:
+            #     continue
+
+            # check prev node b is a sigmoid
+            if prev_node_b.op_type != "Sigmoid":
+                continue
+
+            # check that the current node an prev node b have the same input
+            if node.input[0] != prev_node_b.input[0]:
+                continue
+
+            # create a new HardSwish node
+            new_node = onnx.helper.make_node(
+                "HardSwish",
+                name=node.name+"_hard_swish",
+                inputs=[prev_node_a.output[0]],
+                outputs=node.output,
+            )
+
+            # add the node to the graph
+            self.onnx_model.graph.node.insert(index, new_node)
+
+            # remove prev nodes
+            self.onnx_model.graph.node.remove(node)
+            self.onnx_model.graph.node.remove(prev_node_b)

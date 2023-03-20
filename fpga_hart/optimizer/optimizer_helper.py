@@ -231,6 +231,22 @@ def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes
 
     return result
 
+def get_off_chip_mem_connections(graph):
+    input_nodes = get_input_nodes(graph)
+    output_nodes = get_output_nodes(graph)
+
+    mem_conns = dict({"inputs": [], "outputs": []})
+    for n in nx.topological_sort(graph):
+        if n in input_nodes:
+            mem_conns["inputs"].append(n)
+            if graph.nodes[n]["layer_mode"] == "merge" and graph.in_degree(n) == 0:
+                mem_conns["inputs"].append(n)
+        if n in output_nodes:
+            mem_conns["outputs"].append(n)
+        if graph.nodes[n]["layer_mode"] == "split" and graph.out_degree(n) <= 1 and n not in output_nodes:
+            mem_conns["outputs"].append(n)
+    return mem_conns["inputs"], mem_conns["outputs"]
+
 def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx):
     # branch_edges = get_branch_start_end_points(graph)
 
@@ -281,13 +297,17 @@ def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, wor
             assert False, "Not supported layer"
         comb_config[node]
 
-    nodes_in = get_input_nodes(graph)
-    nodes_out = get_output_nodes(graph)
+    # nodes_in = get_input_nodes(graph)
+    # nodes_out = get_output_nodes(graph)
+    nodes_in, nodes_out = get_off_chip_mem_connections(graph)
     num_mem_connections = len(nodes_in) + len(nodes_out)
+
+    # TODO: This might not be totally correct. We should split the memory bandwidth between input and output in half and then split either input or output in half again if there are extra connections.
     mem_bw_in = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_in))]
     mem_bw_out = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_out))]
     read_points, write_points = add_off_chip_connections(
                 graph, nodes_in, nodes_out, gap_approx)
+
     dp_info = partition_composer.get_design_point(
         graph.copy(),
         comb_config,

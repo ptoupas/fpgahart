@@ -17,6 +17,19 @@ class ModelLayerDescriptor(OnnxModelParser):
         self.layers = {}
         self.create_layers()
 
+    def is_branch_layer(self, output_id: str) -> bool:
+        num_outputs = 0
+        swish_detect = []
+        for kk in self.torch_layers.keys():
+            if output_id in self.torch_layers[kk]["input_id"]:
+                swish_detect.append(self.torch_layers[kk]["operation"])
+                num_outputs += 1
+        if swish_detect == ["Sigmoid", "Mul"]:
+            return False
+        if num_outputs > 1:
+            return True
+        return False
+
     def create_layers(self) -> None:
         if self.se_block:
             se_module = deque(maxlen=6)
@@ -59,7 +72,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                 "shape_out": output_shape,
                 "node_in": input_node,
                 "node_out": output_node,
-                "branching": False,
+                "branching": self.is_branch_layer(self.torch_layers[k]["output_id"]),
             }
 
             if operation == "Conv":
@@ -160,7 +173,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                         "node_in": swish_input_node,
                         "node_out": swish_output_node,
                         "shape_branch": swish_input_shape,
-                        "branching": True,
+                        "branching": self.is_branch_layer(self.torch_layers[mul_name]["output_id"]),
                         "primitive_ops": {sigmoid_name: sigmoid, mul_name: mul},
                     }
 
