@@ -82,22 +82,64 @@ class NetworkParser(ModelLayerDescriptor):
                 rp_idx += 1
         return reconfig_points
 
-    def get_partitions(self):
+    def get_partitions(self, plot_graph=False):
         reconfig_points = self.get_reconfig_points()
         model_layers = list(self.layers.keys())
 
         partitions = dict()
         for i, rp in enumerate(reconfig_points):
+            partition_specs = dict()
             current_partition = []
             for layer in model_layers:
                 if layer == rp:
                     break
                 current_partition.append(layer)
+
             partition_name = f"part_{i}"
-            partitions[partition_name] = current_partition
+            partition_specs["layers"] = current_partition
+
+            part_graph = self.create_graph(current_partition)
+            for n in nx.topological_sort(part_graph):
+                print(n, part_graph.nodes[n])
+            bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
+            if plot_graph:
+                if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
+                        os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
+                visualize_graph(
+                    part_graph,
+                    os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + partition_name,
+                    self.enable_wandb,
+                    partition_name,
+                )
+            partition_specs["total_bram"] = bram_util
+            partition_specs["total_dsp"] = dsp_util
+            partition_specs["layers_bram"] = layers_bram
+            partition_specs["branch_bram"] = branch_bram
+
+            partitions[partition_name] = partition_specs
             model_layers = model_layers[model_layers.index(rp):]
+
+        partition_specs = dict()
         partition_name = f"part_{i}"
-        partitions[partition_name] = model_layers
+        partition_specs["layers"] = model_layers
+
+        part_graph = self.create_graph(model_layers)
+        bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
+        if plot_graph:
+            if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
+                    os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
+            visualize_graph(
+                part_graph,
+                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + partition_name,
+                self.enable_wandb,
+                partition_name,
+            )
+        partition_specs["total_bram"] = bram_util
+        partition_specs["total_dsp"] = dsp_util
+        partition_specs["layers_bram"] = layers_bram
+        partition_specs["branch_bram"] = branch_bram
+
+        partitions[partition_name] = partition_specs
 
         return partitions
 
@@ -111,35 +153,37 @@ class NetworkParser(ModelLayerDescriptor):
             total_dsp_util += dsp_util
             if total_bram_util > self.config.max_bram_util or total_dsp_util > self.config.max_dsp_util:
                 _logger.warning(f"Partition BRAM utilization = {total_bram_util:.2f}, DSP utilization = {total_dsp_util:.2f}")
-                return total_bram_util, total_dsp_util
-        
+
+        layers_bram_util = deepcopy(total_bram_util)
         # TODO: Do we want to use a copy of a graph here or not? In case we remove that we will alter the original graph by adding the off-chip memory connections
-        _, min_bram_util = get_worst_case_buffering(deepcopy(graph), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
+        _, min_bram_util = get_worst_case_buffering(graph, self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
+        branch_buffering_bram_util = deepcopy(min_bram_util)
         total_bram_util += min_bram_util
 
-        return total_bram_util, dsp_util
-    
+        return total_bram_util, total_dsp_util, layers_bram_util, branch_buffering_bram_util
+
     def validate_partitions(self, partitions):
         for part_name, part in partitions.items():
 
-            part_graph = self.create_graph(part)
-            if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
-                os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
-            visualize_graph(
-                part_graph,
-                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + part_name,
-                self.enable_wandb,
-                part_name,
-            )
+            # part_graph = self.create_graph(part["layers"])
 
-            bram_util, dsp_util = self.get_partition_utilization(part_graph)
-            if bram_util > self.config.max_bram_util or dsp_util > self.config.max_dsp_util:
+            # bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
+            # part["total_bram"] = bram_util
+            # part["total_dsp"] = dsp_util
+            # part["layers_bram"] = layers_bram
+            # part["branch_bram"] = branch_bram
+            if part["total_bram"] > self.config.max_bram_util or part["total_dsp"] > self.config.max_dsp_util:
                 return False
-        
+
         return True
 
+    def rearrange_partitions(self, partitions):
+        for part, specs in partitions.items():
+            print(f"{part}: {specs}")
+
+
     def parse(self):
-        initial_partitions = self.get_partitions()
+        initial_partitions = self.get_partitions(plot_graph=True)
         if not self.validate_partitions(initial_partitions):
             _logger.error("Invalid partitions. Exiting...")
             self.rearrange_partitions(initial_partitions)
@@ -235,8 +279,25 @@ class NetworkParser(ModelLayerDescriptor):
                 )
             else:
                 hw_type = layer_type
-            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
+
+            if self.layers[layer]["branching"]:
+                layer_mode = "split"
+            elif layer_type == "ElementWise":
+                layer_mode = "merge"
+            else:
+                layer_mode = "sequential"
+
+            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type, layer_mode=layer_mode)
         _logger.info("*" * 40)
+
+        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/"):
+            os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/")
+        visualize_graph(
+                graph,
+                os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + "test",
+                self.enable_wandb,
+                "test",
+            )
 
         edges = []
         for name in graph.nodes():
