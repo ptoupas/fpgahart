@@ -577,8 +577,10 @@ def get_output_nodes(graph):
             output_nodes.append(node)
     return output_nodes
 
-def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str) -> None:
+def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name: str, valid: bool = True) -> None:
     PG = nx.nx_pydot.to_pydot(graph)
+    if not valid:
+        PG.set_bgcolor("lightpink")
     PG.write_png(path + ".png")
     if enable_wandb:
         wandb.log({graph_name: wandb.Image(path + ".png")})

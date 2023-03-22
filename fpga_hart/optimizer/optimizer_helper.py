@@ -102,20 +102,39 @@ def update_nodes_shapes(graph, wr_f, old_filters, old_layer):
 
 def calculate_wr_factor(graph, max_BRAM_util):
     weights_reloading = 1
+
+    wr_layers = []
+    for layer in reversed(list(nx.topological_sort(graph))):
+        wr_layers.append(layer)
+        if graph.nodes[layer]["type"] == "Conv":
+            break
+    wr_layers = wr_layers[::-1]
+
+    total_bram_util = 0
     for layer in nx.topological_sort(graph):
+        if layer == wr_layers[0]:
+            break
         hw = graph.nodes[layer]["hw"]
         bram_util, _, _, _ = get_minimum_resource_utilization(hw)
-        if bram_util > max_BRAM_util:
+        total_bram_util += bram_util
+
+    for layer in wr_layers:
+        hw = graph.nodes[layer]["hw"]
+        bram_util, _, _, _ = get_minimum_resource_utilization(hw)
+        if (total_bram_util + bram_util) > max_BRAM_util:
             initial_filters = deepcopy(hw.filters)
             for f in range(1,initial_filters):
             # for f in utils.get_factors(initial_filters)[1:]:
                 update_nodes_shapes(graph=graph, wr_f=f, old_filters=initial_filters, old_layer=layer)
                 bram_util_wr, _, _, _ = get_minimum_resource_utilization(hw)
-                if bram_util_wr < max_BRAM_util:
+                if (total_bram_util + bram_util_wr) < max_BRAM_util:
                     weights_reloading = f if initial_filters%f == 0 else (f+1)
                     break
             if weights_reloading == 1:
-                raise ValueError(f"Layer {layer} does not fit in the device even after weights reloading")
+                _logger.error(f"Layer {layer} does not fit in the device even after weights reloading")
+                return -1
+        else:
+            total_bram_util += bram_util
     return weights_reloading
 
 def check_partition_fitting(graph, partition_composer, max_BRAM_util, word_bytes, bram_type, brams_total, mem_words_per_cycle, result=[], original_graph=None, gap_approx=False):
