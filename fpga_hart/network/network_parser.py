@@ -207,18 +207,52 @@ class NetworkParser(ModelLayerDescriptor):
 
         return my_dict
 
+    def add_key_and_shift_dict(self, my_dict, key_to_add, key_number):
+        num_keys = len(my_dict.keys())
+        my_dict["part_" + str(num_keys)] = dict()
+
+        for i in range(num_keys, key_number, -1):
+            old_key = "part_" + str(i - 1)
+            new_key = "part_" + str(i)
+            my_dict[new_key] = my_dict[old_key]
+
+        my_dict[key_to_add] = dict()
+
+        return my_dict
+
+    def split_partition(self, partitions, name):
+        part_number = int(name.split("_")[-1])
+        part = partitions[name]
+        layers = part["layers"]
+        num_layers = len(layers)
+
+        assert len(layers) > 1, "Trying to split a partition with only one layer"
+
+        # Add a new partition to the dictionary
+        partitions = self.add_key_and_shift_dict(partitions, "part_" + str(part_number + 1), part_number + 1)
+
+        # Split the partition in two
+        sub_partition_1 = layers[:num_layers // 2]
+        self.update_single_partition(partitions, name, sub_partition_1)
+        sub_partition_2 = layers[num_layers // 2:]
+        self.update_single_partition(partitions, "part_" + str(part_number + 1), sub_partition_2)
+
+        return partitions
+
     def update_single_partition(self, partitions, name, layers):
         graph_new = self.create_graph(layers)
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new)
+        part_validity = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
 
         partitions[name]["layers"] = layers
         partitions[name]["graph"] = graph_new
+        partitions[name]["valid"] = part_validity
         partitions[name]["total_bram"] = bram_util
         partitions[name]["total_dsp"] = dsp_util
         partitions[name]["layers_bram"] = layers_bram
         partitions[name]["branch_bram"] = branch_bram
 
-        return True if bram_util < self.config.max_bram_util and dsp_util < self.config.max_dsp_util else False
+        return part_validity
 
     def update_partitions(self, partitions, part_name, mode="move", direction="prev"):
         part_number = int(part_name.split("_")[-1])
@@ -265,25 +299,27 @@ class NetworkParser(ModelLayerDescriptor):
             assert len(specs["layers"]) > 0, f"Partition {part} has no layers assigned to it."
             if not specs["valid"]:
                 _logger.info(f"Refining partition {part} with {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
-                if True: # Here we should check if the graph can support weights reloading or not
+                
+                for node in nx.topological_sort(specs["graph"]):
+                    hw = specs["graph"].nodes[node]["hw"]
+                    input_shape = hw.input_shape
+                    output_shape = hw.output_shape
+                    print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
+
+                wr_factor = calculate_wr_factor(specs["graph"], self.config.max_bram_util)
+                if wr_factor > 1:
+                    bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(specs["graph"])
+                    specs["valid"] = True
+                    print(f"WR factor for partition {part} is {wr_factor} and BRAM utilization is {bram_util:.2f}")
                     for node in nx.topological_sort(specs["graph"]):
                         hw = specs["graph"].nodes[node]["hw"]
                         input_shape = hw.input_shape
                         output_shape = hw.output_shape
                         print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
-                    wr_factor = calculate_wr_factor(specs["graph"], self.config.max_bram_util)
-                    if wr_factor > 1:
-                        bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(specs["graph"])
-                        specs["valid"] = True
-                        print(f"WR factor for partition {part} is {wr_factor} and BRAM utilization is {bram_util:.2f}")
-                        for node in nx.topological_sort(specs["graph"]):
-                            hw = specs["graph"].nodes[node]["hw"]
-                            input_shape = hw.input_shape
-                            output_shape = hw.output_shape
-                            print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
-                    elif wr_factor == -1:
-                        _logger.error(f"Partition cannot fit in the FPGA even after WR. Splitting it into two partitions.")
-                        exit()
+                elif wr_factor == -1:
+                    _logger.error(f"Partition {part} cannot fit in the FPGA even after WR. Splitting it into two partitions.")
+                    return self.split_partition(partitions, part)
+                    exit()
                 continue
                 part_number = int(part.split("_")[-1])
                 prev_part_name = f"part_{part_number - 1}"
