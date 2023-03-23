@@ -33,6 +33,7 @@ class Pooling3DLayer(BaseLayer3D):
         self.kw = self.kernel_shape[2]
 
         self.channels = self.input_shape[1]
+        self.filters = self.input_shape[1]
 
         self.padding = description["padding"]
         self.stride = description["stride"]
@@ -51,6 +52,7 @@ class Pooling3DLayer(BaseLayer3D):
         self.data_size_in = np.prod(np.array(self.input_shape[1:]))
 
         self.output_shape = output_shape
+        self.filters = self.output_shape[1]
         self.depth_out = self.output_shape[2]
         self.rows_out = self.output_shape[3]
         self.cols_out = self.output_shape[4]
