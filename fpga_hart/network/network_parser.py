@@ -274,6 +274,7 @@ class NetworkParser(ModelLayerDescriptor):
                     wr_factor = calculate_wr_factor(specs["graph"], self.config.max_bram_util)
                     if wr_factor > 1:
                         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(specs["graph"])
+                        specs["valid"] = True
                         print(f"WR factor for partition {part} is {wr_factor} and BRAM utilization is {bram_util:.2f}")
                         for node in nx.topological_sort(specs["graph"]):
                             hw = specs["graph"].nodes[node]["hw"]
@@ -281,7 +282,8 @@ class NetworkParser(ModelLayerDescriptor):
                             output_shape = hw.output_shape
                             print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
                     elif wr_factor == -1:
-                        _logger.warning(f"Partition cannot fit in the FPGA even after WR. Splitting it into two partitions.")
+                        _logger.error(f"Partition cannot fit in the FPGA even after WR. Splitting it into two partitions.")
+                        exit()
                 continue
                 part_number = int(part.split("_")[-1])
                 prev_part_name = f"part_{part_number - 1}"
@@ -353,7 +355,6 @@ class NetworkParser(ModelLayerDescriptor):
             _logger.error("Invalid partitions. Refining...")
             network_partitions = self.refine_partitions(network_partitions)
             self.visualize_partitions(network_partitions)
-            exit()
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
