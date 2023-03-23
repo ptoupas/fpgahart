@@ -266,7 +266,7 @@ def get_off_chip_mem_connections(graph):
             mem_conns["outputs"].append(n)
     return mem_conns["inputs"], mem_conns["outputs"]
 
-def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx):
+def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx, wr_factor=1):
     # branch_edges = get_branch_start_end_points(graph)
 
     # branch_buffer = 0
@@ -334,7 +334,8 @@ def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, wor
         mem_bw_out,
         read_points,
         write_points,
-        gap_approx=gap_approx
+        gap_approx=gap_approx,
+        wr_factor=wr_factor
     )
 
     branch_buffer_new = 0
