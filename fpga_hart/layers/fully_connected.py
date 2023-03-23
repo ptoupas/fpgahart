@@ -37,7 +37,7 @@ class FCLayer(BaseLayer3D):
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
         if self.bias_shape:
-            self.bias_shape = [self.filters]
+            self.bias_shape = [self.dim_out]
 
     def update_layer(self):
         self.full_rate_in = []
