@@ -16,7 +16,7 @@ depth_dist_thresh: 30
 height_dist_thresh: 60
 initial_max_bram_util: 70
 batch_size: 1
-num_reconfig_points: 10
+num_reconfig_points: 5
 allowed_reconfig_layers: ['Conv', 'GlobalAveragePool', 'MaxPool', 'Add', 'Gemm'] # 'Mul',
 min_partition_layers: 1
 max_partition_layers: 30

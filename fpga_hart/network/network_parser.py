@@ -18,7 +18,7 @@ from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.optimizer.optimizer_helper import (
     calculate_wr_factor, get_minimum_resource_utilization,
-    get_worst_case_buffering)
+    get_worst_case_buffering, get_off_chip_mem_connections, add_off_chip_connections)
 from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.platform.platform import Platform
@@ -102,7 +102,7 @@ class NetworkParser(ModelLayerDescriptor):
             partition_specs["graph"] = part_graph
             bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
             
-            partition_specs["valid"] = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
+            partition_specs["valid"] = True if bram_util <= self.config.initial_max_bram_util and dsp_util <= self.config.max_dsp_util else False
             partition_specs["weights_reloading"] = 1
 
             partition_specs["total_bram"] = bram_util
@@ -114,14 +114,17 @@ class NetworkParser(ModelLayerDescriptor):
             model_layers = model_layers[model_layers.index(rp):]
 
         partition_specs = dict()
-        partition_name = f"part_{i+1}"
+        if len(reconfig_points) == 0:
+            partition_name = "part_0"
+        else:
+            partition_name = f"part_{i+1}"
         partition_specs["layers"] = model_layers
 
         part_graph = self.create_graph(model_layers)
         partition_specs["graph"] = part_graph
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
 
-        partition_specs["valid"] = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
+        partition_specs["valid"] = True if bram_util <= self.config.initial_max_bram_util and dsp_util <= self.config.max_dsp_util else False
         partition_specs["weights_reloading"] = 1
 
         partition_specs["total_bram"] = bram_util
@@ -141,8 +144,12 @@ class NetworkParser(ModelLayerDescriptor):
             os.remove(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + fp)
 
         for part, specs in partitions.items():
+            graph = deepcopy(specs["graph"])
+            nodes_in, nodes_out = get_off_chip_mem_connections(graph)
+            _, _ = add_off_chip_connections(
+                graph, nodes_in, nodes_out, self.gap_approx)
             visualize_graph(
-                specs["graph"],
+                graph,
                 os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/throughput/model_graphs/" + part,
                 self.enable_wandb,
                 part,
@@ -158,7 +165,7 @@ class NetworkParser(ModelLayerDescriptor):
             _logger.debug(f"Layer {layer}: BRAM utilization = {bram_util:.2f}, DSP utilization = {dsp_util:.2f}, Pipeline depth = {pipeline_depth}")
             total_bram_util += bram_util
             total_dsp_util += dsp_util
-            if total_bram_util > self.config.max_bram_util or total_dsp_util > self.config.max_dsp_util:
+            if total_bram_util > self.config.initial_max_bram_util or total_dsp_util > self.config.max_dsp_util:
                 _logger.warning(f"Partition BRAM utilization = {total_bram_util:.2f}, DSP utilization = {total_dsp_util:.2f}")
 
         layers_bram_util = deepcopy(total_bram_util)
@@ -250,11 +257,12 @@ class NetworkParser(ModelLayerDescriptor):
         else:
             graph_new = partitions[name]["graph"]
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new, wr_factor=wr_factor)
-        part_validity = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
+        part_validity = True if bram_util <= self.config.initial_max_bram_util and dsp_util <= self.config.max_dsp_util else False
 
         partitions[name]["layers"] = layers
         partitions[name]["graph"] = graph_new
         partitions[name]["valid"] = part_validity
+        partitions[name]["weights_reloading"] = wr_factor
         partitions[name]["total_bram"] = bram_util
         partitions[name]["total_dsp"] = dsp_util
         partitions[name]["layers_bram"] = layers_bram
@@ -307,32 +315,26 @@ class NetworkParser(ModelLayerDescriptor):
             assert len(specs["layers"]) > 0, f"Partition {part} has no layers assigned to it."
             if not specs["valid"]:
                 _logger.info(f"Refining partition {part} with {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
-
-                wr_factor = calculate_wr_factor(specs["graph"], self.config.max_bram_util)
+                
+                wr_factor = calculate_wr_factor(specs["graph"], self.config.initial_max_bram_util)
                 if wr_factor > 1:
+                    _logger.info(f"WR factor for partition {part} is {wr_factor}.")
                     self.update_single_partition(partitions, part, specs["layers"], wr_factor=wr_factor)
-                elif wr_factor == -1:
+                else:
+                    _logger.info(f"Partition {part} cannot fit in the FPGA even after WR. Splitting it into two partitions.")
                     return self.split_partition(partitions, part)
             
         return partitions
 
     def parse(self):
         network_partitions = self.get_partitions()
-        for p, specs in network_partitions.items():
-            print(f"Partition {p} has {len(specs['layers'])} and BRAM utilization of {specs['total_bram']:.2f}")
 
         while not self.validate_partitions(network_partitions):
-            _logger.error("Invalid partitions. Refining...")
             network_partitions = self.refine_partitions(network_partitions)
             self.visualize_partitions(network_partitions)
 
-        for p, specs in network_partitions.items():
-            print(f"Partition {p} has {len(specs['layers'])} and BRAM utilization of {specs['total_bram']:.2f}")
-
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
-        # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
-        # TODO: When spliting we should also check and add the extra inputs that may be needed because of either spliting on branches or because of the ElementWise layers.
-        # TODO: Instead of setting a fixed number of partitions we can start with a valid model partitioning and then we can have a transform that merges or splits partitions based on the available resources and performance.
+        # TODO: After the initialization we should do another check that searching for partitions that can be merges based on the BRAM utilization and the WR factor as well as the types of layers that exist in that partition. In order to merge it to another one we should take into account the BRAM utilization of the other partition and the WR factor.
         # TODO: I dont like the thing that layers partitions and network are not being connected somehow. It would be nice to have a way to connect them and build the network from the partitions and the partitions from the layers.
 
     def create_graph(self, partition: list) -> nx.DiGraph:
