@@ -101,7 +101,9 @@ class NetworkParser(ModelLayerDescriptor):
             part_graph = self.create_graph(current_partition)
             partition_specs["graph"] = part_graph
             bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
+            
             partition_specs["valid"] = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
+            partition_specs["weights_reloading"] = 1
 
             partition_specs["total_bram"] = bram_util
             partition_specs["total_dsp"] = dsp_util
@@ -118,7 +120,9 @@ class NetworkParser(ModelLayerDescriptor):
         part_graph = self.create_graph(model_layers)
         partition_specs["graph"] = part_graph
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(part_graph)
+
         partition_specs["valid"] = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
+        partition_specs["weights_reloading"] = 1
 
         partition_specs["total_bram"] = bram_util
         partition_specs["total_dsp"] = dsp_util
@@ -145,7 +149,7 @@ class NetworkParser(ModelLayerDescriptor):
                 specs["valid"]
             )
 
-    def get_partition_utilization(self, graph):
+    def get_partition_utilization(self, graph, wr_factor=1):
         total_bram_util = 0
         total_dsp_util = 0
         for layer in nx.topological_sort(graph):
@@ -158,7 +162,7 @@ class NetworkParser(ModelLayerDescriptor):
                 _logger.warning(f"Partition BRAM utilization = {total_bram_util:.2f}, DSP utilization = {total_dsp_util:.2f}")
 
         layers_bram_util = deepcopy(total_bram_util)
-        _, min_bram_util = get_worst_case_buffering(deepcopy(graph), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx)
+        _, min_bram_util = get_worst_case_buffering(deepcopy(graph), self.partition_composer, self.platform.mem_words_per_cycle, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.gap_approx, wr_factor=wr_factor)
         branch_buffering_bram_util = deepcopy(min_bram_util)
         total_bram_util += min_bram_util
 
@@ -217,6 +221,7 @@ class NetworkParser(ModelLayerDescriptor):
             my_dict[new_key] = my_dict[old_key]
 
         my_dict[key_to_add] = dict()
+        my_dict["part_" + str(key_number - 1)] = dict()
 
         return my_dict
 
@@ -239,9 +244,12 @@ class NetworkParser(ModelLayerDescriptor):
 
         return partitions
 
-    def update_single_partition(self, partitions, name, layers):
-        graph_new = self.create_graph(layers)
-        bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new)
+    def update_single_partition(self, partitions, name, layers, wr_factor=1):
+        if "graph" not in partitions[name]:
+            graph_new = self.create_graph(layers)
+        else:
+            graph_new = partitions[name]["graph"]
+        bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new, wr_factor=wr_factor)
         part_validity = True if bram_util <= self.config.max_bram_util and dsp_util <= self.config.max_dsp_util else False
 
         partitions[name]["layers"] = layers
@@ -299,87 +307,13 @@ class NetworkParser(ModelLayerDescriptor):
             assert len(specs["layers"]) > 0, f"Partition {part} has no layers assigned to it."
             if not specs["valid"]:
                 _logger.info(f"Refining partition {part} with {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
-                
-                for node in nx.topological_sort(specs["graph"]):
-                    hw = specs["graph"].nodes[node]["hw"]
-                    input_shape = hw.input_shape
-                    output_shape = hw.output_shape
-                    print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
 
                 wr_factor = calculate_wr_factor(specs["graph"], self.config.max_bram_util)
                 if wr_factor > 1:
-                    bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(specs["graph"])
-                    specs["valid"] = True
-                    print(f"WR factor for partition {part} is {wr_factor} and BRAM utilization is {bram_util:.2f}")
-                    for node in nx.topological_sort(specs["graph"]):
-                        hw = specs["graph"].nodes[node]["hw"]
-                        input_shape = hw.input_shape
-                        output_shape = hw.output_shape
-                        print(f"Layer {node}: input shape = {input_shape} - output shape =  {output_shape}")
+                    self.update_single_partition(partitions, part, specs["layers"], wr_factor=wr_factor)
                 elif wr_factor == -1:
-                    _logger.error(f"Partition {part} cannot fit in the FPGA even after WR. Splitting it into two partitions.")
                     return self.split_partition(partitions, part)
-                    exit()
-                continue
-                part_number = int(part.split("_")[-1])
-                prev_part_name = f"part_{part_number - 1}"
-                next_part_name = f"part_{part_number + 1}"
-
-                if part_number == 0:
-                    direction = "next"
-                elif part_number == len(partitions) - 1:
-                    direction = "prev"
-                else:
-                    direction = "next" if partitions[next_part_name]["total_bram"] < partitions[prev_part_name]["total_bram"] else "prev"
-
-                layers_count, num_layers = self.count_layer_types(specs["graph"])
-
-                if "Conv" not in layers_count and "MaxPool" not in layers_count and "Gemm" not in layers_count:
-                    _logger.error(f"Partition {part} does not contain any convolutional or fully connected layers. Merge the partition into another one.")
-                    return self.update_partitions(partitions, part, mode="merge", direction=direction)
-                elif num_layers <= 2 and specs["total_bram"] < self.config.max_bram_util - 45:
-                    _logger.error(f"Partition {part} contains only {num_layers} layers with BRAM utilization = {specs['total_bram']}. Merge the partition into another one.")
-                    return self.update_partitions(partitions, part, mode="merge", direction=direction)
-
-                if specs["total_bram"] > self.config.max_bram_util:
-                    _logger.warning(f"{part} exceeds BRAM limit")
-
-                    if part_number == 0:
-                        next_part = partitions[next_part_name]
-
-                        if next_part["total_bram"] >= self.config.max_bram_util:
-                            _logger.error(f"Next partition {next_part_name} also exceeds BRAM limit. Split the current partition into two.")
-                        elif next_part["total_bram"] < self.config.max_bram_util - 25:
-                            _logger.warning(f"Next partition {next_part_name} is fine. Move layers from the current partition to the next one.")
-                            return self.update_partitions(partitions, part, mode="move", direction=direction)
-
-                    elif part_number == len(partitions) - 1:
-                        prev_part = partitions[prev_part_name]
-
-                        if prev_part["total_bram"] >= self.config.max_bram_util:
-                            _logger.error(f"Previous partition {prev_part_name} also exceeds BRAM limit. Split the current partition into two.")
-                        elif prev_part["total_bram"] < self.config.max_bram_util - 25:
-                            _logger.warning(f"Previous partition {prev_part_name} is fine. Move layers from the current partition to the next one.")
-                            return self.update_partitions(partitions, part, mode="move", direction=direction)
-                    else:
-                        prev_part = partitions[prev_part_name]
-                        next_part = partitions[next_part_name]
-
-                        if prev_part["total_bram"] > self.config.max_bram_util and next_part["total_bram"] > self.config.max_bram_util:
-                            _logger.error(f"Previous {prev_part_name} and Next {next_part_name} partition also exceeds BRAM limit. Split the current partition into two.")
-                        elif prev_part["total_bram"] < self.config.max_bram_util - 25 and next_part["total_bram"] > self.config.max_bram_util:
-                            _logger.warning(f"Previous {prev_part_name} partition is fine but Next {next_part_name} partition exceeds BRAM limit. Move layers from the current partition to the previous one.")
-                            return self.update_partitions(partitions, part, mode="move", direction=direction)
-                        elif prev_part["total_bram"] > self.config.max_bram_util and next_part["total_bram"] < self.config.max_bram_util - 25:
-                            _logger.warning(f"Previous {prev_part_name} partition exceeds BRAM limit but Next {next_part_name} partition is fine. Move layers from the current partition to the next one.")
-                            return self.update_partitions(partitions, part, mode="move", direction=direction)
-                        else:
-                            if prev_part["total_bram"] < next_part["total_bram"] and prev_part["total_bram"] < self.config.max_bram_util - 25:
-                                _logger.warning(f"Choose to move layers from the current partition to the previous {prev_part_name} one since it has less BRAM utilization.")
-                                return self.update_partitions(partitions, part, mode="move", direction=direction)
-                            elif next_part["total_bram"] < prev_part["total_bram"] and next_part["total_bram"] < self.config.max_bram_util - 25:
-                                _logger.warning(f"Choose to move layers from the current partition to the next {next_part_name} one since it has less BRAM utilization.")
-                                return self.update_partitions(partitions, part, mode="move", direction=direction)
+            
         return partitions
 
     def parse(self):
@@ -391,6 +325,9 @@ class NetworkParser(ModelLayerDescriptor):
             _logger.error("Invalid partitions. Refining...")
             network_partitions = self.refine_partitions(network_partitions)
             self.visualize_partitions(network_partitions)
+
+        for p, specs in network_partitions.items():
+            print(f"Partition {p} has {len(specs['layers'])} and BRAM utilization of {specs['total_bram']:.2f}")
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: We should always have a check that validates the partition and checks whether the partition weights are within the BRAM limits. Otherwise, we are going to need the wieghts reloaded from the DRAM.
