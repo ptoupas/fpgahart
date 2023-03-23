@@ -75,14 +75,11 @@ def get_extra_mem_connections(graph, node_list):
                     extra_inputs.append(node)
     return extra_inputs, extra_outputs
 
-def update_nodes_shapes(graph, wr_f, old_filters, old_layer):
+def update_nodes_shapes(graph, wr_f, old_filters, wr_layers):
     new_filters = math.floor(old_filters/wr_f)
-    update_valid = False
 
     for layer in nx.topological_sort(graph):
-        if layer == old_layer:
-            update_valid = True
-        if update_valid:
+        if layer in wr_layers:
             hw = graph.nodes[layer]["hw"]
             new_shape_out = deepcopy(hw.output_shape)
             new_shape_out[1] = new_filters
@@ -124,8 +121,7 @@ def calculate_wr_factor(graph, max_BRAM_util):
         if (total_bram_util + bram_util) > max_BRAM_util:
             initial_filters = deepcopy(hw.filters)
             for f in range(1,initial_filters):
-            # for f in utils.get_factors(initial_filters)[1:]:
-                update_nodes_shapes(graph=graph, wr_f=f, old_filters=initial_filters, old_layer=layer)
+                update_nodes_shapes(graph=graph, wr_f=f, old_filters=initial_filters, wr_layers=wr_layers)
                 bram_util_wr, _, _, _ = get_minimum_resource_utilization(hw)
                 if (total_bram_util + bram_util_wr) < max_BRAM_util:
                     weights_reloading = f if initial_filters%f == 0 else (f+1)
