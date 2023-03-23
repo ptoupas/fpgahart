@@ -4,6 +4,7 @@ from collections import deque
 import networkx as nx
 import numpy as np
 
+from fpga_hart import _logger
 from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.base_layer_3d import BaseLayer3D
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
@@ -748,7 +749,7 @@ class PartitionComposer(BaseLayer3D):
                     wr_kernel_shape = [hw.filters, hw.channels] + hw.kernel_shape
                     conv_nodes_count += 1
             if conv_nodes_count > 1:
-                raise ValueError(f"Partition with weights reloading should not have more than 1 Conv layers. Currently {conv_nodes_count}.")
+                _logger.warning(f"Partition with weights reloading having more than 1 Conv layers. Currently {conv_nodes_count}.")
         else:
             wr_kernel_shape = [1, 1, 1, 1, 1]
 
