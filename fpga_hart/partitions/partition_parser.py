@@ -263,8 +263,16 @@ class PartitionParser(ModelLayerDescriptor):
                 )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
+            
+            if self.layers[layer]["branching"]:
+                layer_mode = "split"
+            elif layer_type == "ElementWise":
+                layer_mode = "merge"
+            else:
+                layer_mode = "sequential"
+
             # TODO: use the LAYER_TYPE enum for the layer type param
-            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
+            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type, layer_mode=layer_mode)
         _logger.info("*" * 40)
 
         edges = []
