@@ -236,7 +236,7 @@ class NetworkParser(ModelLayerDescriptor):
 
         return my_dict
 
-    def merge_partition(self, partitions, name, direction):
+    def merge_partition(self, partitions, name, direction, extra_bram_allowed=0):
         part_number = int(name.split("_")[-1])
 
         if direction == "prev":
@@ -244,25 +244,26 @@ class NetworkParser(ModelLayerDescriptor):
             merge_part = f"part_{merge_part_number}"
             if partitions[merge_part].pop("graph", None) is None:
                 raise ValueError(f"Cannot find graph for partition {merge_part}")
-            self.update_single_partition(partitions, merge_part, partitions[merge_part]["layers"] + partitions[name]["layers"])
+            self.update_single_partition(partitions, merge_part, partitions[merge_part]["layers"] + partitions[name]["layers"], extra_bram_allowed=extra_bram_allowed)
             self.remove_key_and_shift_dict(partitions, name, part_number)
         elif direction == "next":
             merge_part_number = part_number + 1
             merge_part = f"part_{merge_part_number}"
             if partitions[name].pop("graph", None) is None:
                 raise ValueError(f"Cannot find graph for partition {name}")
-            self.update_single_partition(partitions, name, partitions[name]["layers"] + partitions[merge_part]["layers"])
+            self.update_single_partition(partitions, name, partitions[name]["layers"] + partitions[merge_part]["layers"], extra_bram_allowed=extra_bram_allowed)
             self.remove_key_and_shift_dict(partitions, merge_part, merge_part_number)
 
         return partitions
 
-    def update_single_partition(self, partitions, name, layers, wr_factor=1):
+    def update_single_partition(self, partitions, name, layers, wr_factor=1, extra_bram_allowed=0):
         if "graph" not in partitions[name]:
             graph_new = self.create_graph(layers)
+            wr_factor = calculate_wr_factor(graph_new, self.config.initial_max_bram_util + extra_bram_allowed)
         else:
             graph_new = partitions[name]["graph"]
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new, wr_factor=wr_factor)
-        part_validity = True if bram_util <= self.config.initial_max_bram_util and dsp_util <= self.config.max_dsp_util else False
+        part_validity = True if bram_util <= self.config.initial_max_bram_util + extra_bram_allowed and dsp_util <= self.config.max_dsp_util else False
 
         partitions[name]["layers"] = layers
         partitions[name]["graph"] = graph_new
@@ -281,31 +282,26 @@ class NetworkParser(ModelLayerDescriptor):
                 return name
         return None
 
-    def get_partition_to_merge(self, partitions, name):
+    def get_partition_to_merge(self, partitions, name, extra_bram_allowed):
         part_number = int(name.split("_")[-1])
         part_bram_util = partitions[name]["total_bram"]
         part_wr_factor = partitions[name]["weights_reloading"]
         direction = None
-        fix_wr_factor = False
 
         if part_number == 0:
             next_part_name = f"part_{part_number + 1}"
             next_part_bram_util = partitions[next_part_name]["total_bram"]
             next_part_wr_factor = partitions[next_part_name]["weights_reloading"]
 
-            if part_bram_util + next_part_bram_util < self.config.initial_max_bram_util + 10:
+            if part_bram_util + next_part_bram_util < self.config.initial_max_bram_util + extra_bram_allowed:
                 direction = "next"
-                if not (part_wr_factor == 1):
-                    fix_wr_factor = True
         elif part_number == len(partitions.keys()) - 1:
             prev_part_name = f"part_{part_number - 1}"
             prev_part_bram_util = partitions[prev_part_name]["total_bram"]
             prev_part_wr_factor = partitions[prev_part_name]["weights_reloading"]
 
-            if part_bram_util + prev_part_bram_util < self.config.initial_max_bram_util + 10:
+            if part_bram_util + prev_part_bram_util < self.config.initial_max_bram_util + extra_bram_allowed:
                 direction = "prev"
-                if not (prev_part_wr_factor == 1):
-                    fix_wr_factor = True
         else:
             prev_part_name = f"part_{part_number - 1}"
             prev_part_bram_util = partitions[prev_part_name]["total_bram"]
@@ -315,16 +311,12 @@ class NetworkParser(ModelLayerDescriptor):
             next_part_bram_util = partitions[next_part_name]["total_bram"]
             next_part_wr_factor = partitions[next_part_name]["weights_reloading"]
 
-            if (part_bram_util + prev_part_bram_util < part_bram_util + prev_part_bram_util) and (part_bram_util + prev_part_bram_util < self.config.initial_max_bram_util + 10):
+            if (part_bram_util + prev_part_bram_util <= part_bram_util + next_part_bram_util) and (part_bram_util + prev_part_bram_util < self.config.initial_max_bram_util + extra_bram_allowed):
                 direction = "prev"
-                if not (part_wr_factor == prev_part_wr_factor):
-                    fix_wr_factor = True
-            elif (part_bram_util + next_part_bram_util < part_bram_util + prev_part_bram_util) and (part_bram_util + next_part_bram_util < self.config.initial_max_bram_util + 10):
+            elif (part_bram_util + next_part_bram_util < part_bram_util + prev_part_bram_util) and (part_bram_util + next_part_bram_util < self.config.initial_max_bram_util + extra_bram_allowed):
                 direction = "next"
-                if not (part_wr_factor == next_part_wr_factor):
-                    fix_wr_factor = True
 
-        return direction, fix_wr_factor
+        return direction
 
     # def count_layer_types(self, graph):
 
@@ -404,27 +396,28 @@ class NetworkParser(ModelLayerDescriptor):
             network_partitions = self.refine_partitions(network_partitions)
 
         for part, specs in network_partitions.items():
-            print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
+            print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
 
         blacklisted_parts = []
+        merge_extra_bram_allowed = 10
         cm_part = self.get_candidate_merge_partition(network_partitions, blacklisted_parts)
         while cm_part is not None:
-            direction, fix_wr_factor = self.get_partition_to_merge(network_partitions, cm_part)
+            direction = self.get_partition_to_merge(network_partitions, cm_part, merge_extra_bram_allowed)
+            _logger.error(f"Merging {cm_part} with {len(network_partitions[cm_part]['layers'])} number of layers into {direction} partition")
             if direction is not None:
-                print(f"Partition {cm_part}: with {network_partitions[cm_part]['total_bram']} BRAM utilization and {len(network_partitions[cm_part]['layers'])} number of layers, wr factor {network_partitions[cm_part]['weights_reloading']}. Merging with {direction} partition with the wr factor fix = {fix_wr_factor}. Merging with {direction} partition.")
-                if fix_wr_factor:
-                    _logger.error("Fixing the WR factor is not implemented yet.")
-                    exit()
-                else:
-                    network_partitions = self.merge_partition(network_partitions, cm_part, direction)
-                    for part, specs in network_partitions.items():
-                        print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
+                network_partitions = self.merge_partition(network_partitions, cm_part, direction, extra_bram_allowed=merge_extra_bram_allowed)
+                blacklisted_parts.clear()
+                for part, specs in network_partitions.items():
+                    print(f"(MERGE) Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
             else:
                 blacklisted_parts.append(cm_part)
             cm_part = self.get_candidate_merge_partition(network_partitions, blacklisted_parts)
 
         assert self.validate_partitions(network_partitions), "Partitions are not valid after merging."
         self.visualize_partitions(network_partitions)
+
+        for part, specs in network_partitions.items():
+            print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
         # TODO: After the initialization we should do another check that searching for partitions that can be merges based on the BRAM utilization and the WR factor as well as the types of layers that exist in that partition. In order to merge it to another one we should take into account the BRAM utilization of the other partition and the WR factor.
