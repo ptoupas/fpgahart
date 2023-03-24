@@ -15,8 +15,8 @@ DEBUG = False
 
 
 class SqueezeExcitationLayer(BaseLayer3D):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         self.branching = description["branching"]
         if self.branching:
@@ -27,18 +27,18 @@ class SqueezeExcitationLayer(BaseLayer3D):
         self.sequencial = {}
         for n_se, l_se in description["primitive_ops"].items():
             if l_se["operation"] == "GlobalAveragePool":
-                self.sequencial[n_se] = GAP3DLayer(max_DSP_util, max_BRAM_util, l_se)
+                self.sequencial[n_se] = GAP3DLayer(max_DSP_util, max_BRAM_util, l_se, platform)
             elif l_se["operation"] == "Conv":
                 self.sequencial[n_se] = Convolutional3DLayer(
-                    max_DSP_util, max_BRAM_util, l_se
+                    max_DSP_util, max_BRAM_util, l_se, platform
                 )
             elif l_se["operation"] == "Relu" or l_se["operation"] == "Sigmoid":
                 self.sequencial[n_se] = Activation3DLayer(
-                    max_DSP_util, max_BRAM_util, l_se
+                    max_DSP_util, max_BRAM_util, l_se, platform
                 )
             elif l_se["operation"] == "Mul":
                 self.sequencial[n_se] = ElementWise3DLayer(
-                    max_DSP_util, max_BRAM_util, l_se
+                    max_DSP_util, max_BRAM_util, l_se, platform
                 )
         self.num_layers = len(self.sequencial) + 2
 

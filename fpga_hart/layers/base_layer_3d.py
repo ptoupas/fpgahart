@@ -9,7 +9,7 @@ from fpga_hart.platform.platform import Platform
 
 
 class BaseLayer3D:
-    def __init__(self, max_DSP_util=95.0, max_BRAM_util=95.0, data_format="NHWDC"):
+    def __init__(self, max_DSP_util=95.0, max_BRAM_util=95.0, platform=None, data_format="NHWDC"):
         assert (
             data_format == "NHWDC" or data_format == "NCHWD"
         ), "Wrong data format. Accepted formats are 'NHWDC' or 'NCHWD'"
@@ -17,7 +17,8 @@ class BaseLayer3D:
 
         self.data_format = data_format
 
-        self.platform = Platform()
+        assert platform is not None, "FPGA platform must be defined (BaseLayer3D)"
+        self.platform = platform
 
         self.word_length = self.platform.word_length
         self.clock_freq = self.platform.clock_freq

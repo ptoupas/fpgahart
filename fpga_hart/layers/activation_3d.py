@@ -12,8 +12,8 @@ DEBUG = False
 
 
 class Activation3DLayer(BaseLayer3D):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         self.op_type = description["operation"]
         self.input_shape = description["shape_in"][0]

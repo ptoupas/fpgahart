@@ -3,14 +3,16 @@ import os
 
 
 class Platform:
-    def __init__(self) -> None:
-        self.get_fpga_specs()
+    def __init__(self, device_name) -> None:
+        self.get_fpga_specs(device_name)
 
-    def get_fpga_specs(self):
+    def get_fpga_specs(self, device_name):
         config = configparser.ConfigParser()
         config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
 
-        self.fpga_device = config.get("FPGA Device", "fpga_device")
+        available_fpga_devices = config.get("FPGA Device", "fpga_devices")
+        self.fpga_device = device_name.upper()
+        assert self.fpga_device in available_fpga_devices, f"{self.fpga_device} is not one of the supported FPGA devices"
 
         self.word_length = int(config.get(self.fpga_device, "word_length"))
         self.word_bytes = self.word_length / 8

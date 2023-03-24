@@ -61,7 +61,7 @@ def initialize_optimizer_partition(self, graph, read_points, write_points, wr_fa
 def run_optimizer_partition(self):
 
     #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
-    sub_partitions = check_partition_fitting(self.graph, self.partition_composer, 70, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.mem_words_per_cycle, [], gap_approx=self.gap_approx)
+    sub_partitions = check_partition_fitting(self.graph, self.partition_composer, self.config.initial_max_bram_util, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.mem_words_per_cycle, [], gap_approx=self.gap_approx)
     extra_reconfigurations = len(sub_partitions) - 1
     print(f'Splitting original partition into {len(sub_partitions)} sub-partitions. A number of {extra_reconfigurations} extra reconfiguration(s) will be added.')
 

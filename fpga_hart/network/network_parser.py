@@ -37,6 +37,7 @@ class NetworkParser(ModelLayerDescriptor):
     min_partition_layers: int
     max_partition_layers: int
     gap_approx: bool
+    platform: Platform
     config: wandb.Config
     enable_wandb: bool
 
@@ -44,10 +45,8 @@ class NetworkParser(ModelLayerDescriptor):
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
 
-        self.platform = Platform()
-
         self.partition_composer = PartitionComposer(
-            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util
+            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util, platform=self.platform
         )
 
     def get_reconfig_points(self):
@@ -441,6 +440,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
@@ -448,6 +448,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "MaxPool" or self.layers[layer]["operation"] == "AveragePool":
@@ -455,6 +456,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "Pooling"
             elif (
@@ -466,6 +468,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "Activation"
             elif (
@@ -476,6 +479,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "ElementWise"
             elif (
@@ -487,6 +491,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
             elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
@@ -494,6 +499,7 @@ class NetworkParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
             else:
                 assert False, "{} operation in layer {} is not supported".format(

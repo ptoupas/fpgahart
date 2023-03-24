@@ -27,6 +27,12 @@ def parse_args():
         help="name of the HAR model",
     )
     parser.add_argument(
+        "device_name",
+        choices=["zc706", "zcu104-106", "zcu102", "vc707", "vc709", "vus440"],
+        type=str,
+        help="name of the FPGA device",
+    )
+    parser.add_argument(
         "type",
         choices=["network", "partition", "layer"],
         type=str,
@@ -78,7 +84,7 @@ def parse_args():
 def optimizer() -> None:
     args = parse_args()
 
-    platform = Platform()
+    platform = Platform(args.device_name)
 
     project_name = f"fpga-hart-{args.model_name}-{args.type}-{args.target}"
 
@@ -115,6 +121,7 @@ def optimizer() -> None:
             min_partition_layers=config.min_partition_layers,
             max_partition_layers=config.max_partition_layers,
             gap_approx=args.gap_approx,
+            platform=platform,
             config=config,
             enable_wandb=args.enable_wandb,
         )
@@ -130,6 +137,7 @@ def optimizer() -> None:
             gap_approx=args.gap_approx,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
+            platform=platform,
             config=config,
             enable_wandb=args.enable_wandb,
         )
@@ -146,6 +154,7 @@ def optimizer() -> None:
             se_block=args.se_block,
             singlethreaded=args.singlethreaded,
             per_layer_plot=args.plot_layers,
+            platform=platform,
             config=config,
             enable_wandb=args.enable_wandb,
         )

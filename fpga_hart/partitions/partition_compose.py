@@ -24,8 +24,8 @@ DEBUG = False
 
 
 class PartitionComposer(BaseLayer3D):
-    def __init__(self, max_DSP_util, max_BRAM_util):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+    def __init__(self, max_DSP_util, max_BRAM_util, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
         self.preliminary_branch_depth = {}
 
     def update_layer(self):

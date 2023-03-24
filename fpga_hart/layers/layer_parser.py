@@ -13,16 +13,15 @@ from fpga_hart.utils import utils
 
 @dataclass
 class LayerParser(ModelLayerDescriptor):
+    singlethreaded: bool
+    per_layer_plot: bool
+    platform: Platform
     config: wandb.Config
-    singlethreaded: bool = False
-    per_layer_plot: bool = False
-    enable_wandb: bool = False
+    enable_wandb: bool
 
     def __post_init__(self) -> None:
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
-
-        self.platform = Platform()
 
         if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)):
             os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name))

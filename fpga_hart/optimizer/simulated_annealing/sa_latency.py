@@ -314,27 +314,27 @@ def generate_building_blocks_config(
 
             if "Conv" in bb:
                 bb_setup[bb]["hw"] = Convolutional3DLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
             if "Pooling" in bb:
                 bb_setup[bb]["hw"] = Pooling3DLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
             elif bb == "Activation":
                 bb_setup[bb]["hw"] = Activation3DLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
             elif bb == "GlobalAveragePool":
                 bb_setup[bb]["hw"] = GAP3DLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
             elif bb == "ElementWise":
                 bb_setup[bb]["hw"] = ElementWise3DLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
             elif bb == "Gemm":
                 bb_setup[bb]["hw"] = FCLayer(
-                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor
+                    self.config.max_dsp_util, self.config.max_bram_util, bb_descriptor, self.platform
                 )
 
             if "Conv" in bb:

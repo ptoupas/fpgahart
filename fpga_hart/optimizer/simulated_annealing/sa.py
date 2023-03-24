@@ -68,7 +68,7 @@ class SimulatedAnnealing():
         self.freeze_param = False
 
         self.partition_composer = PartitionComposer(
-            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util
+            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util, platform=self.platform
         )
 
     from fpga_hart.optimizer.simulated_annealing.sa_latency import (

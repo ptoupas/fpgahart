@@ -34,7 +34,7 @@ def layer_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ) -> None:
-    platform = Platform()
+
     if description["operation"] == "Conv":
         conv_design_points(
             name, description, config, platform, model_file, report_dict, singlethreaded
@@ -85,7 +85,7 @@ def conv_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     if conv.depthwise:
         convtype = "DepthWise"
@@ -262,7 +262,7 @@ def pooling_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    pool = Pooling3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    pool = Pooling3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     op_type = pool.op_type
 
@@ -410,7 +410,7 @@ def batchnorm_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    bn = BatchNorm3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    bn = BatchNorm3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     # coarse_inout = utils.get_factors(bn.channels) / np.int32(bn.channels)
 
@@ -546,7 +546,7 @@ def gap_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    gap = GAP3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    gap = GAP3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     # coarse_inout = utils.get_factors(gap.channels) / np.int32(gap.channels)
 
@@ -682,7 +682,7 @@ def activation_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    activ = Activation3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    activ = Activation3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     # coarse_inout = utils.get_factors(activ.channels) / np.int32(activ.channels)
 
@@ -818,7 +818,7 @@ def se_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    se = SqueezeExcitationLayer(config.max_dsp_util, config.max_bram_util, description)
+    se = SqueezeExcitationLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     # layers_in_shape = []
     # layers_out_shape = []
@@ -1010,7 +1010,7 @@ def elemwise_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    elem = ElementWise3DLayer(config.max_dsp_util, config.max_bram_util, description)
+    elem = ElementWise3DLayer(config.max_dsp_util, config.max_bram_util, description, platform)
 
     # coarse_inout = utils.get_factors(elem.channels_1) / np.int32(elem.channels_1)
 
@@ -1150,7 +1150,7 @@ def fc_design_points(
     report_dict: dict,
     singlethreaded: bool,
 ):
-    fc = FCLayer(config.max_dsp_util, config.max_bram_util, description)
+    fc = FCLayer(config.max_dsp_util, config.max_bram_util, description, platform)
     description_ = {
         "operation": "Conv",
         "shape_in": [[1, description["kernel"][0], 1, 1, 1]],
@@ -1165,7 +1165,7 @@ def fc_design_points(
         "groups": 1,
         "dilation": [1, 1, 1],
     }
-    fc_as_conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description_)
+    fc_as_conv = Convolutional3DLayer(config.max_dsp_util, config.max_bram_util, description_, platform)
 
     graph = nx.DiGraph()
     graph.add_node(name, type=description["operation"], hw=fc)

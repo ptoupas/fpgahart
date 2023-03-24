@@ -34,6 +34,7 @@ class PartitionParser(ModelLayerDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
+    platform: Platform
     config: wandb.Config
     enable_wandb: bool
 
@@ -44,7 +45,6 @@ class PartitionParser(ModelLayerDescriptor):
         # _logger.setLevel(level=logging.DEBUG)
 
         self.partitions = self.create_partitions(self.layers)
-        self.platform = Platform()
 
         columns = [
             "Partition Name",
@@ -182,6 +182,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
@@ -189,6 +190,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "MaxPool" or self.layers[layer]["operation"] == "AveragePool":
@@ -196,6 +198,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "Pooling"
             elif (
@@ -207,6 +210,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "Activation"
             elif (
@@ -217,6 +221,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
                 layer_type = "ElementWise"
             elif (
@@ -228,6 +233,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
             elif self.layers[layer]["operation"] == "SqueezeExcitation":
                 layer_type = self.layers[layer]["operation"]
@@ -235,6 +241,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
             elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
@@ -242,6 +249,7 @@ class PartitionParser(ModelLayerDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform
                 )
             else:
                 assert False, "{} operation in layer {} is not supported".format(
