@@ -2,14 +2,15 @@ import os
 from collections import Counter, deque
 
 import networkx as nx
+import scienceplots
 from matplotlib import pyplot as plt
 
 from fpga_hart import _logger
 from fpga_hart.optimizer.simulated_annealing.sa import SimulatedAnnealing
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import visualize_graph, get_nodes_sorted
+from fpga_hart.utils.graph_manipulation import (get_nodes_sorted,
+                                                visualize_graph)
 
-import scienceplots
 plt.style.use(["science", "ieee", "grid"])
 
 def create_partitions(self, layers: dict) -> list:
@@ -160,10 +161,10 @@ def create_partitions(self, layers: dict) -> list:
         layers_list = list(layers.keys())
         final_layers.append(layers_list)
         return final_layers
-    elif self.model_name == "r2plus1d":
+    elif "r2plus1d" in self.model_name:
         layer_type_1 = ["Conv", "Relu", "Conv", "Relu", "MaxPool", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
         layer_type_2 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Add"]
-        layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Relu", "Conv", "Add"]
+        layer_type_3 = ["Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Conv", "Conv", "Add"]
         layer_type_4 = ["Relu", "GlobalAveragePool", "Gemm"]
         layer_queue = deque(maxlen=13)
         layer_queue_operations = deque(maxlen=13)
@@ -174,8 +175,8 @@ def create_partitions(self, layers: dict) -> list:
                 final_layers.append(list(layer_queue))
             elif list(layer_queue_operations)[4:] == layer_type_2:
                 final_layers.append(list(layer_queue)[4:])
-            elif list(layer_queue_operations)[1:] == layer_type_3:
-                final_layers.append(list(layer_queue)[1:])
+            elif list(layer_queue_operations)[3:] == layer_type_3:
+                final_layers.append(list(layer_queue)[3:])
             elif list(layer_queue_operations)[10:] == layer_type_4:
                 final_layers.append(list(layer_queue)[10:])
         return final_layers
