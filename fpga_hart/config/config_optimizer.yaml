@@ -14,8 +14,8 @@ use_previous_config: True
 chan_dist_thresh: 60
 depth_dist_thresh: 30
 height_dist_thresh: 60
-initial_max_bram_util: 40
-merge_bram_threshold: 20
+initial_max_bram_util: 25
+merge_bram_threshold: 15
 batch_size: 1
 num_reconfig_points: 5
 allowed_reconfig_layers: ['Conv', 'GlobalAveragePool', 'MaxPool', 'Add', 'Gemm'] # 'Mul',
