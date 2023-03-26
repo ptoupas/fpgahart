@@ -2,7 +2,7 @@ simulatedAnnealing:
   t_min: 0.000001 #1e-6
   t_max: 10
   iterationPerTemp: 10
-  cooling_rate: 0.975
+  cooling_rate: 0.98
   best_of_iter: 1
 max_dsp_util: 95
 max_bram_util: 95
