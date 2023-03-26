@@ -610,3 +610,13 @@ def get_branch_edges(graph):
         branch_edges.append(list(graph.in_edges(mrg)))
 
     return branch_edges
+
+def remove_off_chip_mem_connections(graph):
+    nodes_to_remove = []
+    for node in graph.nodes():
+        if graph.nodes[node]["type"] == "mem_in" or graph.nodes[node]["type"] == "mem_out":
+            nodes_to_remove.append(node)
+
+    graph.remove_nodes_from(nodes_to_remove)
+
+    return graph

@@ -224,6 +224,8 @@ class PartitionComposer(BaseLayer3D):
             write_mem_points
         ), "Output memory break points and memory configuration does not match."
 
+        assert wr_factor >= 1, "Weights reloading factor must be at least 1."
+
         self.update_layer()
 
         off_chip_mem_in = deque()

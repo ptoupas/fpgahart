@@ -50,7 +50,7 @@ class SimulatedAnnealing():
         self.branch_mem = branch_mem
 
         # Simulate Annealing Variables
-        self.k = sc.Boltzmann
+        self.k = 50 #sc.Boltzmann
         self.t_min = self.config.simulatedAnnealing["t_min"]
         self.t_max = self.config.simulatedAnnealing["t_max"]
         self.cooling_rate = self.config.simulatedAnnealing["cooling_rate"]

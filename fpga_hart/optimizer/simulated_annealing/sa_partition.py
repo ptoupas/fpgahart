@@ -143,7 +143,7 @@ def run_optimizer_partition(self):
                             copy.deepcopy(new_dp_info),
                         )
                     else:
-                        if random.uniform(0, 1) < math.exp(cost_diff / current_temp):
+                        if random.uniform(0, 1) < math.exp(cost_diff / (current_temp * self.k)):
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
                             solution_mem, solution_dp = (

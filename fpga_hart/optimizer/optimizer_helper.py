@@ -115,6 +115,10 @@ def calculate_wr_factor(graph, max_BRAM_util):
         bram_util, _, _, _ = get_minimum_resource_utilization(hw)
         total_bram_util += bram_util
 
+    if total_bram_util > max_BRAM_util:
+        _logger.error(f"Partition does not fit in the device even after weights reloading with layers: {list(nx.topological_sort(graph))}")
+        return -1
+
     for layer in wr_layers:
         hw = graph.nodes[layer]["hw"]
         bram_util, _, _, _ = get_minimum_resource_utilization(hw)
