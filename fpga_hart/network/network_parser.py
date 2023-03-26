@@ -438,7 +438,7 @@ class NetworkParser(ModelLayerDescriptor):
             print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
 
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
-        # TODO: After the initialization we should do another check that searching for partitions that can be merges based on the BRAM utilization and the WR factor as well as the types of layers that exist in that partition. In order to merge it to another one we should take into account the BRAM utilization of the other partition and the WR factor.
+        # TODO: SOS! During the WR calculation the shapes of the layers inside the partition are being changed. This has to be taken into consideration when merging spliting or moving layers between partitions where the WR factor is greater than 1.
         # TODO: I dont like the thing that layers partitions and network are not being connected somehow. It would be nice to have a way to connect them and build the network from the partitions and the partitions from the layers.
 
     def create_graph(self, partition: list) -> nx.DiGraph:
