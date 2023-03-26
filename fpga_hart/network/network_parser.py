@@ -186,7 +186,7 @@ class NetworkParser(ModelLayerDescriptor):
                 raise ValueError(f"Layer {origin_layer} not found in any partition")
 
         for part in partitions.values():
-            if not part["valid"] or len(part["layers"]) < 1:
+            if not part["valid"] or len(part["layers"]) < 1 or part["weights_reloading"] == -1:
                 return False
 
         return True
@@ -218,9 +218,14 @@ class NetworkParser(ModelLayerDescriptor):
 
         # Split the partition in two
         sub_partition_1 = layers[:num_layers // 2]
-        self.update_single_partition(partitions, name, sub_partition_1)
+        part_1_valid = self.update_single_partition(partitions, name, sub_partition_1)
         sub_partition_2 = layers[num_layers // 2:]
-        self.update_single_partition(partitions, "part_" + str(part_number + 1), sub_partition_2)
+        part_2_valid = self.update_single_partition(partitions, "part_" + str(part_number + 1), sub_partition_2)
+
+        if not part_1_valid:
+            partitions = self.split_partition(partitions, name)
+        if not part_2_valid:
+            partitions = self.split_partition(partitions, "part_" + str(part_number + 1))
 
         return partitions
 
@@ -244,24 +249,33 @@ class NetworkParser(ModelLayerDescriptor):
             merge_part = f"part_{merge_part_number}"
             if partitions[merge_part].pop("graph", None) is None:
                 raise ValueError(f"Cannot find graph for partition {merge_part}")
-            self.update_single_partition(partitions, merge_part, partitions[merge_part]["layers"] + partitions[name]["layers"], extra_bram_allowed=extra_bram_allowed)
+            valid_part = self.update_single_partition(partitions, merge_part, partitions[merge_part]["layers"] + partitions[name]["layers"], extra_bram_allowed=extra_bram_allowed)
             self.remove_key_and_shift_dict(partitions, name, part_number)
         elif direction == "next":
             merge_part_number = part_number + 1
             merge_part = f"part_{merge_part_number}"
             if partitions[name].pop("graph", None) is None:
                 raise ValueError(f"Cannot find graph for partition {name}")
-            self.update_single_partition(partitions, name, partitions[name]["layers"] + partitions[merge_part]["layers"], extra_bram_allowed=extra_bram_allowed)
+            valid_part = self.update_single_partition(partitions, name, partitions[name]["layers"] + partitions[merge_part]["layers"], extra_bram_allowed=extra_bram_allowed)
             self.remove_key_and_shift_dict(partitions, merge_part, merge_part_number)
+
+        assert valid_part, f"Invalid partition after merging part {name} with part {merge_part}"
 
         return partitions
 
-    def update_single_partition(self, partitions, name, layers, wr_factor=1, extra_bram_allowed=0):
-        if "graph" not in partitions[name]:
+    def update_single_partition(self, partitions, name, layers, wr_factor=None, extra_bram_allowed=0):
+
+        if wr_factor is None:
             graph_new = self.create_graph(layers)
             wr_factor = calculate_wr_factor(graph_new, self.config.initial_max_bram_util + extra_bram_allowed)
         else:
             graph_new = partitions[name]["graph"]
+        if wr_factor == -1:
+            partitions[name]["layers"] = layers
+            partitions[name]["graph"] = graph_new
+            partitions[name]["valid"] = False
+            partitions[name]["weights_reloading"] = -1
+            return False
         bram_util, dsp_util, layers_bram, branch_bram = self.get_partition_utilization(graph_new, wr_factor=wr_factor)
         part_validity = True if bram_util <= self.config.initial_max_bram_util + extra_bram_allowed and dsp_util <= self.config.max_dsp_util else False
 
@@ -377,14 +391,18 @@ class NetworkParser(ModelLayerDescriptor):
         for part, specs in partitions.items():
             assert len(specs["layers"]) > 0, f"Partition {part} has no layers assigned to it."
             if not specs["valid"]:
-                _logger.info(f"Refining partition {part} with {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}")
+                if "total_bram" in specs:
+                    bram_util = specs["total_bram"]
+                else:
+                    bram_util = "unknown"
+                _logger.info(f"Refining partition {part} with {len(specs['layers'])} layers and BRAM utilization {bram_util}")
 
                 wr_factor = calculate_wr_factor(specs["graph"], self.config.initial_max_bram_util)
-                if wr_factor > 1:
-                    _logger.info(f"WR factor for partition {part} is {wr_factor}.")
-                    self.update_single_partition(partitions, part, specs["layers"], wr_factor=wr_factor)
+                if wr_factor >= 1:
+                    part_valid = self.update_single_partition(partitions, part, specs["layers"], wr_factor=wr_factor)
+                    _logger.info(f"WR factor for partition {part} is {wr_factor}. Validity is {part_valid}.")
                 else:
-                    _logger.info(f"Partition {part} cannot fit in the FPGA even after WR. Splitting it into two partitions.")
+                    _logger.warning(f"Partition {part} cannot fit in the FPGA even after WR. Splitting it into two partitions.")
                     return self.split_partition(partitions, part)
 
         return partitions
