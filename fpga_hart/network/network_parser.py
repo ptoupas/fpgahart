@@ -413,8 +413,8 @@ class NetworkParser(ModelLayerDescriptor):
         while not self.validate_partitions(network_partitions):
             network_partitions = self.refine_partitions(network_partitions)
 
-        for part, specs in network_partitions.items():
-            print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
+        # for part, specs in network_partitions.items():
+        #     print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
 
         blacklisted_parts = []
         merge_extra_bram_allowed = 10
@@ -425,8 +425,8 @@ class NetworkParser(ModelLayerDescriptor):
             if direction is not None:
                 network_partitions = self.merge_partition(network_partitions, cm_part, direction, extra_bram_allowed=merge_extra_bram_allowed)
                 blacklisted_parts.clear()
-                for part, specs in network_partitions.items():
-                    print(f"(MERGE) Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
+                # for part, specs in network_partitions.items():
+                #     print(f"(MERGE) Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
             else:
                 blacklisted_parts.append(cm_part)
             cm_part = self.get_candidate_merge_partition(network_partitions, blacklisted_parts)
@@ -436,9 +436,12 @@ class NetworkParser(ModelLayerDescriptor):
 
         for part, specs in network_partitions.items():
             print(f"Partition {part} has {len(specs['layers'])} layers and BRAM utilization {specs['total_bram']:.2f}, wr factor of {specs['weights_reloading']}")
+            for node in specs["graph"].nodes:
+                hw = specs["graph"].nodes[node]["hw"]
+                print(f"Layer {node} has input shape {hw.input_shape}, output shape {hw.output_shape}")
 
+        # TODO: SOS! During the WR calculation the shapes of the layers inside the partition are being changed. This has to be taken into consideration when merging spliting or moving layers between partitions where the WR factor is greater than 1. WR factor is probably INCORRECT for the partitions that have been split or merged.
         # TODO: Instead of generating completely new partitions we can have a new transform that alters a bit the existing partitions by adding or removing layers from previous or next partitions.
-        # TODO: SOS! During the WR calculation the shapes of the layers inside the partition are being changed. This has to be taken into consideration when merging spliting or moving layers between partitions where the WR factor is greater than 1.
         # TODO: I dont like the thing that layers partitions and network are not being connected somehow. It would be nice to have a way to connect them and build the network from the partitions and the partitions from the layers.
 
     def create_graph(self, partition: list) -> nx.DiGraph:
