@@ -567,6 +567,4 @@ class NetworkParser(ModelLayerDescriptor):
         for layer in partition:
             if node_id in self.layers[layer]["node_in"]:
                 nodes.append(layer)
-        return nodes            if node_id in self.layers[layer]["node_in"]:
-                nodes.append(layer)
         return nodes
