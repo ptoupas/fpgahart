@@ -322,6 +322,7 @@ class Convolutional3DLayer(BaseLayer):
         f_coarseIn: np.float64,
         f_coarseOut: np.float64,
         mem_bw_in: int,
+
         mem_bw_out: int,
         wr_factor: int = 1,
         ignore_bw_util: bool = False
