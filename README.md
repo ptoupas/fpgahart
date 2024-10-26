@@ -22,7 +22,7 @@ python main.py {model_name} {device_name} {optimization-type} {optimization-targ
 - `--plot_layers`: Whether to plot design points per layer or not.
 - `--gap_approx`: Whether to use historical data as an approximation for GlobalAveragePooling (GAP) layers or not during the optimization process.
 - `--sweep`: Whether to run a (wandb) sweep of the design space or not.
-- `--enable_wandb`: Whether to enable wandb support or not (enabled by default).
+- `--enable_wandb`: Whether to enable wandb support or not.
 - `--profile`: Whether to profile the whole program or not.
 
 ## Backend code generation
