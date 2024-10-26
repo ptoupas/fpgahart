@@ -17,9 +17,12 @@ from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.optimizer.optimizer_helper import (
-    add_off_chip_connections, calculate_wr_factor,
-    get_minimum_resource_utilization, get_off_chip_mem_connections,
-    get_worst_case_buffering)
+    add_off_chip_connections,
+    calculate_wr_factor,
+    get_minimum_resource_utilization,
+    get_off_chip_mem_connections,
+    get_worst_case_buffering,
+)
 from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
 from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.platform.platform import Platform
@@ -66,18 +69,18 @@ class NetworkParser(ModelLayerDescriptor):
             reconfig_points.sort(key=num_sort)
 
             rp_idx = 0
-            layers_couter = 0
+            layers_counter = 0
             for layer in self.layers:
                 if rp_idx < self.num_reconfig_points and layer == reconfig_points[rp_idx]:
-                    if layers_couter < self.min_partition_layers or layers_couter > self.max_partition_layers:
-                        _logger.debug(f"Reconfig point {reconfig_points[rp_idx]} number of layers {layers_couter} is not within the allowed range {self.min_partition_layers} <= num layers <= {self.max_partition_layers}. Reconfiguring...")
+                    if layers_counter < self.min_partition_layers or layers_counter > self.max_partition_layers:
+                        _logger.debug(f"Reconfig point {reconfig_points[rp_idx]} number of layers {layers_counter} is not within the allowed range {self.min_partition_layers} <= num layers <= {self.max_partition_layers}. Reconfiguring...")
                         break
                     else:
-                        layers_couter = 0
+                        layers_counter = 0
                         rp_idx += 1
-                layers_couter += 1
-            if layers_couter < self.min_partition_layers or layers_couter > self.max_partition_layers:
-                _logger.debug(f"Final reconfig point number of layers {layers_couter} is not within the allowed range {self.min_partition_layers} <= num layers <= {self.max_partition_layers}. Reconfiguring...")
+                layers_counter += 1
+            if layers_counter < self.min_partition_layers or layers_counter > self.max_partition_layers:
+                _logger.debug(f"Final reconfig point number of layers {layers_counter} is not within the allowed range {self.min_partition_layers} <= num layers <= {self.max_partition_layers}. Reconfiguring...")
             else:
                 rp_idx += 1
         return reconfig_points
@@ -563,5 +566,7 @@ class NetworkParser(ModelLayerDescriptor):
         nodes = []
         for layer in partition:
             if node_id in self.layers[layer]["node_in"]:
+                nodes.append(layer)
+        return nodes            if node_id in self.layers[layer]["node_in"]:
                 nodes.append(layer)
         return nodes

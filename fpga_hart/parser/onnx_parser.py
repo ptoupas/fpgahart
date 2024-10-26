@@ -82,6 +82,11 @@ class OnnxModelParser:
         self.init_onnx_model()
 
     def init_onnx_model(self) -> None:
+        # if os.path.exists(self.optimized_model_path):
+        #     self.onnx_model = onnx.load(self.optimized_model_path)
+        #     self.initial_model_inputs = [node.name for node in self.onnx_model.graph.input]
+        #     self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
+        # else:
         self.onnx_model = onnx.load(self.model_path)
         self.initial_model_inputs = [node.name for node in self.onnx_model.graph.input]
         self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
@@ -340,7 +345,7 @@ class OnnxModelParser:
                         elif attr.name == "kernel_shape":
                             kernel = list(attr.ints)
 
-                elif n.op_type == "Mul" or n.op_type == "Add" or n.op_type == "Div":
+                elif n.op_type == "Mul" or n.op_type == "Add" or n.op_type == "Div" or n.op_type == "Concat":
                     layer_input_ids.append(n.input[0])
                     layer_input_ids.append(n.input[1])
                     layer_input_shapes.append(layers_outputs[n.input[0]])
@@ -390,6 +395,10 @@ class OnnxModelParser:
                     or n.op_type == "HardSwish"
                     or n.op_type == "Softmax"
                 ):
+                    layer_input_ids.append(n.input[0])
+                    layer_input_shapes.append(layers_outputs[n.input[0]])
+
+                elif n.op_type == "Resize":
                     layer_input_ids.append(n.input[0])
                     layer_input_shapes.append(layers_outputs[n.input[0]])
 
