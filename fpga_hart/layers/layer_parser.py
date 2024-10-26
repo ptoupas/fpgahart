@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 import yaml
+from dotmap import DotMap
 
 import wandb
 from fpga_hart import _logger
@@ -16,7 +17,7 @@ class LayerParser(ModelLayerDescriptor):
     singlethreaded: bool
     per_layer_plot: bool
     platform: Platform
-    config: wandb.Config
+    config: DotMap
     enable_wandb: bool
 
     def __post_init__(self) -> None:

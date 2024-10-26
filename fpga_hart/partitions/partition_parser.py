@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import scienceplots
+from dotmap import DotMap
 
 import wandb
 from fpga_hart import _logger
@@ -35,7 +36,7 @@ class PartitionParser(ModelLayerDescriptor):
     singlethreaded: bool
     per_layer_plot: bool
     platform: Platform
-    config: wandb.Config
+    config: DotMap
     enable_wandb: bool
 
     from fpga_hart.partitions.partition_descriptor import create_partitions
@@ -271,7 +272,7 @@ class PartitionParser(ModelLayerDescriptor):
                 )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
-            
+
             if self.layers[layer]["branching"]:
                 layer_mode = "split"
             elif layer_type == "ElementWise":
@@ -916,4 +917,5 @@ class PartitionParser(ModelLayerDescriptor):
         ]
         self.layers["Add_68"]["shape_out"] = [1, 10, 6, 6, 6]
 
+        extra_reconfig = self.model_partition(custom_partition, name=name)
         extra_reconfig = self.model_partition(custom_partition, name=name)

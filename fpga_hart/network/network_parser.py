@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import networkx as nx
 import scienceplots
+from dotmap import DotMap
 
 import wandb
 from fpga_hart import _logger
@@ -41,7 +42,7 @@ class NetworkParser(ModelLayerDescriptor):
     max_partition_layers: int
     gap_approx: bool
     platform: Platform
-    config: wandb.Config
+    config: DotMap
     enable_wandb: bool
 
     def __post_init__(self) -> None:
