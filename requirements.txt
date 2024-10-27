@@ -3,10 +3,13 @@ pyyaml
 wandb
 networkx
 scipy
-sklearn
+scikit-learn
 onnx
+onnxruntime
+onnxoptimizer
 onnxsim
 pydot
 plotly
 dotmap
-onnxoptimizer<=0.2.7
+scienceplots
+fpbinary
