@@ -336,9 +336,7 @@ class PartitionParser(ModelLayerDescriptor):
         )
         if not os.path.exists(partition_graphs_path):
             os.makedirs(partition_graphs_path)
-        else:
-            for file in os.listdir(partition_graphs_path):
-                os.unlink(os.path.join(partition_graphs_path, file))
+
         visualize_graph(
             graph,
             os.getcwd()

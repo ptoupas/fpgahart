@@ -623,6 +623,15 @@ class NetworkParser(ModelLayerDescriptor):
         num_dev_reconfig = len(network_partitions) - 1
         _logger.info(f"Initial number of device reconfigurations: {num_dev_reconfig}.")
 
+        partition_graphs_path = os.path.join(
+            os.getcwd(),
+            "fpga_modeling_reports",
+            self.model_name,
+            "partition_graphs",
+        )
+        if os.path.exists(partition_graphs_path):
+            for file in os.listdir(partition_graphs_path):
+                os.unlink(os.path.join(partition_graphs_path, file))
         for part_name, specs in network_partitions.items():
             num_dev_reconfig += self.partition_parser.model_partition(
                 specs["layers"], name=part_name
