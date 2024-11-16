@@ -106,7 +106,7 @@ class PartitionComposer(BaseLayer3D):
     def calculate_branch_buffering(graph):
         branch_buffering = {}
         branch_edges = graph_manipulation.get_branch_start_end_points(graph)
-        if branch_edges and (branch_edges[0][0] == None or branch_edges[0][1] == None):
+        if branch_edges and (branch_edges[0][0] is None or branch_edges[0][1] is None):
             return branch_buffering
         unconnected_branches = {}
         for (in_point, end_point) in branch_edges:
@@ -149,7 +149,7 @@ class PartitionComposer(BaseLayer3D):
                     + 2
                 )
                 assert paths[0][-1] == paths[1][-1], "Paths should end at the same node"
-                if paths[0][0] == paths[1][0] and not 'Mem_in' in paths[0][0]:
+                if paths[0][0] == paths[1][0] and 'Mem_in' not in paths[0][0]:
                     branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": int(final_depth)}
                 else:
                     unconnected_branches[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[longest_idx][-2], "depth": depths[longest_idx], "path": paths[longest_idx]}
@@ -208,8 +208,8 @@ class PartitionComposer(BaseLayer3D):
     def get_design_point(
         self,
         graph,
-        comb: dict(),
-        mem_bw_in: list(),
+        comb: dict,
+        mem_bw_in: list,
         mem_bw_out: list,
         read_mem_points: list,
         write_mem_points: list,
@@ -276,7 +276,7 @@ class PartitionComposer(BaseLayer3D):
 
             if op_type == "mem_in":
                 assert (
-                    not node in comb.keys()
+                    node not in comb.keys()
                 ), f"Memory IN node: {node} cannot have configuration."
                 gamma_matrix[n, n] = off_chip_mem_in.pop()
                 graph.nodes[node]["prod_rate"] = gamma_matrix[n, n]
@@ -284,7 +284,7 @@ class PartitionComposer(BaseLayer3D):
 
             if op_type == "mem_out":
                 assert (
-                    not node in comb.keys()
+                    node not in comb.keys()
                 ), f"Memory OUT node: {node} cannot have configuration."
                 gamma_matrix[graph_idx[node_predecessors[0]], n] = -off_chip_mem_out.pop()
                 curr_layer_rate = gamma_matrix[graph_idx[node_predecessors[0]], n]
@@ -639,7 +639,7 @@ class PartitionComposer(BaseLayer3D):
             for idx_out, (k, h) in enumerate(mem_conns_out):
                 curr_thr_out = thr_out[idx_out] / workload_matrix[k, h]
                 thr_out_vols.append(curr_thr_out)
-                assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(curr_thr_in, curr_thr_out)
+                assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(idx_in, idx_out, curr_thr_in, curr_thr_out)
 
         if (
             dsps_util < self.max_DSP_util

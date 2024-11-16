@@ -72,16 +72,26 @@ class SimulatedAnnealing():
         )
 
     from fpga_hart.optimizer.simulated_annealing.sa_latency import (
-        generate_building_blocks, generate_building_blocks_config,
-        get_cost_latency, run_optimizer_latency,
-        validate_building_blocks_setup)
+        generate_building_blocks,
+        generate_building_blocks_config,
+        get_cost_latency,
+        run_optimizer_latency,
+        validate_building_blocks_setup,
+    )
     from fpga_hart.optimizer.simulated_annealing.sa_layer import (
-        generate_random_config_layer, get_cost_layer,
-        initialize_optimizer_layer, run_optimizer_layer)
+        generate_random_config_layer,
+        get_cost_layer,
+        initialize_optimizer_layer,
+        run_optimizer_layer,
+    )
     from fpga_hart.optimizer.simulated_annealing.sa_partition import (
-        generate_random_config_partition, get_cost_partition,
-        initialize_optimizer_partition, run_optimizer_partition,
-        run_optimizer_partition_double_graph)
+        check_partition_fitting,
+        generate_random_config_partition,
+        get_cost_partition,
+        initialize_optimizer_partition,
+        run_optimizer_partition,
+        run_optimizer_partition_double_graph,
+    )
 
     def run_solver(self, mode, layer=None, alignedfactors=None):
         if mode == "partition":

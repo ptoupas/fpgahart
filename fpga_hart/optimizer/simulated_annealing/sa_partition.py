@@ -1,4 +1,3 @@
-
 import copy
 import math
 import os
@@ -6,7 +5,9 @@ import random
 import time
 from copy import deepcopy
 
+import networkx as nx
 import numpy as np
+from colorama import Fore, init
 
 import wandb
 from fpga_hart import _logger
@@ -19,36 +20,305 @@ from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.memory_interface import MemoryNode
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.optimizer.optimizer_helper import check_partition_fitting
+from fpga_hart.optimizer.optimizer_helper import (
+    calculate_wr_factor,
+    get_extra_mem_connections,
+    get_minimum_resource_utilization,
+    get_off_chip_mem_connections,
+    get_split_points,
+    get_worst_case_buffering,
+)
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                get_input_nodes,
-                                                get_output_nodes, split_graph,
-                                                visualize_graph)
+from fpga_hart.utils.graph_manipulation import (
+    add_off_chip_connections,
+    get_input_nodes,
+    get_output_nodes,
+    split_graph,
+    visualize_graph,
+)
+
+init(autoreset=True)
+
+def check_partition_fitting(
+    self,
+    graph,
+    partition_composer,
+    max_BRAM_util,
+    word_bytes,
+    bram_type,
+    brams_total,
+    mem_words_per_cycle,
+    result=[],
+    original_graph=None,
+    gap_approx=False,
+    force_split=False,
+):
+    if original_graph is None:
+        original_graph = deepcopy(graph)
+    sort_order = list(nx.topological_sort(original_graph))
+
+    _, min_bram_util = get_worst_case_buffering(
+        deepcopy(graph),
+        partition_composer,
+        mem_words_per_cycle,
+        word_bytes,
+        bram_type,
+        brams_total,
+        gap_approx,
+    )
+    if min_bram_util > max_BRAM_util or force_split:
+        for sp in reversed(get_split_points(graph)):
+            ancestors = list(nx.ancestors(graph, sp))
+            ancestors.sort(key=lambda val: sort_order.index(val))
+            subgraph_nodes = deepcopy(ancestors)
+            subgraph_nodes.append(sp)
+
+            # TODO: I dont like this, but it works. It should be improved since it is a workaround
+            if len(subgraph_nodes) == 1 and "Conv" not in subgraph_nodes[0]:
+                descendants = list(nx.descendants(graph, sp))
+                descendants.sort(key=lambda val: sort_order.index(val))
+                convs_added = 0
+                for d in descendants:
+                    if "Conv" in d and graph.in_degree[d] <= 1:
+                        if convs_added >= 1:
+                            break
+                        subgraph_nodes.append(d)
+                        convs_added += 1
+                    else:
+                        subgraph_nodes.append(d)
+
+            graph_1 = graph.subgraph(subgraph_nodes).copy()
+            graph_2 = graph.copy()
+            graph_2.remove_nodes_from(graph_1.nodes())
+
+            _, min_bram_util = get_worst_case_buffering(
+                deepcopy(graph_2),
+                partition_composer,
+                mem_words_per_cycle,
+                word_bytes,
+                bram_type,
+                brams_total,
+                gap_approx,
+            )
+
+            if min_bram_util <= max_BRAM_util:
+                extra_inputs, extra_outputs = get_extra_mem_connections(
+                    original_graph, subgraph_nodes
+                )
+                weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                result.append([graph_1, extra_inputs, extra_outputs, weights_reloading])
+
+                if len(graph_2.nodes()) > 0:
+                    self.check_partition_fitting(
+                        graph_2,
+                        partition_composer,
+                        max_BRAM_util,
+                        word_bytes,
+                        bram_type,
+                        brams_total,
+                        mem_words_per_cycle,
+                        result,
+                        original_graph,
+                        gap_approx=gap_approx,
+                    )
+                break
+        if min_bram_util > max_BRAM_util:
+            raise ValueError(
+                f"Graph {graph.nodes()} does not fit in the device even after partitioning based on branch buffering"
+            )
+    else:
+        for layer in nx.topological_sort(graph):
+            hw = graph.nodes[layer]["hw"]
+            bram_util, _, _, _ = get_minimum_resource_utilization(hw)
+
+            min_bram_util += bram_util
+            if min_bram_util > max_BRAM_util:
+                ancestors = list(nx.ancestors(graph, layer))
+                ancestors.sort(key=lambda val: sort_order.index(val))
+                descendants = list(nx.descendants(graph, layer))
+                descendants.sort(key=lambda val: sort_order.index(val))
+
+                extra_inputs = []
+                extra_outputs = []
+                if ancestors:
+                    subgraph_nodes = deepcopy(ancestors)
+
+                    append_current = True
+                    for ancestor in subgraph_nodes:
+                        if "GlobalAveragePool" in ancestor or "Conv" in ancestor:
+                            append_current = False
+                            break
+
+                    if append_current:
+                        subgraph_nodes.append(layer)
+
+                        for descendant in descendants:
+                            if (
+                                "GlobalAveragePool" in descendant
+                                or "Conv" in descendant
+                            ):
+                                break
+                            if "Add" in descendant or "Mul" in descendant:
+                                split_points = get_split_points(graph)
+                                if not split_points:
+                                    subgraph_nodes.append(descendant)
+                                else:
+                                    # TODO: Check to which split point the descendant is connected and check only that
+                                    if len(split_points) > 1:
+                                        raise ValueError(
+                                            "More than one split point found. Not supported yet."
+                                        )
+                                    if not list(
+                                        nx.all_simple_paths(
+                                            graph, split_points[0], descendant
+                                        )
+                                    ):
+                                        subgraph_nodes.append(descendant)
+                                        break
+
+                    extra_inputs, extra_outputs = get_extra_mem_connections(
+                        original_graph, subgraph_nodes
+                    )
+                    graph_1 = graph.subgraph(subgraph_nodes).copy()
+                    weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                    result.append([
+                        graph_1,
+                        extra_inputs,
+                        extra_outputs,
+                        weights_reloading,
+                    ])
+                else:
+                    subgraph_nodes = [layer]
+
+                    for descendant in descendants:
+                        if "GlobalAveragePool" in descendant or "Conv" in descendant:
+                            break
+                        subgraph_nodes.append(descendant)
+
+                    extra_inputs, extra_outputs = get_extra_mem_connections(
+                        original_graph, subgraph_nodes
+                    )
+                    graph_1 = graph.subgraph(subgraph_nodes).copy()
+                    weights_reloading = calculate_wr_factor(graph_1, max_BRAM_util)
+                    result.append([
+                        graph_1,
+                        extra_inputs,
+                        extra_outputs,
+                        weights_reloading,
+                    ])
+
+                graph_2 = graph.copy()
+                graph_2.remove_nodes_from(graph_1.nodes())
+                if len(graph_2.nodes()) > 0:
+                    self.check_partition_fitting(
+                        graph_2,
+                        partition_composer,
+                        max_BRAM_util,
+                        word_bytes,
+                        bram_type,
+                        brams_total,
+                        mem_words_per_cycle,
+                        result,
+                        original_graph,
+                        gap_approx=gap_approx,
+                    )
+                break
+        if min_bram_util <= max_BRAM_util:
+            extra_inputs, extra_outputs = get_extra_mem_connections(
+                original_graph, graph.nodes()
+            )
+            weights_reloading = calculate_wr_factor(graph, max_BRAM_util)
+            result.append([graph, extra_inputs, extra_outputs, weights_reloading])
+
+    result_split = []
+    for i, r in enumerate(result):
+        curr_graph, extra_inputs, extra_outputs, weights_reloading = r
+        curr_graph = deepcopy(curr_graph)
+        nodes_in, nodes_out = get_off_chip_mem_connections(curr_graph)
+        read_points, write_points = add_off_chip_connections(
+            curr_graph, nodes_in, nodes_out, gap_approx=gap_approx
+        )
+
+        (
+            config,
+            _,
+            _,
+            _,
+            _,
+        ) = self.initialize_optimizer_partition(
+            graph=curr_graph,
+            read_points=read_points,
+            write_points=write_points,
+            wr_factor=weights_reloading,
+            init_time_limit=15,
+        )
+
+        if config is None:
+            _logger.warning(
+                "Initial design point can not be found, splitting the graph further"
+            )
+            result_split.append(i)
+
+    for i in result_split:
+        curr_graph, _, _, _ = result[i]
+        del result[i]
+        self.check_partition_fitting(
+            curr_graph,
+            partition_composer,
+            max_BRAM_util,
+            word_bytes,
+            bram_type,
+            brams_total,
+            mem_words_per_cycle,
+            result,
+            original_graph,
+            gap_approx=gap_approx,
+            force_split=True,
+        )
+
+    return result
 
 
-def initialize_optimizer_partition(self, graph, read_points, write_points, wr_factor):
+def initialize_optimizer_partition(
+    self, graph, read_points, write_points, wr_factor, init_time_limit=90.0
+):
     self.freeze_param = True
 
     config, mem_bw, _, _ = self.generate_random_config_partition(target_graph=graph)
-    cost, dp_info = self.get_cost_partition(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
+    cost, dp_info = self.get_cost_partition(
+        config,
+        mem_bw,
+        read_points,
+        write_points,
+        target_graph=graph,
+        wr_factor=wr_factor,
+    )
     slowest_nodes = None
 
     if cost is None:
         start_time = time.time()
-        while time.time() - start_time < 90.0:
+        while time.time() - start_time < init_time_limit:
             x = float(time.time() - start_time)
-            perc = 1/(1+math.exp(-0.1*(x-45)))
+            perc = 1 / (1 + math.exp(-0.1 * (x - 45)))
             config, mem_bw, _, _ = self.generate_random_config_partition(
+                target_graph=graph, keep_percentage=perc
+            )
+            cost, dp_info = self.get_cost_partition(
+                config,
+                mem_bw,
+                read_points,
+                write_points,
                 target_graph=graph,
-                keep_percentage=perc)
-            cost, dp_info = self.get_cost_partition(config, mem_bw, read_points, write_points, target_graph=graph, wr_factor=wr_factor)
+                wr_factor=wr_factor,
+            )
 
             if cost is not None:
                 slowest_nodes = dp_info["slowestNodes"]
                 break
         if cost is None:
-            print("No configuration found after 90 seconds. Aborting...")
+            print(
+                f"No configuration found after {init_time_limit} seconds. Aborting..."
+            )
             return None, None, None, None, None
 
     prev_state = config
@@ -58,12 +328,25 @@ def initialize_optimizer_partition(self, graph, read_points, write_points, wr_fa
 
     return prev_state, prev_cost, solution_dp, solution_mem, slowest_nodes
 
-def run_optimizer_partition(self):
 
-    #TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user by 15 %.
-    sub_partitions = check_partition_fitting(self.graph, self.partition_composer, self.config.initial_max_bram_util, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.mem_words_per_cycle, [], gap_approx=self.gap_approx)
+def run_optimizer_partition(self):
+    # TODO: Searching for partition fitting or not to the device we assume a lower bram utilization than the provided one from the user (initial_max_bram_util) by 10 %.
+    sub_partitions = self.check_partition_fitting(
+        self.graph,
+        self.partition_composer,
+        self.config.initial_max_bram_util - 10,
+        self.platform.word_bytes,
+        self.platform.bram_Kbytes,
+        self.platform.bram,
+        self.platform.mem_words_per_cycle,
+        [],
+        gap_approx=self.gap_approx,
+    )
     extra_reconfigurations = len(sub_partitions) - 1
-    print(f'Splitting original partition into {len(sub_partitions)} sub-partitions. A number of {extra_reconfigurations} extra reconfiguration(s) will be added.')
+    if extra_reconfigurations > 0:
+        _logger.warning(
+            f"Splitting original partition into {len(sub_partitions)} sub-partitions. A number of {extra_reconfigurations} extra reconfiguration(s) will be added."
+        )
 
     mem_bw_list = []
     dp_info_list = []
@@ -74,23 +357,41 @@ def run_optimizer_partition(self):
         mem_out = sp[2]
         weights_reloading = sp[3]
 
+        nodes_in, nodes_out = get_off_chip_mem_connections(graph)
         read_points, write_points = add_off_chip_connections(
-            graph, mem_in, mem_out, gap_approx=self.gap_approx
+            graph, nodes_in, nodes_out, gap_approx=self.gap_approx
         )
-        visualize_graph(graph, os.getcwd() + '/fpga_modeling_reports/' + self.cnn_model_name + '/partition_graphs/' + self.part_name + '_split' + str(i), self.enable_wandb, f"{self.part_name}_split_{i}",)
+        visualize_graph(
+            graph,
+            os.getcwd()
+            + "/fpga_modeling_reports/"
+            + self.cnn_model_name
+            + "/partition_graphs/"
+            + self.part_name
+            + "_split"
+            + str(i),
+            self.enable_wandb,
+            f"{self.part_name}_split_{i}",
+        )
 
         best_solution_mem = None
         best_solution_dp = None
         best_latency = 1000
         for _ in range(self.best_of_iter):
-            ( config,
-            cost,
-            dp_info,
-            mem_bw,
-            slowest_nodes,
-            ) = self.initialize_optimizer_partition(graph=graph, read_points=read_points, write_points=write_points, wr_factor=weights_reloading)
+            (
+                config,
+                cost,
+                dp_info,
+                mem_bw,
+                slowest_nodes,
+            ) = self.initialize_optimizer_partition(
+                graph=graph,
+                read_points=read_points,
+                write_points=write_points,
+                wr_factor=weights_reloading,
+            )
 
-            if config == None:
+            if config is None:
                 return None, None, None, None, None
 
             prev_state = config
@@ -101,9 +402,10 @@ def run_optimizer_partition(self):
             current_temp = self.t_max
             # first_restart, second_restart, third_restart = True, True, True
             count = 0
-            print(f"Temperature  |  Latency     |   Count")
+            print(
+                f"{Fore.LIGHTGREEN_EX}{'Temperature':<12} | {'Latency':<12} | {'Count':<8} | {'Best Latency':<12}"
+            )
             while current_temp > self.t_min:
-
                 # if self.enable_wandb:
                 #     log_dict = {}
                 #     log_dict["temperature"] = current_temp
@@ -112,8 +414,11 @@ def run_optimizer_partition(self):
 
                 num_iterations = 0
                 timeout_tmr_start = time.time()
-                while num_iterations < self.iterationPerTemp and time.time() - timeout_tmr_start < 10.0:
-                # for _ in range(self.iterationPerTemp):
+                while (
+                    num_iterations < self.iterationPerTemp
+                    and time.time() - timeout_tmr_start < 2.5
+                ):
+                    # for _ in range(self.iterationPerTemp):
                     (
                         new_state,
                         new_mem_bw,
@@ -123,9 +428,16 @@ def run_optimizer_partition(self):
                         neighbours=True,
                         prev_state=prev_state,
                         slowest_nodes=slowest_nodes,
-                        target_graph=graph
+                        target_graph=graph,
                     )
-                    new_cost, new_dp_info = self.get_cost_partition(new_state, new_mem_bw, read_points, write_points, target_graph=graph, wr_factor=weights_reloading)
+                    new_cost, new_dp_info = self.get_cost_partition(
+                        new_state,
+                        new_mem_bw,
+                        read_points,
+                        write_points,
+                        target_graph=graph,
+                        wr_factor=weights_reloading,
+                    )
                     if new_cost is not None:
                         slowest_nodes = new_dp_info["slowestNodes"]
 
@@ -143,7 +455,9 @@ def run_optimizer_partition(self):
                             copy.deepcopy(new_dp_info),
                         )
                     else:
-                        if random.uniform(0, 1) < math.exp(cost_diff / (current_temp * self.k)):
+                        if random.uniform(0, 1) < math.exp(
+                            cost_diff / (current_temp * self.k)
+                        ):
                             prev_state = copy.deepcopy(new_state)
                             prev_cost = copy.deepcopy(new_cost)
                             solution_mem, solution_dp = (
@@ -161,29 +475,35 @@ def run_optimizer_partition(self):
                 # elif current_temp <= 0.0001 and third_restart:
                 #     current_temp *= 1000
                 #     third_restart = False
+                if prev_cost < best_latency:
+                    best_latency = prev_cost
+                    best_solution_mem = solution_mem
+                    best_solution_dp = solution_dp
+
                 print(
-                    f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}",
+                    f"{current_temp:<12.5e}   {prev_cost:<12.5e}   {count:<8d}  {Fore.LIGHTBLUE_EX}{best_latency:12.5e}",
                     end="\r",
                 )
-
-            print(
-                f"{current_temp:.5e}\t{prev_cost:.5e}\t{count:5d}"
-            )
 
             if prev_cost < best_latency:
                 best_latency = prev_cost
                 best_solution_mem = solution_mem
                 best_solution_dp = solution_dp
 
+            print(
+                f"{current_temp:<12.5e}   {prev_cost:<12.5e}   {count:<8d}  {Fore.LIGHTBLUE_EX}{best_latency:12.5e}",
+                end="\r",
+            )
+
         mem_bw_list.append(best_solution_mem)
         dp_info_list.append(best_solution_dp)
         wr_list.append(weights_reloading)
 
         print(
-            f"\n\nLatency: {best_latency}.\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.platform.mem_words_per_cycle)}."
+            f"\n\n{Fore.LIGHTBLUE_EX}Latency: {best_latency}{Fore.WHITE}\nFinal Memory IN {list(np.array(best_solution_mem[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(best_solution_mem[1]) * self.platform.mem_words_per_cycle)}"
         )
         print(
-            "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
+            "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}({}), Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(  # \nPartition Configuration: {}
                 best_solution_dp["latency(C)"],
                 best_solution_dp["latency(S)"],
                 best_solution_dp["GOP/s"],
@@ -202,11 +522,18 @@ def run_optimizer_partition(self):
                 best_solution_dp["memKBs"],
                 best_solution_dp["memBoundedIn"],
                 best_solution_dp["memBoundedOut"],
-                best_solution_dp["config"],
+                # best_solution_dp["config"],
             )
         )
         print("*" * 60)
-    return self.platform.mem_words_per_cycle, mem_bw_list, dp_info_list, extra_reconfigurations, wr_list
+    return (
+        self.platform.mem_words_per_cycle,
+        mem_bw_list,
+        dp_info_list,
+        extra_reconfigurations,
+        wr_list,
+    )
+
 
 def get_cost_partition(
     self,
@@ -216,7 +543,7 @@ def get_cost_partition(
     write_points,
     target_graph=None,
     branch_mem_update=None,
-    wr_factor=1
+    wr_factor=1,
 ):
     """
     We should be able to choose whether we want to optimize for latency or throughput
@@ -258,24 +585,25 @@ def get_cost_partition(
         write_points,
         gap_approx=self.gap_approx,
         branch_mem=branch_mem,
-        wr_factor=wr_factor
+        wr_factor=wr_factor,
     )
     if dp_info["config"]:
         return dp_info["latency(S)"], dp_info
         # return -dp_info['GOP/s'], dp_info
     return None, None
 
+
 def generate_random_config_partition(
-        self,
-        target_graph=None,
-        neighbours=False,
-        prev_state=None,
-        slowest_nodes=None,
-        keep_percentage=None,
-        param_perc=0.3,
-        n_in=1,
-        n_out=1,
-    ):
+    self,
+    target_graph=None,
+    neighbours=False,
+    prev_state=None,
+    slowest_nodes=None,
+    keep_percentage=None,
+    param_perc=0.3,
+    n_in=1,
+    n_out=1,
+):
     if target_graph is None:
         graph = self.graph.copy()
     else:
@@ -347,12 +675,12 @@ def generate_random_config_partition(
             coarse_out_feasible = utils.get_factors(
                 filters, keep_percentage=keep_percentage
             )
-            fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
+            fine_feasible = utils.get_fine_feasible(
+                kernel_size, keep_percentage=keep_percentage
+            )
             coarse_in_factor = random.choice(coarse_in_feasible) / channels
             coarse_out_factor = random.choice(coarse_out_feasible) / filters
-            fine_factor = random.choice(fine_feasible) / np.prod(
-                np.array(kernel_size)
-            )
+            fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
             if slowest_nodes and node in config.keys():
                 transformations = list(config[node].keys())
                 transformations.remove("op_type")
@@ -376,11 +704,11 @@ def generate_random_config_partition(
             coarse_inout_feasible = utils.get_factors(
                 channels, keep_percentage=keep_percentage
             )
-            fine_feasible = utils.get_fine_feasible(kernel_size, keep_percentage=keep_percentage)
-            coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
-            fine_factor = random.choice(fine_feasible) / np.prod(
-                np.array(kernel_size)
+            fine_feasible = utils.get_fine_feasible(
+                kernel_size, keep_percentage=keep_percentage
             )
+            coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
+            fine_factor = random.choice(fine_feasible) / np.prod(np.array(kernel_size))
             if slowest_nodes and node in config.keys():
                 transformations = list(config[node].keys())
                 transformations.remove("op_type")
@@ -496,7 +824,11 @@ def run_optimizer_partition_double_graph(self):
         mem_in_2,
         mem_out_2,
     ) = split_graph(
-        self.graph, self.platform.word_bytes, self.platform.bram_Kbytes, self.platform.bram, self.platform.max_BRAM_util
+        self.graph,
+        self.platform.word_bytes,
+        self.platform.bram_Kbytes,
+        self.platform.bram,
+        self.platform.max_BRAM_util,
     )
 
     nIN1 = len(mem_in_1)
@@ -511,7 +843,7 @@ def run_optimizer_partition_double_graph(self):
         len(mem_in_1),
         len(mem_out_1),
         target_graph=graph_1,
-        branch_mem_update=bb1
+        branch_mem_update=bb1,
     )
 
     nIN2 = len(mem_in_2)
@@ -526,7 +858,7 @@ def run_optimizer_partition_double_graph(self):
         len(mem_in_2),
         len(mem_out_2),
         target_graph=graph_2,
-        branch_mem_update=bb2
+        branch_mem_update=bb2,
     )
 
     if cost_1 is None or cost_2 is None:
@@ -560,7 +892,7 @@ def run_optimizer_partition_double_graph(self):
                 len(mem_in_1),
                 len(mem_out_1),
                 target_graph=graph_1,
-                branch_mem_update=bb1
+                branch_mem_update=bb1,
             )
 
             nIN2 = len(mem_in_2)
@@ -575,7 +907,7 @@ def run_optimizer_partition_double_graph(self):
                 len(mem_in_2),
                 len(mem_out_2),
                 target_graph=graph_2,
-                branch_mem_update=bb2
+                branch_mem_update=bb2,
             )
             if (
                 cost_1 is not None
@@ -596,7 +928,7 @@ def run_optimizer_partition_double_graph(self):
 
     current_temp = self.t_max
 
-    print(f"Temperature  |  Latency")
+    print("Temperature  |  Latency")
     split_graph_count = 0
     while current_temp > self.t_min:
         for i in range(self.iterationPerTemp):
@@ -637,7 +969,7 @@ def run_optimizer_partition_double_graph(self):
                 len(mem_in_1),
                 len(mem_out_1),
                 target_graph=graph_1,
-                branch_mem_update=bb1
+                branch_mem_update=bb1,
             )
 
             nIN2 = len(mem_in_2)
@@ -656,7 +988,7 @@ def run_optimizer_partition_double_graph(self):
                 len(mem_in_2),
                 len(mem_out_2),
                 target_graph=graph_2,
-                branch_mem_update=bb2
+                branch_mem_update=bb2,
             )
 
             if (
@@ -751,10 +1083,10 @@ def run_optimizer_partition_double_graph(self):
         print(f"{current_temp:.5e}\t{prev_cost:.5e}", end="\r")
 
     print(
-        f"\n\nLatency: {prev_cost}. volumes/s: {1/prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.platform.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.platform.mem_words_per_cycle)}."
+        f"\n\nLatency: {prev_cost}. volumes/s: {1 / prev_cost}.\nSolution 1: Memory IN {list(np.array(solution_mem_1[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_1[1]) * self.platform.mem_words_per_cycle)}\nSolution 2: Memory IN {list(np.array(solution_mem_2[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem_2[1]) * self.platform.mem_words_per_cycle)}."
     )
     print(
-        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
+        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(  # \nPartition Configuration: {}
             solution_dp_1["latency(C)"],
             solution_dp_1["latency(S)"],
             solution_dp_1["GOP/s"],
@@ -770,11 +1102,11 @@ def run_optimizer_partition_double_graph(self):
             solution_dp_1["memKBs"],
             solution_dp_1["memBoundedIn"],
             solution_dp_1["memBoundedOut"],
-            solution_dp_1["config"],
+            # solution_dp_1["config"],
         )
     )
     print(
-        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
+        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={:.2f}, BRAM(%)={:.2f}, rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format(  # \nPartition Configuration: {}
             solution_dp_2["latency(C)"],
             solution_dp_2["latency(S)"],
             solution_dp_2["GOP/s"],
@@ -790,7 +1122,7 @@ def run_optimizer_partition_double_graph(self):
             solution_dp_2["memKBs"],
             solution_dp_2["memBoundedIn"],
             solution_dp_2["memBoundedOut"],
-            solution_dp_2["config"],
+            # solution_dp_2["config"],
         )
     )
     print("*" * 60)
@@ -798,5 +1130,5 @@ def run_optimizer_partition_double_graph(self):
         self.platform.mem_words_per_cycle,
         [solution_mem_1, solution_mem_2],
         [solution_dp_1, solution_dp_2],
-        0
+        0,
     )

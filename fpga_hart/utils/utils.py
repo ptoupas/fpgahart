@@ -11,6 +11,7 @@ from typing import Tuple
 
 import numpy as np
 import pandas as pd
+import scienceplots
 import seaborn as sns
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist
@@ -27,7 +28,6 @@ from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils.graph_manipulation import get_out_streams
 
-import scienceplots
 plt.style.use(["science", "ieee", "grid"])
 
 
@@ -55,7 +55,7 @@ def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
                 )
             )
         )
-        if not keep_percentage == None:
+        if keep_percentage is not None:
             keep_perc = 1 - keep_percentage
             threshold = max(math.ceil(max(result) * keep_perc), min(result))
             return sorted([x for x in result if x <= threshold])
@@ -392,7 +392,7 @@ def get_fine_feasible(kernel_size: list, keep_percentage: float = None):
             kernel_size[1] * kernel_size[2],
             kernel_size[0] * kernel_size[1] * kernel_size[2],
         ]
-    if not keep_percentage == None:
+    if keep_percentage is not None:
         keep_perc = 1 - keep_percentage
         threshold = max(math.ceil(max(fine_feasible) * keep_perc), min(fine_feasible))
         return sorted([x for x in fine_feasible if x <= threshold])
@@ -1008,7 +1008,7 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
 
 
 def get_pool_type(
-    layer: dict(),
+    layer: dict,
     discriminate_kernel_size: bool = False,
     discriminate_stide: bool = False,
     discriminate_padding: bool = False,
@@ -1028,7 +1028,7 @@ def get_pool_type(
     return pool_type
 
 def get_conv_type(
-    layer: dict(),
+    layer: dict,
     discriminate_kernel_size: bool = False,
     discriminate_stide: bool = False,
     discriminate_padding: bool = False,

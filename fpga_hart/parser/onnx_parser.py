@@ -118,8 +118,10 @@ class OnnxModelParser:
             self.onnx_model,
             self.optimized_model_path,
         )
+        self.num_onnx_nodes = len(self.onnx_model.graph.node)
         self.get_config()
         self.parse_layers()
+        assert len(self.torch_layers) == self.num_onnx_nodes, f"Number of layers ({len(self.torch_layers)}) does not match number of nodes in the onnx model ({self.num_onnx_nodes})"
 
     def get_node_weight_bias(self, node_name: str) -> Tuple[np.ndarray, np.ndarray]:
         node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
@@ -235,6 +237,8 @@ class OnnxModelParser:
         return tensor_shape
 
     def parse_layers(self) -> None:
+        assert len(self.onnx_model.graph.node) == len(self.onnx_model.graph.value_info), "Number of nodes and value_info mismatch. Aborting..."
+
         input_shape = self.get_tensor_shape(self.onnx_model.graph.input[0].name)
 
         _logger.debug("Model input shape = {}".format(input_shape))
@@ -434,6 +438,7 @@ class OnnxModelParser:
                         n.name, n.op_type
                     )
                 )
+                self.num_onnx_nodes -= 1
 
     def get_model_initializer(
         self, name: str, to_tensor: bool = True

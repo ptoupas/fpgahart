@@ -503,17 +503,23 @@ def get_branch_start_end_points(graph):
     def traverse_branch_bw(graph, mp, result):
         for pred in graph.predecessors(mp):
             prev_node = pred
+            # print(f"Traversing branch for merge point {mp} and previous node {prev_node}, result: {result}")
             while True:
                 if graph.out_degree[prev_node] > 1:
                     if (prev_node, mp) not in result:
                         result.append((prev_node, mp))
                     break
 
+                is_mem_in = any("Mem_in" in n for n in list(graph.predecessors(prev_node)))
+                if is_mem_in:
+                    if (prev_node, mp) not in result:
+                        result.append((prev_node, mp))
+                    break
                 if graph.in_degree[prev_node] == 1:
                     prev_node = list(graph.predecessors(prev_node))[0]
                 elif graph.in_degree[prev_node] > 1:
                     prev_node = traverse_branch_bw(graph, prev_node, result)
-                    assert len(list(graph.predecessors(prev_node))) == 1, "Split layer before split layer is not supported"
+                    assert len(list(graph.predecessors(prev_node))) == 1, f"Split layer before split layer is not supported. Previous node: {prev_node}, Predecessors: {list(graph.predecessors(prev_node))}, In degree: {graph.in_degree[prev_node]}"
                     prev_node = list(graph.predecessors(prev_node))[0]
                 elif graph.in_degree[prev_node] == 0:
                     if (prev_node, mp) not in result:
@@ -589,16 +595,20 @@ def visualize_graph(graph: nx.DiGraph, path: str, enable_wandb: bool, graph_name
 def get_split_points(graph):
     split_points = []
     for node in nx.topological_sort(graph):
-        if graph.out_degree[node] > 1:
+        node_successors = list(graph.successors(node))
+        is_mem_out = any("Mem_out" in n for n in node_successors)
+        if graph.out_degree[node] > 1 and not is_mem_out:
             split_points.append(node)
-        if graph.nodes[node]["type"] == "GlobalAveragePool":
+        if graph.nodes[node]["type"] == "GlobalAveragePool" and not is_mem_out:
             split_points.insert(0, node)
     return split_points
 
 def get_merge_points(graph):
     merge_points = []
     for node in nx.topological_sort(graph):
-        if graph.in_degree[node] > 1:
+        node_predecessors = list(graph.predecessors(node))
+        is_mem_in = any("Mem_in" in n for n in node_predecessors)
+        if graph.in_degree[node] > 1 and not is_mem_in:
             merge_points.append(node)
     return merge_points
 

@@ -122,7 +122,7 @@ def run_optimizer_layer(self, layer):
         f"\n\nLatency: {prev_cost}.\nFinal Memory IN {list(np.array(solution_mem[0]) * self.platform.mem_words_per_cycle)}, Memory OUT {list(np.array(solution_mem[1]) * self.platform.mem_words_per_cycle)}."
     )
     print(
-        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}\nPartition Configuration: {}".format(
+        "Latency(C)={}, Latency(S)={:.6f}, GOP/s={:.2f}, volumes/s={:.2f}, DSP(%)={}({:.2f}), BRAM(%)={}({:.2f}), rateIn={}, RateOut={}, Depth={}, Muls={}, Adds={}, Mem(W)={}, Mem(KB)={}, MemBoundIn={}, MemBoundOut={}".format( # \nPartition Configuration: {}
             solution_dp["latency(C)"],
             solution_dp["latency(S)"],
             solution_dp["GOP/s"],
@@ -140,7 +140,7 @@ def run_optimizer_layer(self, layer):
             solution_dp["memKBs"],
             solution_dp["memBoundedIn"],
             solution_dp["memBoundedOut"],
-            solution_dp["config"],
+            # solution_dp["config"],
         )
     )
     print("*" * 60)
