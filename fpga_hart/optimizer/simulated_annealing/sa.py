@@ -20,8 +20,7 @@ from fpga_hart.partitions.partition_compose import PartitionComposer
 from fpga_hart.utils import utils
 
 
-class SimulatedAnnealing():
-
+class SimulatedAnnealing:
     def __init__(
         self,
         graph,
@@ -50,7 +49,7 @@ class SimulatedAnnealing():
         self.branch_mem = branch_mem
 
         # Simulate Annealing Variables
-        self.k = 50 #sc.Boltzmann
+        self.k = 50  # sc.Boltzmann
         self.t_min = self.config.simulatedAnnealing["t_min"]
         self.t_max = self.config.simulatedAnnealing["t_max"]
         self.cooling_rate = self.config.simulatedAnnealing["cooling_rate"]
@@ -68,7 +67,9 @@ class SimulatedAnnealing():
         self.freeze_param = False
 
         self.partition_composer = PartitionComposer(
-            max_DSP_util=self.config.max_dsp_util, max_BRAM_util=self.config.max_bram_util, platform=self.platform
+            max_DSP_util=self.config.max_dsp_util,
+            max_BRAM_util=self.config.max_bram_util,
+            platform=self.platform,
         )
 
     from fpga_hart.optimizer.simulated_annealing.sa_latency import (
@@ -136,9 +137,9 @@ class SimulatedAnnealing():
         for i in range(n_in + n_out):
             perc.append(rand_vals[i] / total_sum)
 
-        assert math.isclose(
-            np.sum(np.array(perc)), 1.0
-        ), "Sum of mem_in_1_perc, mem_in_2_perc and mem_out_perc should be 1"
+        assert math.isclose(np.sum(np.array(perc)), 1.0), (
+            "Sum of mem_in_1_perc, mem_in_2_perc and mem_out_perc should be 1"
+        )
 
         perc_in = perc[:n_in]
         perc_out = perc[n_in:]
@@ -188,7 +189,9 @@ class SimulatedAnnealing():
                     kernel_size = hw.kernel_shape
                     coarse_inout_feasible = utils.get_factors(channels)
                     fine_feasible = utils.get_fine_feasible(kernel_size)
-                    coarse_inout_factor = random.choice(coarse_inout_feasible) / channels
+                    coarse_inout_factor = (
+                        random.choice(coarse_inout_feasible) / channels
+                    )
                     fine_factor = random.choice(fine_feasible) / np.prod(
                         np.array(kernel_size)
                     )

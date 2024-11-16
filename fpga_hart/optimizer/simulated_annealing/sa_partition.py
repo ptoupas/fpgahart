@@ -25,7 +25,6 @@ from fpga_hart.optimizer.optimizer_helper import (
     get_extra_mem_connections,
     get_minimum_resource_utilization,
     get_off_chip_mem_connections,
-    get_split_points,
     get_worst_case_buffering,
 )
 from fpga_hart.utils import utils
@@ -33,11 +32,13 @@ from fpga_hart.utils.graph_manipulation import (
     add_off_chip_connections,
     get_input_nodes,
     get_output_nodes,
+    get_split_points,
     split_graph,
     visualize_graph,
 )
 
 init(autoreset=True)
+
 
 def check_partition_fitting(
     self,
