@@ -45,7 +45,7 @@ class PartitionParser(ModelLayerDescriptor):
         ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
 
-        # self.partitions = self.create_partitions(self.layers)
+        self.partitions = self.create_partitions(self.layers)
 
         columns = [
             "Partition Name",
@@ -563,6 +563,9 @@ class PartitionParser(ModelLayerDescriptor):
             )
             if not os.path.exists(log_results_path):
                 os.makedirs(log_results_path)
+            else:
+                for file in os.listdir(log_results_path):
+                    os.unlink(os.path.join(log_results_path, file))
 
         batch_size = np.arange(1, 500, 1)
         lat_sec = (
@@ -642,27 +645,32 @@ class PartitionParser(ModelLayerDescriptor):
             "Batch 1": lat_sec[0],
             "Batch 30": lat_sec[29],
             "Batch 100": lat_sec[99],
+            "Batch 250": lat_sec[249],
         }
 
         self.model_avg_metrics["GOPs/s"] = {
             "Batch 1": through_gops_sec[0],
             "Batch 30": through_gops_sec[29],
             "Batch 100": through_gops_sec[99],
+            "Batch 250": through_gops_sec[249],
         }
         self.model_avg_metrics["Volumes/s"] = {
             "Batch 1": through_vols_sec[0],
             "Batch 30": through_vols_sec[29],
             "Batch 100": through_vols_sec[99],
+            "Batch 250": through_vols_sec[249],
         }
         self.model_avg_metrics["GOPs/s/DSP"] = {
             "Batch 1": gops_sec_dsp[0],
             "Batch 30": gops_sec_dsp[29],
             "Batch 100": gops_sec_dsp[99],
+            "Batch 250": gops_sec_dsp[249],
         }
         self.model_avg_metrics["GOPs/s/DSP/cycle"] = {
             "Batch 1": gops_sec_dsp_cycle[0],
             "Batch 30": gops_sec_dsp_cycle[29],
             "Batch 100": gops_sec_dsp_cycle[99],
+            "Batch 250": gops_sec_dsp_cycle[249],
         }
 
         del self.model_avg_metrics["latency(C)"]

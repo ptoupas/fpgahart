@@ -773,32 +773,32 @@ class NetworkParser(ModelLayerDescriptor):
             "Batch 1": lat_sec[0],
             "Batch 30": lat_sec[29],
             "Batch 100": lat_sec[99],
-            "Batch 200": lat_sec[199],
+            "Batch 250": lat_sec[249],
         }
 
         self.partition_parser.model_avg_metrics["GOPs/s"] = {
             "Batch 1": through_gops_sec[0],
             "Batch 30": through_gops_sec[29],
             "Batch 100": through_gops_sec[99],
-            "Batch 200": through_gops_sec[199],
+            "Batch 250": through_gops_sec[249],
         }
         self.partition_parser.model_avg_metrics["Volumes/s"] = {
             "Batch 1": through_vols_sec[0],
             "Batch 30": through_vols_sec[29],
             "Batch 100": through_vols_sec[99],
-            "Batch 200": through_vols_sec[199],
+            "Batch 250": through_vols_sec[249],
         }
         self.partition_parser.model_avg_metrics["GOPs/s/DSP"] = {
             "Batch 1": gops_sec_dsp[0],
             "Batch 30": gops_sec_dsp[29],
             "Batch 100": gops_sec_dsp[99],
-            "Batch 200": gops_sec_dsp[199],
+            "Batch 250": gops_sec_dsp[249],
         }
         self.partition_parser.model_avg_metrics["GOPs/s/DSP/cycle"] = {
             "Batch 1": gops_sec_dsp_cycle[0],
             "Batch 30": gops_sec_dsp_cycle[29],
             "Batch 100": gops_sec_dsp_cycle[99],
-            "Batch 200": gops_sec_dsp_cycle[199],
+            "Batch 250": gops_sec_dsp_cycle[249],
         }
 
         del self.partition_parser.model_avg_metrics["latency(C)"]

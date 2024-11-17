@@ -11,6 +11,7 @@ from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
 from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
+from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import (
     add_off_chip_connections,
     get_input_nodes,
@@ -210,29 +211,75 @@ def get_worst_case_buffering(
         op_type = graph.nodes[node]["type"]
         if op_type == "GlobalAveragePool":
             channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1 / channels]
+            coarse_feasible = utils.get_factors(channels)
+            coarse_feasible = coarse_feasible[math.floor(len(coarse_feasible) / 4)]
+            comb_config[node] = [coarse_feasible / channels]
         elif op_type == "Conv":
             channels = graph.nodes[node]["hw"].input_shape[1]
             filters = graph.nodes[node]["hw"].output_shape[1]
             kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
-            comb_config[node] = [1 / kernel_size, 1 / channels, 1 / filters]
+            coarse_in_feasible = utils.get_factors(channels)
+            coarse_in_feasible = coarse_in_feasible[
+                math.floor(len(coarse_in_feasible) / 4)
+            ]
+            coarse_out_feasible = utils.get_factors(filters)
+            coarse_out_feasible = coarse_out_feasible[
+                math.floor(len(coarse_out_feasible) / 4)
+            ]
+            fine_feasible = utils.get_fine_feasible(
+                graph.nodes[node]["hw"].kernel_shape
+            )
+            fine_feasible = fine_feasible[math.floor(len(fine_feasible) / 4)]
+            comb_config[node] = [
+                fine_feasible / kernel_size,
+                coarse_in_feasible / channels,
+                coarse_out_feasible / filters,
+            ]
         elif op_type == "Pooling":
             channels = graph.nodes[node]["hw"].input_shape[1]
             kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
-            comb_config[node] = [1 / kernel_size, 1 / channels]
+            coarse_in_feasible = utils.get_factors(channels)
+            coarse_in_feasible = coarse_in_feasible[
+                math.floor(len(coarse_in_feasible) / 4)
+            ]
+            fine_feasible = utils.get_fine_feasible(
+                graph.nodes[node]["hw"].kernel_shape
+            )
+            fine_feasible = fine_feasible[math.floor(len(fine_feasible) / 4)]
+            comb_config[node] = [
+                coarse_in_feasible / kernel_size,
+                fine_feasible / channels,
+            ]
         elif op_type == "Activation":
             channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1 / channels]
+            coarse_feasible = utils.get_factors(channels)
+            coarse_feasible = coarse_feasible[math.floor(len(coarse_feasible) / 4)]
+            comb_config[node] = [coarse_feasible / channels]
         elif op_type == "ElementWise":
             channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1 / channels]
+            coarse_feasible = utils.get_factors(channels)
+            coarse_feasible = coarse_feasible[math.floor(len(coarse_feasible) / 4)]
+            comb_config[node] = [coarse_feasible / channels]
         elif op_type == "BatchNormalization":
             channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1 / channels]
+            coarse_feasible = utils.get_factors(channels)
+            coarse_feasible = coarse_feasible[math.floor(len(coarse_feasible) / 4)]
+            comb_config[node] = [coarse_feasible / channels]
         elif op_type == "Gemm":
             channels = graph.nodes[node]["hw"].input_shape[1]
             filters = graph.nodes[node]["hw"].output_shape[1]
-            comb_config[node] = [1 / channels, 1 / filters]
+            coarse_in_feasible = utils.get_factors(channels)
+            coarse_in_feasible = coarse_in_feasible[
+                math.floor(len(coarse_in_feasible) / 4)
+            ]
+            coarse_out_feasible = utils.get_factors(filters)
+            coarse_out_feasible = coarse_out_feasible[
+                math.floor(len(coarse_out_feasible) / 4)
+            ]
+            comb_config[node] = [
+                coarse_in_feasible / channels,
+                coarse_out_feasible / filters,
+            ]
         else:
             assert False, "Not supported layer"
         comb_config[node]
@@ -270,8 +317,9 @@ def get_worst_case_buffering(
     bram_util = (
         (branch_buffer_new * word_bytes / (bram_type * 1024)) / brams_total
     ) * 100
-
-    if not dp_info["config"] and bram_util <= 90.0:
+    if not dp_info["config"] and bram_util <= 80.0:
         return 0, 0
+    # if not dp_info["config"]:
+    #     return branch_buffer_new, 100
 
     return branch_buffer_new, bram_util
