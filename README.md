@@ -1,4 +1,4 @@
-# FPGA-HART
+# fpgaHART
 
 ## Prerequisites
 Create a python environment with python version >=3.9 and install the dependencies from `requirements.txt` file.
