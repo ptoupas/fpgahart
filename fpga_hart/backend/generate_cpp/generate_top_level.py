@@ -1,13 +1,6 @@
 import os
-import re
 
-import numpy as np
 from layers.codegen import *
-
-from fpga_hart.utils.utils import (generate_supportive_layer_config,
-                                   get_branch_edges, get_input_node,
-                                   get_output_node)
-
 
 def find_fifo_depth(edge_out, partition_structure, branch_depth):
     for k, v in branch_depth.items():

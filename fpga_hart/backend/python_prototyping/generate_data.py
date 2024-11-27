@@ -1,5 +1,4 @@
 import argparse
-import json
 import math
 import os
 import random
@@ -7,15 +6,13 @@ import sys
 from collections import deque
 from copy import deepcopy
 
-import networkx as nx
 import numpy as np
-import pandas as pd
 import torch
 from fpbinary import FpBinary
 from torch import nn
 
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
-from fpga_hart.utils.utils import get_branch_start_end_points
+from fpga_hart.parser.onnx_parser import OnnxModelParser
+from fpga_hart.utils.graph_manipulation import get_branch_start_end_points
 
 random.seed(0)
 torch.manual_seed(0)
@@ -890,7 +887,7 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
                     weights.detach().numpy(), coarse_in, coarse_out, 1, 1, groups=groups
                 )
                 with open(
-                    os.path.join(self.file_path, prefix, self.part)
+                    os.path.join(self.file_path, self.part)
                     + "/weights_{}_cin{}_cout{}.csv".format(
                         node, coarse_in, coarse_out
                     ),
@@ -911,7 +908,7 @@ def partition_3d(part, partition_structure, layers_config, onnx_parser, file_for
                     groups=groups,
                 )
                 with open(
-                    os.path.join(self.file_path, prefix, self.part)
+                    os.path.join(self.file_path, self.part)
                     + "/weights_{}_cin{}_cout{}.csv".format(
                         node, coarse_in, coarse_out
                     ),

@@ -4,13 +4,14 @@ from collections import deque
 import networkx as nx
 import numpy as np
 
-from fpga_hart.layers.activation import ActivationLayer
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart import _logger
+from fpga_hart.layers.activation_3d import Activation3DLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
 from fpga_hart.utils import graph_manipulation, utils
@@ -22,9 +23,9 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class PartitionComposer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class PartitionComposer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
         self.preliminary_branch_depth = {}
 
     def update_layer(self):
@@ -104,8 +105,8 @@ class PartitionComposer(BaseLayer):
     @staticmethod
     def calculate_branch_buffering(graph):
         branch_buffering = {}
-        branch_edges = utils.get_branch_start_end_points(graph)
-        if branch_edges and (branch_edges[0][0] == None or branch_edges[0][1] == None):
+        branch_edges = graph_manipulation.get_branch_start_end_points(graph)
+        if branch_edges and (branch_edges[0][0] is None or branch_edges[0][1] is None):
             return branch_buffering
         unconnected_branches = {}
         for (in_point, end_point) in branch_edges:
@@ -148,7 +149,7 @@ class PartitionComposer(BaseLayer):
                     + 2
                 )
                 assert paths[0][-1] == paths[1][-1], "Paths should end at the same node"
-                if paths[0][0] == paths[1][0] and not 'Mem_in' in paths[0][0]:
+                if paths[0][0] == paths[1][0] and 'Mem_in' not in paths[0][0]:
                     branch_buffering[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[shortest_idx][-2], "depth": int(final_depth)}
                 else:
                     unconnected_branches[f"{in_point}_{end_point}"] = {"start": in_point, "end": end_point, "conn": paths[longest_idx][-2], "depth": depths[longest_idx], "path": paths[longest_idx]}
@@ -207,8 +208,8 @@ class PartitionComposer(BaseLayer):
     def get_design_point(
         self,
         graph,
-        comb: dict(),
-        mem_bw_in: list(),
+        comb: dict,
+        mem_bw_in: list,
         mem_bw_out: list,
         read_mem_points: list,
         write_mem_points: list,
@@ -222,6 +223,8 @@ class PartitionComposer(BaseLayer):
         assert len(mem_bw_out) == len(
             write_mem_points
         ), "Output memory break points and memory configuration does not match."
+
+        assert wr_factor >= 1, "Weights reloading factor must be at least 1."
 
         self.update_layer()
 
@@ -273,7 +276,7 @@ class PartitionComposer(BaseLayer):
 
             if op_type == "mem_in":
                 assert (
-                    not node in comb.keys()
+                    node not in comb.keys()
                 ), f"Memory IN node: {node} cannot have configuration."
                 gamma_matrix[n, n] = off_chip_mem_in.pop()
                 graph.nodes[node]["prod_rate"] = gamma_matrix[n, n]
@@ -281,7 +284,7 @@ class PartitionComposer(BaseLayer):
 
             if op_type == "mem_out":
                 assert (
-                    not node in comb.keys()
+                    node not in comb.keys()
                 ), f"Memory OUT node: {node} cannot have configuration."
                 gamma_matrix[graph_idx[node_predecessors[0]], n] = -off_chip_mem_out.pop()
                 curr_layer_rate = gamma_matrix[graph_idx[node_predecessors[0]], n]
@@ -311,7 +314,7 @@ class PartitionComposer(BaseLayer):
                     f"Node: {node} has more than 2 predecessors. This kind of connection is not yet supported."
                 )
 
-            if isinstance(hw, GAPLayer):
+            if isinstance(hw, GAP3DLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
@@ -339,7 +342,7 @@ class PartitionComposer(BaseLayer):
                     ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
-            elif isinstance(hw, ActivationLayer):
+            elif isinstance(hw, Activation3DLayer):
                 dp_info = hw.get_design_point(
                     coarse_inout=c[0],
                     mem_bw_in=curr_layer_rate,
@@ -347,7 +350,7 @@ class PartitionComposer(BaseLayer):
                     ignore_bw_util=True,
                 )
                 config[node] = utils.generate_layer_config(hw, c, wr_factor=wr_factor)
-            elif isinstance(hw, ElementWiseLayer):
+            elif isinstance(hw, ElementWise3DLayer):
                 if hw.broadcasting:
                     prev_nodes = [pn for pn in graph.predecessors(node)]
                     prev_nodes_out_shapes = [
@@ -408,7 +411,7 @@ class PartitionComposer(BaseLayer):
             else:
                 assert False, "Not supported layer"
 
-            if isinstance(hw, ElementWiseLayer):
+            if isinstance(hw, ElementWise3DLayer):
                 if not dp_info["config"]:
                     self.update_layer()
                     if DEBUG:
@@ -636,7 +639,7 @@ class PartitionComposer(BaseLayer):
             for idx_out, (k, h) in enumerate(mem_conns_out):
                 curr_thr_out = thr_out[idx_out] / workload_matrix[k, h]
                 thr_out_vols.append(curr_thr_out)
-                assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(curr_thr_in, curr_thr_out)
+                assert math.isclose(curr_thr_in, curr_thr_out), "Thoughputs missmatch between {} IN and {} OUT connections. thr in = {}, thr out = {}.".format(idx_in, idx_out, curr_thr_in, curr_thr_out)
 
         if (
             dsps_util < self.max_DSP_util
@@ -710,7 +713,7 @@ class PartitionComposer(BaseLayer):
                 workload_matrix[pn, n] = np.prod(np.array(hw.input_shape[1:]))
                 continue
 
-            if isinstance(hw, ElementWiseLayer):
+            if isinstance(hw, ElementWise3DLayer):
                 cp1 = graph_idx[list(graph.in_edges(node))[0][0]]
                 cp2 = graph_idx[list(graph.in_edges(node))[1][0]]
                 workload_matrix[cp1, n] = np.prod(np.array(hw.input_shape_1[1:]))
@@ -748,7 +751,7 @@ class PartitionComposer(BaseLayer):
                     wr_kernel_shape = [hw.filters, hw.channels] + hw.kernel_shape
                     conv_nodes_count += 1
             if conv_nodes_count > 1:
-                raise ValueError(f"Partition with weights reloading should not have more than 1 Conv layers. Currently {conv_nodes_count}.")
+                _logger.warning(f"Partition with weights reloading having more than 1 Conv layers. Currently {conv_nodes_count}.")
         else:
             wr_kernel_shape = [1, 1, 1, 1, 1]
 

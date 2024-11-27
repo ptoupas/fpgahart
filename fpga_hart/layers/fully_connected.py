@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -11,9 +11,9 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class FCLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class FCLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         self.input_shape = description["shape_in"][0]
         self.output_shape = description["shape_out"]
@@ -37,7 +37,7 @@ class FCLayer(BaseLayer):
         self.data_size_out = np.prod(np.array(self.output_shape[1:]))
 
         if self.bias_shape:
-            self.bias_shape = [self.filters]
+            self.bias_shape = [self.dim_out]
 
     def update_layer(self):
         self.full_rate_in = []
@@ -98,6 +98,8 @@ class FCLayer(BaseLayer):
         f_coarseOut: np.float64,
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+
         muls = math.ceil(
             self.dim_out * f_coarseOut
         )  # math.ceil(self.dim_in * f_coarseIn)
@@ -119,7 +121,7 @@ class FCLayer(BaseLayer):
             coarse_out=math.ceil(self.dim_out * f_coarseOut),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_num_streams(self):
         self.max_streams_in = self.dim_in

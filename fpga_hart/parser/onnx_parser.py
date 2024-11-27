@@ -82,6 +82,11 @@ class OnnxModelParser:
         self.init_onnx_model()
 
     def init_onnx_model(self) -> None:
+        # if os.path.exists(self.optimized_model_path):
+        #     self.onnx_model = onnx.load(self.optimized_model_path)
+        #     self.initial_model_inputs = [node.name for node in self.onnx_model.graph.input]
+        #     self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
+        # else:
         self.onnx_model = onnx.load(self.model_path)
         self.initial_model_inputs = [node.name for node in self.onnx_model.graph.input]
         self.initial_model_outputs = [node.name for node in self.onnx_model.graph.output]
@@ -93,6 +98,7 @@ class OnnxModelParser:
 
         add_input_from_initializer(self.onnx_model)
         self.convert_matmul_to_gemm()
+        # self.fuse_mul_sigmoid_into_hardswish()
         self.onnx_model = onnx.shape_inference.infer_shapes(self.onnx_model)
         passes = [
             "extract_constant_to_initializer",
@@ -112,8 +118,10 @@ class OnnxModelParser:
             self.onnx_model,
             self.optimized_model_path,
         )
+        self.num_onnx_nodes = len(self.onnx_model.graph.node)
         self.get_config()
         self.parse_layers()
+        assert len(self.torch_layers) == self.num_onnx_nodes, f"Number of layers ({len(self.torch_layers)}) does not match number of nodes in the onnx model ({self.num_onnx_nodes})"
 
     def get_node_weight_bias(self, node_name: str) -> Tuple[np.ndarray, np.ndarray]:
         node = [n for n in self.onnx_model.graph.node if n.name == node_name][0]
@@ -229,6 +237,8 @@ class OnnxModelParser:
         return tensor_shape
 
     def parse_layers(self) -> None:
+        assert len(self.onnx_model.graph.node) == len(self.onnx_model.graph.value_info), "Number of nodes and value_info mismatch. Aborting..."
+
         input_shape = self.get_tensor_shape(self.onnx_model.graph.input[0].name)
 
         _logger.debug("Model input shape = {}".format(input_shape))
@@ -242,10 +252,13 @@ class OnnxModelParser:
                     if n.name == "Gemm_401":
                         layers_outputs[n.input[0]] = [1, 432]
                 if self.model_name == "slowonly":
-                    if n.name == "Gemm_179":
+                    if n.name == "Gemm_181":
                         layers_outputs[n.input[0]] = [1, 2048]
-                if self.model_name == "r2plus1d":
-                    if n.name == "Gemm_237":
+                if self.model_name == "r2plus1d_18":
+                    if n.name == "Gemm_89":
+                        layers_outputs[n.input[0]] = [1, 512]
+                if self.model_name == "r2plus1d_34":
+                    if n.name == "Gemm_161":
                         layers_outputs[n.input[0]] = [1, 512]
                 if self.model_name == "c3d":
                     if n.name == "Gemm_32":
@@ -336,7 +349,7 @@ class OnnxModelParser:
                         elif attr.name == "kernel_shape":
                             kernel = list(attr.ints)
 
-                elif n.op_type == "Mul" or n.op_type == "Add" or n.op_type == "Div":
+                elif n.op_type == "Mul" or n.op_type == "Add" or n.op_type == "Div" or n.op_type == "Concat":
                     layer_input_ids.append(n.input[0])
                     layer_input_ids.append(n.input[1])
                     layer_input_shapes.append(layers_outputs[n.input[0]])
@@ -389,6 +402,10 @@ class OnnxModelParser:
                     layer_input_ids.append(n.input[0])
                     layer_input_shapes.append(layers_outputs[n.input[0]])
 
+                elif n.op_type == "Resize":
+                    layer_input_ids.append(n.input[0])
+                    layer_input_shapes.append(layers_outputs[n.input[0]])
+
                 out_shape = []
                 for dim in v.type.tensor_type.shape.dim:
                     out_shape.append(dim.dim_value)
@@ -421,6 +438,7 @@ class OnnxModelParser:
                         n.name, n.op_type
                     )
                 )
+                self.num_onnx_nodes -= 1
 
     def get_model_initializer(
         self, name: str, to_tensor: bool = True
@@ -543,3 +561,47 @@ class OnnxModelParser:
                 self.onnx_model.graph.node.insert(index, new_node)
                 if transpose_connection:
                     self.onnx_model.graph.node.remove(input_node)
+
+    def fuse_mul_sigmoid_into_hardswish(self):
+
+        # iterate over nodes in the graph
+        for index, node in enumerate(self.onnx_model.graph.node):
+
+            # find a mul node
+            if node.op_type != "Mul":
+                continue
+
+            # check only two inputs
+            if len(node.input) != 2:
+                continue
+
+            # get previous nodes
+            prev_node_a = next(filter(lambda x: x.output[0] == node.input[0], self.onnx_model.graph.node))
+            prev_node_b = next(filter(lambda x: x.output[0] == node.input[1], self.onnx_model.graph.node))
+
+            # # check prev node a has two outputs
+            # if len(prev_node_a.input) != 2:
+            #     continue
+
+            # check prev node b is a sigmoid
+            if prev_node_b.op_type != "Sigmoid":
+                continue
+
+            # check that the current node an prev node b have the same input
+            if node.input[0] != prev_node_b.input[0]:
+                continue
+
+            # create a new HardSwish node
+            new_node = onnx.helper.make_node(
+                "HardSwish",
+                name=node.name+"_hard_swish",
+                inputs=[prev_node_a.output[0]],
+                outputs=node.output,
+            )
+
+            # add the node to the graph
+            self.onnx_model.graph.node.insert(index, new_node)
+
+            # remove prev nodes
+            self.onnx_model.graph.node.remove(node)
+            self.onnx_model.graph.node.remove(prev_node_b)

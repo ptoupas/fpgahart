@@ -5,15 +5,15 @@ from typing import Tuple
 import numpy as np
 
 from fpga_hart import _logger
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
 
 
-class Convolutional3DLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class Convolutional3DLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
         # _logger.setLevel(level=logging.DEBUG)
 
         self.input_shape = description["shape_in"][0]
@@ -178,6 +178,8 @@ class Convolutional3DLayer(BaseLayer):
         f_coarseOut: np.float64,
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         layer_fifos_arrays = {
@@ -187,7 +189,10 @@ class Convolutional3DLayer(BaseLayer):
             "acc_fifo": 0,
             "acc_array": 0,
         }
-        if not self.pointwise:
+        if self.pointwise:
+            pipeline_depth += 1
+            pipeline_depth += math.ceil(1 / f_fine) + 1
+        else:
             if not self.temporal and not self.spatial:
                 depth_line_buffer_3d = (
                     math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
@@ -208,6 +213,17 @@ class Convolutional3DLayer(BaseLayer):
 
                 depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
                 layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+
+                pipeline_depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.cols_in + 2 * self.padding[2])
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kh - 1)
+                    + math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                    + math.ceil(1 / f_coarseIn) * (self.kd - 1)
+                )
             elif self.spatial and not self.temporal:
                 depth_line_buffer_3d = (
                     math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
@@ -224,6 +240,16 @@ class Convolutional3DLayer(BaseLayer):
                     + 1
                 )
                 layer_fifos_arrays["sw_lb_2d"] = depth_line_buffer_2d
+
+                pipeline_depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.cols_in + 2 * self.padding[2])
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kh - 1)
+                    + math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                )
             elif self.temporal and not self.spatial:
                 depth_line_buffer_3d = (
                     math.ceil(1 / f_coarseIn) * (self.depth_in + 2 * self.padding[0]) + 1
@@ -232,6 +258,21 @@ class Convolutional3DLayer(BaseLayer):
 
                 depth_window_buffer_3d = math.ceil(1 / f_coarseIn) + 1
                 layer_fifos_arrays["sw_wb_3d"] = depth_window_buffer_3d
+
+                pipeline_depth += (
+                    math.ceil(1 / f_coarseIn)
+                    * (self.depth_in + 2 * self.padding[0])
+                    * (self.kw - 1)
+                    + math.ceil(1 / f_coarseIn) * (self.kd - 1)
+                )
+
+        pipeline_depth += math.ceil(1 / f_coarseIn) * (
+                (self.kh - 1) * self.kw * self.kd
+                + (self.kw - 1) * self.kd
+                + (self.kd - 1)
+            )
+        
+        pipeline_depth += math.ceil(1 / f_fine) + 1
 
         if not self.depthwise:
             # Accumulator Module (AM) Depth and Memory
@@ -253,6 +294,7 @@ class Convolutional3DLayer(BaseLayer):
                 * math.ceil(self.filters * f_coarseOut)
             )
 
+            pipeline_depth += math.ceil(1 / f_coarseOut) + 1
         else:
             max_parallel_muls = math.ceil(kernel_elems * f_fine) * math.ceil(
                 self.channels * f_coarseIn
@@ -314,7 +356,7 @@ class Convolutional3DLayer(BaseLayer):
                 fine=math.ceil(kernel_elems * f_fine),
             )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_design_point(
         self,

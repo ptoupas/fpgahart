@@ -1,9 +1,6 @@
 import argparse
-import configparser
-import json
 import os
 from copy import deepcopy
-from typing import Tuple
 
 import pandas as pd
 from generate_tb import generate_tb_files_partition
@@ -20,16 +17,15 @@ from layers.generate_squeeze import generate_squeeze_files
 from layers.generate_swish import generate_swish_files
 
 from fpga_hart.backend.python_prototyping.generate_data import partition_3d
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.parser.onnx_parser import OnnxModelParser
 from fpga_hart.utils import utils
-from fpga_hart.utils.graph_manipulation import visualize_graph
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
     parser.add_argument(
         "model_name",
-        choices=["x3d_m", "slowonly", "r2plus1d", "c3d"],
+        choices=["x3d_m", "slowonly", "r2plus1d_18", "r2plus1d_34", "c3d"],
         type=str,
         help="name of the HAR model",
     )
@@ -80,7 +76,7 @@ def generate_partition_code(
             generate_elemwise_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "Conv" in layer_name:
             generate_conv_files(layer_name, layer_config, model_name, hls_project_path, partition_name=partition_name)
-        elif "MaxPool" in layer_name or "AveragePool" in layer_name and not "GlobalAveragePool" in layer_name:
+        elif "MaxPool" in layer_name or "AveragePool" in layer_name and "GlobalAveragePool" not in layer_name:
             generate_pool_files(layer_name, layer_config, model_name, partition_name=partition_name)
         elif "GlobalAveragePool" in layer_name:
             layer_name = "Gap_" + layer_name.split("_")[1]
@@ -141,20 +137,6 @@ def identify_streams_mismatches(layers_config, connections):
             squeeze_layers.append([in_node, out_node])
     return squeeze_layers
 
-def get_fpga_specs() -> Tuple[str, int, int, int, float]:
-    config = configparser.ConfigParser()
-    config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-    word_length = int(config.get("FPGA Specifications", "word_length"))
-    clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
-    bram = int(config.get("FPGA Specifications", "bram"))
-    bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
-    dsp = int(config.get("FPGA Specifications", "dsp"))
-    mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
-    fpga_device = config.get("FPGA Specifications", "fpga_device")
-
-    return fpga_device, clock_freq, dsp, bram, mem_bw
-
 if __name__ == "__main__":
     args = parse_args()
 
@@ -166,8 +148,8 @@ if __name__ == "__main__":
         partition_configuration = get_partitions_configurations(os.path.join(os.getcwd(), "fpga_modeling_reports", args.model_name, f"{args.model_name}_partitions.json"))
 
     for k, v in partition_configuration.items():
-        print(f"Generating partition {k}")
+        print(f"Generating partition {k} of {args.model_name} model")
         if args.config_file:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", deepcopy(onnx_parser), args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, "custom_partitions", onnx_parser, args.hls_project_path)
         else:
-            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, deepcopy(onnx_parser), args.hls_project_path)
+            generate_partition_code(v['layers'], v['structure'], v['branch_depth'], k, args.model_name, onnx_parser, args.hls_project_path)

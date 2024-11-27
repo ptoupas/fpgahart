@@ -4,35 +4,36 @@ import json
 import math
 import os
 import random
+import re
 from copy import deepcopy
-from ctypes import c_int
 from functools import reduce
 from typing import Tuple
 
-import networkx as nx
 import numpy as np
 import pandas as pd
+import scienceplots
 import seaborn as sns
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
 
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.utils.graph_manipulation import (add_off_chip_connections,
-                                                get_input_nodes,
-                                                get_output_nodes)
+from fpga_hart.utils.graph_manipulation import get_out_streams
 
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
+plt.style.use(["science", "ieee", "grid"])
 
+
+# helper function to perform sort
+def num_sort(test_string):
+    return list(map(int, re.findall(r'\d+', test_string)))[0]
 
 def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
     """
@@ -54,7 +55,7 @@ def get_factors(n, max_parallel=None, keep_percentage=None) -> list:
                 )
             )
         )
-        if not keep_percentage == None:
+        if keep_percentage is not None:
             keep_perc = 1 - keep_percentage
             threshold = max(math.ceil(max(result) * keep_perc), min(result))
             return sorted([x for x in result if x <= threshold])
@@ -391,7 +392,7 @@ def get_fine_feasible(kernel_size: list, keep_percentage: float = None):
             kernel_size[1] * kernel_size[2],
             kernel_size[0] * kernel_size[1] * kernel_size[2],
         ]
-    if not keep_percentage == None:
+    if keep_percentage is not None:
         keep_perc = 1 - keep_percentage
         threshold = max(math.ceil(max(fine_feasible) * keep_perc), min(fine_feasible))
         return sorted([x for x in fine_feasible if x <= threshold])
@@ -549,11 +550,6 @@ def plot_layers_csv(
         plt.savefig(os.path.join(plot_dir, file_name))
         plt.clf()
 
-
-def get_nodes_sorted(graph):
-    g_sorted = nx.topological_sort(graph)
-    return list(g_sorted)
-
 def generate_supportive_layer_config(layers, layers_config):
     for layer, config in layers.items():
         if config['type'] == 'Split':
@@ -591,7 +587,7 @@ def generate_supportive_layer_config(layers, layers_config):
 def generate_layer_config(layer, config, wr_factor=1):
 
     layer_config = {}
-    if isinstance(layer, GAPLayer):
+    if isinstance(layer, GAP3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
         coarse_factor = math.ceil(config[0] * layer.channels)
@@ -681,7 +677,7 @@ def generate_layer_config(layer, config, wr_factor=1):
         layer_config["fine_factor"] = fine_factor
         layer_config["coarse_factor"] = coarse_factor
         layer_config["wr_factor"] = wr_factor
-    elif isinstance(layer, ActivationLayer):
+    elif isinstance(layer, Activation3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.output_shape
         coarse_factor = math.ceil(config[0] * layer.channels)
@@ -698,7 +694,7 @@ def generate_layer_config(layer, config, wr_factor=1):
         layer_config["coarse_factor"] = coarse_factor
         layer_config["op_type"] = layer.op_type
         layer_config["wr_factor"] = wr_factor
-    elif isinstance(layer, ElementWiseLayer):
+    elif isinstance(layer, ElementWise3DLayer):
         input_shape = layer.input_shape
         output_shape = layer.input_shape
         broadcasting = 1 if layer.broadcasting else 0
@@ -845,13 +841,13 @@ def update_report_config(template_dict: dict, result_dict: dict, name: str, laye
         layer_config = generate_layer_config(layer_hw, result_dict["config"], wr_factor=result_dict["wr_factor"])
     elif isinstance(layer_hw, Pooling3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, GAPLayer):
+    elif isinstance(layer_hw, GAP3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     elif isinstance(layer_hw, FCLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, ElementWiseLayer):
+    elif isinstance(layer_hw, ElementWise3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
-    elif isinstance(layer_hw, ActivationLayer):
+    elif isinstance(layer_hw, Activation3DLayer):
         layer_config = generate_layer_config(layer_hw, result_dict["config"])
     else:
         raise ValueError("Layer type {} not supported".format(layer_type))
@@ -903,19 +899,19 @@ def check_configuration_validation(config, layers):
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][0])
             input_streams.append(streams_in)
-        elif isinstance(layer["layer"], GAPLayer):
+        elif isinstance(layer["layer"], GAP3DLayer):
             streams_in, streams_out = layer["layer"].get_num_streams()
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][1])
             input_streams.append(streams_in)
-        elif isinstance(layer["layer"], ActivationLayer):
+        elif isinstance(layer["layer"], Activation3DLayer):
             streams_in, streams_out = layer["layer"].get_num_streams()
             streams_in = math.ceil(streams_in * config[i][0])
             streams_out = math.ceil(streams_out * config[i][0])
             input_streams.append(streams_in)
         elif isinstance(layer["layer"], SqueezeExcitationLayer):
             print("config for layer (not supported) {} -> {}".format(layer, config))
-        elif isinstance(layer["layer"], ElementWiseLayer):
+        elif isinstance(layer["layer"], ElementWise3DLayer):
             streams_in1, streams_in2, streams_out = layer["layer"].get_num_streams()
             streams_in1 = math.ceil(streams_in1 * config[i][0])
             streams_in2 = math.ceil(streams_in2 * config[i][1])
@@ -946,251 +942,12 @@ def check_configuration_validation(config, layers):
 
     return valid
 
-
-def get_out_streams(layer_graph, node_out):
-    for v in layer_graph.values():
-        if v["node_out"] == node_out:
-            return v["streams_out"]
-    assert False, "Cannot find node {} in the layer graph.".format(node_out)
-
-
-def get_split_points(graph):
-    split_points = []
-    for node in nx.topological_sort(graph):
-        if graph.out_degree[node] > 1:
-            split_points.append(node)
-        if graph.nodes[node]["type"] == "GlobalAveragePool":
-            split_points.insert(0, node)
-    return split_points
-
-
-def get_merge_points(graph):
-    merge_points = []
-    for node in nx.topological_sort(graph):
-        if graph.in_degree[node] > 1:
-            merge_points.append(node)
-    return merge_points
-
-
-def get_worst_case_buffering(graph, partition_composer, mem_words_per_cycle, word_bytes, bram_type, brams_total, gap_approx):
-    # branch_edges = get_branch_start_end_points(graph)
-
-    # branch_buffer = 0
-    # for (splt, mrg) in branch_edges:
-    #     all_paths = [p for p in nx.all_simple_paths(graph, splt, mrg)]
-    #     num_sub_branches = len(all_paths) - 2
-
-    #     shortest_path = nx.shortest_path(graph, splt, mrg)
-    #     merge_node = shortest_path[-1]
-    #     pre_merge_node = shortest_path[-2]
-    #     assert (graph.nodes[pre_merge_node]["hw"].output_shape
-    #                 == graph.nodes[merge_node]["hw"].input_shape
-    #             ), "Layers input and output shapes does not match"
-    #     #TODO: This is the work case scenario for buffering the whole feature map. A more accurate design would be to calculate the depths for each layer in each branch and accumulate the depths to get the total buffer depth which will be the minimum between the work case scenario and the actual buffer depth.
-    #     branch_buffer += np.prod(np.array(graph.nodes[pre_merge_node]["hw"].output_shape))
-    # branch_buffer *= 0.5
-
-    comb_config = {}
-    for node in nx.topological_sort(graph):
-        op_type = graph.nodes[node]['type']
-        if op_type == "GlobalAveragePool":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1/channels]
-        elif op_type == "Conv":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            filters = graph.nodes[node]["hw"].output_shape[1]
-            kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
-            comb_config[node] = [1/kernel_size, 1/channels, 1/filters]
-        elif op_type == "Pooling":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            kernel_size = np.prod(np.array(graph.nodes[node]["hw"].kernel_shape))
-            comb_config[node] = [1/kernel_size, 1/channels]
-        elif op_type == "Activation":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1/channels]
-        elif op_type == "ElementWise":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1/channels]
-        elif op_type == "BatchNormalization":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            comb_config[node] = [1/channels]
-        elif op_type == "Gemm":
-            channels = graph.nodes[node]["hw"].input_shape[1]
-            filters = graph.nodes[node]["hw"].output_shape[1]
-            comb_config[node] = [1/channels, 1/filters]
-        else:
-            assert False, "Not supported layer"
-        comb_config[node]
-
-    nodes_in = get_input_nodes(graph)
-    nodes_out = get_output_nodes(graph)
-    num_mem_connections = len(nodes_in) + len(nodes_out)
-    mem_bw_in = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_in))]
-    mem_bw_out = [mem_words_per_cycle/num_mem_connections for _ in range(len(nodes_out))]
-    read_points, write_points = add_off_chip_connections(
-                graph, nodes_in, nodes_out, gap_approx)
-    dp_info = partition_composer.get_design_point(
-        graph.copy(),
-        comb_config,
-        mem_bw_in,
-        mem_bw_out,
-        read_points,
-        write_points,
-        gap_approx=gap_approx
-    )
-
-    branch_buffer_new = 0
-    for k, v in partition_composer.preliminary_branch_depth.items():
-        branch_buffer_new += v['depth']
-    bram_util = ((branch_buffer_new * word_bytes / (bram_type * 1024) ) / brams_total) * 100
-
-    if not dp_info['config'] and bram_util <= 90.0:
-        return 0, 0
-
-    return branch_buffer_new, bram_util
-
-def get_branch_edges(graph):
-    merge_points = get_merge_points(graph)
-
-    branch_edges = []
-    for mrg in merge_points:
-        branch_edges.append(list(graph.in_edges(mrg)))
-
-    return branch_edges
-
-
 def get_conbinations(list1, list2):
     combs = [x * y for x, y in itertools.product(list1, list2)]
     return list(np.unique(np.array(combs)))
 
-
-def get_input_node(graph):
-    for node in nx.topological_sort(graph):
-        if graph.in_degree[node] == 0:
-            return node
-
-
-def get_output_node(graph):
-    for node in nx.topological_sort(graph):
-        if graph.out_degree[node] == 0:
-            return node
-
-
-def get_branch_start_end_points(graph):
-    result = []
-    def traverse_branch_bw(graph, mp, result):
-        for pred in graph.predecessors(mp):
-            prev_node = pred
-            while True:
-                if graph.out_degree[prev_node] > 1:
-                    if (prev_node, mp) not in result:
-                        result.append((prev_node, mp))
-                    break
-
-                if graph.in_degree[prev_node] == 1:
-                    prev_node = list(graph.predecessors(prev_node))[0]
-                elif graph.in_degree[prev_node] > 1:
-                    prev_node = traverse_branch_bw(graph, prev_node, result)
-                    assert len(list(graph.predecessors(prev_node))) == 1, "Split layer before split layer is not supported"
-                    prev_node = list(graph.predecessors(prev_node))[0]
-                elif graph.in_degree[prev_node] == 0:
-                    if (prev_node, mp) not in result:
-                        result.append((prev_node, mp))
-                    break
-        if "Mem_in" in prev_node and prev_node in list(graph.predecessors(mp)):
-            assert len(list(graph.predecessors(mp))) == 2, f"If prev_node is a mem_in node {mp} should have atleast 2 predecessors since it is a merge point"
-            predecessors = list(graph.predecessors(mp))
-            predecessors.remove(prev_node)
-            prev_node = predecessors[0]
-        return prev_node
-
-    merge_points = get_merge_points(graph)
-    for mp in merge_points:
-        traverse_branch_bw(graph, mp, result)
-
-    return result
-
-    # split_points = get_split_points(graph)
-    # for sp in split_points:
-    #     merge_point = None
-    #     next_node = sp
-    #     extra_split_points = 0
-    #     while True:
-    #         if graph.out_degree[next_node] == 1:
-    #             next_node = list(graph.successors(next_node))[0]
-    #         elif graph.out_degree[next_node] > 1:
-    #             extra_split_points += 1
-    #             next_node = list(graph.successors(next_node))[0]
-    #         else:
-    #             break
-
-    #         if graph.in_degree[next_node] > 1:
-    #             extra_split_points -= 1
-    #             if extra_split_points == 0:
-    #                 merge_point = next_node
-    #                 break
-    #     result.append((sp, merge_point))
-
-def update_graph(graph, split_points=None, squeeze_layers=None):
-    if split_points is None and squeeze_layers is None:
-        return graph
-
-    if split_points is not None:
-        new_nodes = []
-        new_edges = []
-        for sp in split_points:
-            new_node_name = "Split_" + sp
-            new_nodes.append(new_node_name)
-
-            next_nodes = list(graph.successors(sp))
-
-            edges_out = list(graph.out_edges(sp))
-
-            assert (
-                len(next_nodes) > 1 and len(edges_out) > 1
-            ), "Split point {} cannot have only one successor".format(sp)
-
-            graph.remove_edges_from(edges_out)
-
-            edge = (sp, new_node_name)
-            new_edges.append(edge)
-            for nd in next_nodes:
-                edge = (new_node_name, nd)
-                new_edges.append(edge)
-
-        if new_nodes or new_edges:
-            graph.update(edges=new_edges, nodes=new_nodes)
-
-    if squeeze_layers is not None:
-        new_nodes = []
-        new_edges = []
-        for sl in squeeze_layers:
-            new_node_name = "Squeeze_" + sl[0] + "_" + sl[1]
-            new_nodes.append(new_node_name)
-
-            prev_nodes = list(graph.predecessors(sl[1]))
-
-            edges_in = list(graph.in_edges(sl[1]))
-
-            for ei in edges_in:
-                if sl[0] in ei[0] and sl[1] in ei[1]:
-                    graph.remove_edge(ei[0], ei[1])
-
-            edge = (new_node_name, sl[1])
-            new_edges.append(edge)
-            for pn in prev_nodes:
-                if sl[0] in pn:
-                    edge = (pn, new_node_name)
-                    new_edges.append(edge)
-
-        if new_nodes or new_edges:
-            graph.update(edges=new_edges, nodes=new_nodes)
-
-    return graph
-
 def normalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
-
 
 def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
     X = np.array(channels).reshape(-1, 1)
@@ -1238,21 +995,10 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
         plt.tight_layout()
         plt.show()
 
-    # inertias_res = normalizeData(
-    #     np.array(sorted(mapping2.values(), reverse=True)))
-    # k_inertia = 0
-    # for i in range(len(inertias_res)-1):
-    #     dist = np.linalg.norm(inertias_res[i]-inertias_res[i+1])
-    #     if dist < 0.1:
-    #         k_inertia = i + 1
-    #         print(f"{i + 1} -> {dist}")
-    #         break
-
     df = pd.DataFrame({"channels": channels})
     df["channels_bin"] = pd.qcut(df["channels"], q=k_dist)
     bin_edges = df["channels_bin"].unique()
 
-    # bin_edges = np.histogram_bin_edges(X, bins=k_dist+1)
     if plot_hist:
         sns.histplot(X, bins=X.shape[0])
         plt.tight_layout()
@@ -1262,7 +1008,7 @@ def get_channels_bins(channels, plot_lbow=False, plot_hist=False):
 
 
 def get_pool_type(
-    layer: dict(),
+    layer: dict,
     discriminate_kernel_size: bool = False,
     discriminate_stide: bool = False,
     discriminate_padding: bool = False,
@@ -1282,7 +1028,7 @@ def get_pool_type(
     return pool_type
 
 def get_conv_type(
-    layer: dict(),
+    layer: dict,
     discriminate_kernel_size: bool = False,
     discriminate_stide: bool = False,
     discriminate_padding: bool = False,
@@ -1309,220 +1055,3 @@ def get_conv_type(
         conv_type += "c{}".format(cin)
         conv_type += "f{}".format(cout)
     return conv_type
-
-def calc_mape(value_a: int, value_b: int) -> float:
-    return (abs(value_a - value_b) / abs(value_a)) * 100
-
-def calc_conv_out_shape(cin: int, din: int, hin: int, kernel_shape: list, pad: list, stride: list, dw: bool, chan_dist_thresh: int = 10, is_pool: bool = False) -> list:
-    kd, kh, _ = kernel_shape
-    pad_d, pad_h, _ = pad
-    if kd == 1:
-        pad_d = 0
-    if kh == 1:
-        pad_h = 0
-    stride_d, stride_h, _ = stride
-    dout = max(1, math.floor((din + 2*pad_d -kd)/stride_d + 1))
-    hout = max(1, math.floor((hin + 2*pad_h -kh)/stride_h + 1))
-    wout = hout
-
-    if dw or is_pool:
-        cout = cin
-    else:
-        c_in_range = math.ceil(cin*chan_dist_thresh/100)
-        cout = np.random.randint(cin, cin+c_in_range)
-
-    return [1, int(cout), int(dout), int(hout), int(wout)]
-
-def get_random_arbitrary_shape(
-    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, depth_dist_thresh: int = 10, height_dist_thresh: int = 10
-) -> np.array:
-    in_shapes = []
-    out_shapes = []
-    kernel_shape = [int(x) for x in bb_type.split("k")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
-    padding = [int(x) for x in bb_type.split("p")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
-    stride = [int(x) for x in bb_type.split("s")[-1][:3]] if "Conv" in bb_type or "Pooling" in bb_type else []
-    dw = True if "Dw" in bb_type else False
-    for node in graph.nodes:
-        bb = lookuptable[graph.nodes[node]["hw_type"]]
-        if bb == "Activation" and len(graph.nodes[node]["hw"].input_shape) < 5:
-            continue
-        if bb in bb_type:
-            in_shapes.append(graph.nodes[node]["hw"].input_shape)
-            out_shapes.append(graph.nodes[node]["hw"].output_shape)
-
-    final_shape_in = []
-    final_shape_out = []
-    if len(in_shapes[0]) == 5:
-        if previous_config is not None and bb_type in previous_config:
-            prev_c_in = previous_config[bb_type]["config"]["channels_in"]
-            prev_d_in = previous_config[bb_type]["config"]["depth_in"]
-            prev_h_in = previous_config[bb_type]["config"]["height_in"]
-
-            c_in_range = math.ceil(prev_c_in*chan_dist_thresh/100)
-            d_in_range = math.ceil(prev_d_in*depth_dist_thresh/100)
-            h_in_range = math.ceil(prev_h_in*height_dist_thresh/100)
-
-            c_in = np.random.randint(max(1, prev_c_in-c_in_range), prev_c_in+c_in_range)
-            d_in = np.random.randint(max(1, prev_d_in-d_in_range), prev_d_in+d_in_range)
-            h_in = np.random.randint(max(1, prev_h_in-h_in_range), prev_h_in+h_in_range)
-
-            if "Conv" in bb_type:
-                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh)
-            elif "Pooling" in bb_type:
-                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh, is_pool=True)
-            elif "GlobalAveragePool" in bb_type:
-                c_out = c_in
-                d_out = 1
-                h_out = 1
-            else:
-                c_out = c_in
-                d_out = d_in
-                h_out = h_in
-
-            w_in = h_in
-            w_out = h_out
-
-            assert c_in<=c_out and d_in >= d_out and h_in >= h_out and w_in >= w_out, "Invalid output shape: {} -> {}".format([1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out])
-            final_shape_in, final_shape_out = [1, int(c_in), int(d_in), int(h_in), int(w_in)], [1, int(c_out), int(d_out), int(h_out), int(w_out)]
-
-        _, c_min, d_min, h_min, _ = np.min(np.array(in_shapes), axis=0)
-        _, c_max, d_max, h_max, _ = np.max(np.array(in_shapes), axis=0)
-        c_in = np.random.randint(c_min, c_max) if c_min != c_max else c_min
-        d_in = np.random.randint(d_min, d_max) if d_min != d_max else d_min
-        h_in = np.random.randint(h_min, h_max) if h_min != h_max else h_min
-        w_in = h_in
-
-        if "Conv" in bb_type:
-            _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh)
-        elif "Pooling" in bb_type:
-                _, c_out, d_out, h_out, _ = calc_conv_out_shape(c_in, d_in, h_in, kernel_shape, padding, stride, dw, chan_dist_thresh, is_pool=True)
-        elif "GlobalAveragePool" in bb_type:
-            c_out = c_in
-            d_out = 1
-            h_out = 1
-        else:
-            c_out = c_in
-            d_out = d_in
-            h_out = h_in
-
-        w_in = h_in
-        w_out = h_out
-
-        assert c_in<=c_out and d_in >= d_out and h_in >= h_out and w_in >= w_out, "Invalid output shape: {} -> {}".format([1, c_in, d_in, h_in, w_in], [1, c_out, d_out, h_out, w_out])
-        final_shape_in, final_shape_out = [1, int(c_in), int(d_in), int(h_in), int(w_in)], [1, int(c_out), int(d_out), int(h_out), int(w_out)]
-    elif len(in_shapes[0]) == 2:
-        _, features_min = np.min(np.array(in_shapes), axis=0)
-        _, features_max = np.max(np.array(in_shapes), axis=0)
-        features_in = np.random.randint(features_min, features_max) if features_min != features_max else features_min
-
-        _, features_min_out = np.min(np.array(out_shapes), axis=0)
-        _, features_max_out = np.max(np.array(out_shapes), axis=0)
-        features_out = np.random.randint(features_min_out, features_max_out) if features_min_out != features_max_out else features_min_out
-        final_shape_in, final_shape_out = [1, int(features_in)], [1, int(features_out)]
-
-    return final_shape_in, final_shape_out
-
-def get_random_shape(
-    graph: nx.DiGraph, bb_type: str, lookuptable: dict, previous_config: dict = None, chan_dist_thresh: int = 10, depth_dist_thresh: int = 10, height_dist_thresh: int = 10
-) -> np.array:
-    shapes_list = []
-    for n in nx.topological_sort(graph):
-        bb = lookuptable[graph.nodes[n]["hw_type"]]
-        if bb in bb_type and bb == "Gemm":
-            shapes_list.append(
-                [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
-            )
-        elif bb in bb_type and np.prod(graph.nodes[n]["hw"].input_shape[2:]) > 1:
-            shapes_list.append(
-                [graph.nodes[n]["hw"].input_shape, graph.nodes[n]["hw"].output_shape]
-            )
-
-    while True:
-        final_shapes = random.choice(shapes_list)
-        shape_in = final_shapes[0]
-        shape_out = final_shapes[1]
-        if previous_config is not None and bb_type in previous_config:
-            if len(shape_in) >= 5:
-                prev_shape_in = [previous_config[bb_type]["config"]["batch_size"],
-                                previous_config[bb_type]["config"]["channels_in"],
-                                previous_config[bb_type]["config"]["depth_in"],
-                                previous_config[bb_type]["config"]["height_in"],
-                                previous_config[bb_type]["config"]["width_in"]]
-            else:
-                prev_shape_in = [previous_config[bb_type]["config"]["batch_size"],
-                                previous_config[bb_type]["config"]["features_in"]]
-
-            mape_channels = calc_mape(prev_shape_in[1], shape_in[1])
-            if len(prev_shape_in) >= 5:
-                mape_height = calc_mape(prev_shape_in[3], shape_in[3])
-            else:
-                mape_height = 0
-            if mape_channels > chan_dist_thresh or mape_height > height_dist_thresh:
-                continue
-            break
-        else:
-            break
-    return shape_in, shape_out
-
-
-def get_minmax_input_channels(graph: nx.DiGraph, bb_type: str) -> int:
-    max_input_channels = -1
-    min_input_channels = 10000
-    for n in nx.topological_sort(graph):
-        bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type:
-            max_input_channels = max(
-                max_input_channels, graph.nodes[n]["hw"].input_shape[1]
-            )
-            min_input_channels = min(
-                min_input_channels, graph.nodes[n]["hw"].input_shape[1]
-            )
-    return min_input_channels, max_input_channels
-
-
-def get_minmax_output_channels(graph: nx.DiGraph, bb_type: str) -> int:
-    max_output_channels = -1
-    min_output_channels = 10000
-    for n in nx.topological_sort(graph):
-        bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type:
-            max_output_channels = max(
-                max_output_channels, graph.nodes[n]["hw"].output_shape[1]
-            )
-            min_output_channels = min(
-                min_output_channels, graph.nodes[n]["hw"].output_shape[1]
-            )
-    return min_output_channels, max_output_channels
-
-
-def get_minmax_depth(graph: nx.DiGraph, bb_type: str) -> int:
-    max_depth = -1
-    min_depth = 10000
-    for n in nx.topological_sort(graph):
-        bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type:
-            max_depth = max(max_depth, graph.nodes[n]["hw"].input_shape[2])
-            min_depth = min(min_depth, graph.nodes[n]["hw"].input_shape[2])
-    return min_depth, max_depth
-
-
-def get_minmax_height(graph: nx.DiGraph, bb_type: str) -> int:
-    max_height = -1
-    min_height = 10000
-    for n in nx.topological_sort(graph):
-        bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type:
-            max_height = max(max_height, graph.nodes[n]["hw"].input_shape[3])
-            min_height = min(min_height, graph.nodes[n]["hw"].input_shape[3])
-    return min_height, max_height
-
-
-def get_minmax_width(graph: nx.DiGraph, bb_type: str) -> int:
-    max_width = -1
-    min_width = 10000
-    for n in nx.topological_sort(graph):
-        bb = graph.nodes[n]["hw_type"]
-        if bb == bb_type:
-            max_width = max(max_width, graph.nodes[n]["hw"].input_shape[4])
-            min_width = min(min_width, graph.nodes[n]["hw"].input_shape[4])
-    return min_width, max_width

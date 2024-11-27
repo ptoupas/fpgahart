@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -11,9 +11,9 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class ActivationLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class Activation3DLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         self.op_type = description["operation"]
         self.input_shape = description["shape_in"][0]
@@ -91,6 +91,13 @@ class ActivationLayer(BaseLayer):
         supported_ops: list
     ) -> Tuple[float, float]:
 
+        if self.op_type == "Relu":
+            pipeline_depth = 2
+        elif self.op_type == "Sigmoid":
+            pipeline_depth = 28  # 28 cycles is the delay for the execution of math for sigmoid. This value came up from some experiments on HLS.
+        elif self.op_type == "Swish":
+            pipeline_depth = 33  # 33 cycles is the delay for the execution of math for swish. This value came up from some experiments on HLS.
+
         muls_relu = 0
         adds_relu = 0
         muls_sigmoid = math.ceil(self.channels * f_coarse_inout * 3)
@@ -115,7 +122,7 @@ class ActivationLayer(BaseLayer):
         bram_util = 0
         dsps_util = (muls / self.dsp) * 100
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}

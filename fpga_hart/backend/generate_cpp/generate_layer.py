@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 
 import pandas as pd
@@ -27,7 +26,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="fpga_hart toolflow parser")
     parser.add_argument(
         "model_name",
-        choices=["x3d_m", "slowonly", "r2plus1d", "c3d"],
+        choices=["x3d_m", "slowonly", "r2plus1d_18", "r2plus1d_34", "c3d"],
         type=str,
         help="name of the HAR model",
     )

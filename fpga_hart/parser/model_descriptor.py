@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from fpga_hart import _logger
-from fpga_hart.network_representation.onnx_parser import OnnxModelParser
+from fpga_hart.parser.onnx_parser import OnnxModelParser
 
 
 @dataclass
@@ -17,20 +17,25 @@ class ModelLayerDescriptor(OnnxModelParser):
         self.layers = {}
         self.create_layers()
 
+    def is_branch_layer(self, output_id: str) -> bool:
+        num_outputs = 0
+        swish_detect = []
+        for kk in self.torch_layers.keys():
+            if output_id in self.torch_layers[kk]["input_id"]:
+                swish_detect.append(self.torch_layers[kk]["operation"])
+                num_outputs += 1
+        if swish_detect == ["Sigmoid", "Mul"]:
+            return False
+        if num_outputs > 1:
+            return True
+        return False
+
     def create_layers(self) -> None:
         if self.se_block:
             se_module = deque(maxlen=6)
         swish_module = deque(maxlen=2)
-        prev_output_id = -1
 
         for k in self.torch_layers.keys():
-
-            # curr_output_id = int(self.torch_layers[k]["output_id"])
-            # if not prev_output_id == -1:
-            #     assert (
-            #         curr_output_id >= prev_output_id + 1
-            #     ), "Modules are not in the correct order. Revise the graph creation"
-            # prev_output_id = curr_output_id
 
             name = k
             if "Flatten" in name:
@@ -48,9 +53,12 @@ class ModelLayerDescriptor(OnnxModelParser):
             if self.model_name == "slowonly":
                 if name == "Gemm_181":
                     input_node = [self.torch_layers["GlobalAveragePool_172"]["output_id"]]
-            if self.model_name == "r2plus1d":
-                if name == "Gemm_239":
-                    input_node = [self.torch_layers["GlobalAveragePool_230"]["output_id"]]
+            if self.model_name == "r2plus1d_18":
+                if name == "Gemm_89":
+                    input_node = [self.torch_layers["GlobalAveragePool_80"]["output_id"]]
+            if self.model_name == "r2plus1d_34":
+                if name == "Gemm_161":
+                    input_node = [self.torch_layers["GlobalAveragePool_152"]["output_id"]]
             if self.model_name == "c3d":
                 if name == "Gemm_32":
                     input_node = [self.torch_layers["Relu_25"]["output_id"]]
@@ -64,7 +72,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                 "shape_out": output_shape,
                 "node_in": input_node,
                 "node_out": output_node,
-                "branching": False,
+                "branching": self.is_branch_layer(self.torch_layers[k]["output_id"]),
             }
 
             if operation == "Conv":
@@ -165,7 +173,7 @@ class ModelLayerDescriptor(OnnxModelParser):
                         "node_in": swish_input_node,
                         "node_out": swish_output_node,
                         "shape_branch": swish_input_shape,
-                        "branching": True,
+                        "branching": self.is_branch_layer(self.torch_layers[mul_name]["output_id"]),
                         "primitive_ops": {sigmoid_name: sigmoid, mul_name: mul},
                     }
 

@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def get_connection_points(matrix, node, debug=False):
     consume_points = get_consume_points(matrix, node)
     produce_points = get_produce_points(matrix, node)

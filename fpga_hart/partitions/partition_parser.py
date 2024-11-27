@@ -1,5 +1,3 @@
-import configparser
-import csv
 import json
 import os
 import time
@@ -10,46 +8,48 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-import seaborn as sns
+import scienceplots
+from dotmap import DotMap
 
 import wandb
 from fpga_hart import _logger
-from fpga_hart.layers.activation import ActivationLayer
+from fpga_hart.layers.activation_3d import Activation3DLayer
 from fpga_hart.layers.batchnorm_3d import BatchNorm3DLayer
 from fpga_hart.layers.convolutional_3d import Convolutional3DLayer
-from fpga_hart.layers.elemwise import ElementWiseLayer
+from fpga_hart.layers.elemwise_3d import ElementWise3DLayer
 from fpga_hart.layers.fully_connected import FCLayer
-from fpga_hart.layers.gap import GAPLayer
+from fpga_hart.layers.gap_3d import GAP3DLayer
 from fpga_hart.layers.pooling_3d import Pooling3DLayer
 from fpga_hart.layers.squeeze_excitation import SqueezeExcitationLayer
-from fpga_hart.network_representation.partition_descriptor import \
-    PartitionDescriptor
-from fpga_hart.optimizer.simulated_annealing import SimulatedAnnealing
+from fpga_hart.optimizer.simulated_annealing.sa import SimulatedAnnealing
+from fpga_hart.parser.model_descriptor import ModelLayerDescriptor
+from fpga_hart.platform.platform import Platform
 from fpga_hart.utils import utils
 from fpga_hart.utils.graph_manipulation import visualize_graph
 
-sns.set(rc={"figure.figsize": (15, 8)})
-sns.set_style("whitegrid")
-
-def multithreaded_modeling(operation, input, pool):
-    results = pool.starmap(operation, input)
-    return results
+plt.style.use(["science", "ieee", "grid"])
 
 
 @dataclass
-class PartitionParser(PartitionDescriptor):
+class PartitionParser(ModelLayerDescriptor):
     gap_approx: bool
     singlethreaded: bool
     per_layer_plot: bool
-    config: wandb.Config
+    platform: Platform
+    config: DotMap
     enable_wandb: bool
 
+    from fpga_hart.partitions.partition_descriptor import create_partitions
+
     def __post_init__(self) -> None:
-        PartitionDescriptor.__post_init__(self)  # Initialize the parent class
+        ModelLayerDescriptor.__post_init__(self)  # Initialize the parent class
         # _logger.setLevel(level=logging.DEBUG)
+
+        self.partitions = self.create_partitions(self.layers)
 
         columns = [
             "Partition Name",
+            "Num Layers",
             "Times Repeated",
             "Num Splits",
             "Times Weights Reloading",
@@ -71,39 +71,48 @@ class PartitionParser(PartitionDescriptor):
 
         self.model_avg_metrics = {}
 
-        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)):
-            os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name))
+        if not os.path.exists(
+            os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)
+        ):
+            os.makedirs(
+                os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name)
+            )
 
         self.partition_model_file = os.path.join(
-            os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_partitions.json"
+            os.getcwd(),
+            "fpga_modeling_reports",
+            self.model_name,
+            self.model_name + "_partitions.json",
         )
+        if os.path.exists(self.partition_model_file):
+            os.remove(self.partition_model_file)
 
         if self.se_block:
             self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_se.json"
+                os.getcwd(),
+                "fpga_modeling_reports",
+                self.model_name,
+                self.model_name + "_se.json",
             )
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_se_pareto.json"
+                os.getcwd(),
+                "fpga_modeling_reports",
+                self.model_name,
+                self.model_name + "_se_pareto.json",
             )
         else:
             self.layer_model_file = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + ".json"
+                os.getcwd(),
+                "fpga_modeling_reports",
+                self.model_name,
+                self.model_name + ".json",
             )
             self.layer_model_file_par = os.path.join(
-                os.getcwd(), "fpga_modeling_reports", self.model_name, self.model_name + "_pareto.json"
+                os.getcwd(),
+                "fpga_modeling_reports",
+                self.model_name,
+                self.model_name + "_pareto.json",
             )
-
-        self.get_fpga_specs()
-
-    def get_fpga_specs(self):
-        specs = configparser.ConfigParser()
-        specs.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-        self.clock_frequency = int(specs.get("FPGA Specifications", "clock_freq"))
-        self.total_dsp = int(specs.get("FPGA Specifications", "dsp"))
-        self.reconfiguration_time = float(
-            specs.get("FPGA Specifications", "reconfiguration_time")
-        )
 
     def is_partition_input(self, partition, node_ids):
         if len(node_ids) > 1:
@@ -192,10 +201,11 @@ class PartitionParser(PartitionDescriptor):
             # if not 'Gemm_401' in partition:
             #     self.reduce_node_shapes(layer, channels_reduction_rate=4, depth_reduction_rate=1, height_reduction_rate=1, width_reduction_rate=1)
             if self.layers[layer]["operation"] == "GlobalAveragePool":
-                hw_layer = GAPLayer(
+                hw_layer = GAP3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
                 layer_type = self.layers[layer]["operation"]
             elif self.layers[layer]["operation"] == "Conv":
@@ -203,13 +213,18 @@ class PartitionParser(PartitionDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
                 layer_type = self.layers[layer]["operation"]
-            elif self.layers[layer]["operation"] == "MaxPool" or self.layers[layer]["operation"] == "AveragePool":
+            elif (
+                self.layers[layer]["operation"] == "MaxPool"
+                or self.layers[layer]["operation"] == "AveragePool"
+            ):
                 hw_layer = Pooling3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
                 layer_type = "Pooling"
             elif (
@@ -217,20 +232,22 @@ class PartitionParser(PartitionDescriptor):
                 or self.layers[layer]["operation"] == "Sigmoid"
                 or self.layers[layer]["operation"] == "Swish"
             ):
-                hw_layer = ActivationLayer(
+                hw_layer = Activation3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
                 layer_type = "Activation"
             elif (
                 self.layers[layer]["operation"] == "Mul"
                 or self.layers[layer]["operation"] == "Add"
             ):
-                hw_layer = ElementWiseLayer(
+                hw_layer = ElementWise3DLayer(
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
                 layer_type = "ElementWise"
             elif (
@@ -242,6 +259,7 @@ class PartitionParser(PartitionDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
             elif self.layers[layer]["operation"] == "SqueezeExcitation":
                 layer_type = self.layers[layer]["operation"]
@@ -249,6 +267,7 @@ class PartitionParser(PartitionDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
             elif self.layers[layer]["operation"] == "BatchNormalization":
                 layer_type = self.layers[layer]["operation"]
@@ -256,6 +275,7 @@ class PartitionParser(PartitionDescriptor):
                     self.config.max_dsp_util,
                     self.config.max_bram_util,
                     self.layers[layer],
+                    self.platform,
                 )
             else:
                 assert False, "{} operation in layer {} is not supported".format(
@@ -277,8 +297,22 @@ class PartitionParser(PartitionDescriptor):
                 )
             else:
                 hw_type = layer_type  # self.layers[layer]["operation"]
+
+            if self.layers[layer]["branching"]:
+                layer_mode = "split"
+            elif layer_type == "ElementWise":
+                layer_mode = "merge"
+            else:
+                layer_mode = "sequential"
+
             # TODO: use the LAYER_TYPE enum for the layer type param
-            graph.add_node(layer, type=layer_type, hw=hw_layer, hw_type=hw_type)
+            graph.add_node(
+                layer,
+                type=layer_type,
+                hw=hw_layer,
+                hw_type=hw_type,
+                layer_mode=layer_mode,
+            )
         _logger.info("*" * 40)
 
         edges = []
@@ -295,36 +329,47 @@ class PartitionParser(PartitionDescriptor):
         return graph
 
     def model_partition(self, partition: list, name: str) -> None:
-
         graph = self.create_graph(partition)
 
-        if not os.path.exists(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/"):
-            os.makedirs(os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/")
+        partition_graphs_path = os.path.join(
+            os.getcwd(), "fpga_modeling_reports", self.model_name, "partition_graphs"
+        )
+        if not os.path.exists(partition_graphs_path):
+            os.makedirs(partition_graphs_path)
+
         visualize_graph(
             graph,
-            os.getcwd() + "/fpga_modeling_reports/" + self.model_name + "/partition_graphs/" + name,
+            os.getcwd()
+            + "/fpga_modeling_reports/"
+            + self.model_name
+            + "/partition_graphs/"
+            + name,
             self.enable_wandb,
             name,
         )
 
         _logger.info("Partition: {}: ".format(name))
-        # optimizer = SimulatedAnnealing(graph, config=self.config, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx, enable_wandb=self.enable_wandb, cnn_model_name=self.model_name)
+        # optimizer = SimulatedAnnealing(graph, config=self.config, platform=self.platform, branch_mem=branch_buffer, partition_name=name, gap_approx=self.gap_approx, enable_wandb=self.enable_wandb, cnn_model_name=self.model_name)
         optimizer = SimulatedAnnealing(
             graph,
             config=self.config,
+            platform=self.platform,
             partition_name=name,
             gap_approx=self.gap_approx,
             enable_wandb=self.enable_wandb,
             cnn_model_name=self.model_name,
         )
 
-        mwpc, solution_mem, solution_dp, extra_reconfig, weights_reloading = optimizer.run_optimizer()
+        mwpc, solution_mem, solution_dp, extra_reconfig, weights_reloading = (
+            optimizer.run_solver(mode="partition")
+        )
         if mwpc is None or solution_mem is None or solution_dp is None:
             raise Exception(f"Optimization failed for layer {name}")
 
         num_graphs = len(solution_mem)
 
         for i, (solution, wr) in enumerate(zip(solution_dp, weights_reloading)):
+            num_layers = len(solution["config"])
             part_name = name + "_split" + str(i) if num_graphs > 1 else name
 
             partition_results = deepcopy(solution)
@@ -340,11 +385,12 @@ class PartitionParser(PartitionDescriptor):
 
             self.model_avg_metrics = log_metrics
 
-            times_repeat = 1 if name.count('+') == 0 else name.count('+') + 1
+            times_repeat = 1 if name.count("+") == 0 else name.count("+") + 1
             self.df.loc[len(self.df.index)] = [
                 part_name,
+                num_layers,
                 times_repeat,
-                extra_reconfig+1,
+                extra_reconfig + 1,
                 wr,
                 partition_results["latency(C)"],
                 partition_results["latency(S)"],
@@ -365,7 +411,8 @@ class PartitionParser(PartitionDescriptor):
             if self.enable_wandb:
                 report_dict[part_name] = {
                     "Times Repeated": times_repeat,
-                    "Num Splits": extra_reconfig+1,
+                    "Num Layers": num_layers,
+                    "Num Splits": extra_reconfig + 1,
                     "Times Weights Reloading": wr,
                     "config": partition_results["config"],
                     "structure": partition_results["structure"],
@@ -377,7 +424,8 @@ class PartitionParser(PartitionDescriptor):
 
             report_dict[part_name] = {
                 "Times Repeated": times_repeat,
-                "Num Splits": extra_reconfig+1,
+                "Num Layers": num_layers,
+                "Num Splits": extra_reconfig + 1,
                 "Times Weights Reloading": wr,
                 "Latency(C)": partition_results["latency(C)"],
                 "Latency(S)": partition_results["latency(S)"],
@@ -406,30 +454,28 @@ class PartitionParser(PartitionDescriptor):
             for node in graph.nodes():
                 hw = graph.nodes[node]["hw"]
                 if graph.nodes[node]["type"] == "Conv":
-                    nodes_list.append(
-                        [
-                            hw.input_shape,
-                            hw.output_shape,
-                            hw.kernel_shape,
-                            hw.padding,
-                            hw.stride,
-                            hw.groups,
-                        ]
-                    )
+                    nodes_list.append([
+                        hw.input_shape,
+                        hw.output_shape,
+                        hw.kernel_shape,
+                        hw.padding,
+                        hw.stride,
+                        hw.groups,
+                    ])
                 elif graph.nodes[node]["type"] == "Pooling":
-                    nodes_list.append(
-                        [
-                            hw.input_shape,
-                            hw.output_shape,
-                            hw.kernel_shape,
-                            hw.padding,
-                            hw.stride,
-                        ]
-                    )
+                    nodes_list.append([
+                        hw.input_shape,
+                        hw.output_shape,
+                        hw.kernel_shape,
+                        hw.padding,
+                        hw.stride,
+                    ])
                 elif graph.nodes[node]["type"] == "ElementWise":
-                    nodes_list.append(
-                        [hw.input_shape_1, hw.input_shape_2, hw.output_shape]
-                    )
+                    nodes_list.append([
+                        hw.input_shape_1,
+                        hw.input_shape_2,
+                        hw.output_shape,
+                    ])
                 else:
                     nodes_list.append([hw.input_shape, hw.output_shape])
             partitions[i] = nodes_list
@@ -461,7 +507,7 @@ class PartitionParser(PartitionDescriptor):
             os.remove(self.partition_model_file)
 
         if False:
-            #TODO: Find a way to combine this with the partition split functionality
+            # TODO: Find a way to combine this with the partition split functionality
             duplicates_dict = self.idetify_sequential_duplicates()
         num_dev_reconfig = len(self.partitions) - 1
         print("Initial number of device reconfigurations: {}".format(num_dev_reconfig))
@@ -469,14 +515,20 @@ class PartitionParser(PartitionDescriptor):
         start = time.time()
 
         if False:
-            #TODO: Find a way to combine this with the partition split functionality
+            # TODO: Find a way to combine this with the partition split functionality
             name_offset = 0
             for i, partition in enumerate(self.partitions):
-                part_name = "part_{}".format(i+name_offset)
-                if i+name_offset in duplicates_dict:
+                part_name = "part_{}".format(i + name_offset)
+                if i + name_offset in duplicates_dict:
                     part_name += "+"
-                    part_name += "+".join([str(x) for x in duplicates_dict[i+name_offset]])
-                times_called = 1 if i+name_offset not in duplicates_dict else 1 + len(duplicates_dict[i+name_offset])
+                    part_name += "+".join([
+                        str(x) for x in duplicates_dict[i + name_offset]
+                    ])
+                times_called = (
+                    1
+                    if i + name_offset not in duplicates_dict
+                    else 1 + len(duplicates_dict[i + name_offset])
+                )
                 name_offset += times_called - 1
                 num_dev_reconfig += self.model_partition(partition, name=part_name)
         for i, partition in enumerate(self.partitions):
@@ -486,19 +538,46 @@ class PartitionParser(PartitionDescriptor):
         print("Final number of device reconfigurations: {}.".format(num_dev_reconfig))
 
         for key in self.model_avg_metrics:
-            self.model_avg_metrics[key] = self.df[key].repeat(self.df["Times Repeated"].to_list()).mean()
-        self.model_avg_metrics["latency(C) Sum"] = int((self.df["latency(C)"] * self.df["Times Repeated"]).sum())
-        self.model_avg_metrics["latency(S) Sum"] = (self.df["latency(S)"] * self.df["Times Repeated"]).sum()
-        self.model_avg_metrics["GOPs Sum"] = (self.df["GOPs"] * self.df["Times Repeated"]).sum()
-        self.model_avg_metrics["depth Sum"] = int((self.df["depth"] * self.df["Times Repeated"]).sum())
+            self.model_avg_metrics[key] = (
+                self.df[key].repeat(self.df["Times Repeated"].to_list()).mean()
+            )
+        self.model_avg_metrics["latency(C) Sum"] = int(
+            (self.df["latency(C)"] * self.df["Times Repeated"]).sum()
+        )
+        self.model_avg_metrics["latency(S) Sum"] = (
+            self.df["latency(S)"] * self.df["Times Repeated"]
+        ).sum()
+        self.model_avg_metrics["GOPs Sum"] = (
+            self.df["GOPs"] * self.df["Times Repeated"]
+        ).sum()
+        self.model_avg_metrics["depth Sum"] = int(
+            (self.df["depth"] * self.df["Times Repeated"]).sum()
+        )
 
         if not self.enable_wandb:
-            log_results_path = os.path.join(os.getcwd(), "fpga_modeling_reports", self.model_name, "partition_results")
+            log_results_path = os.path.join(
+                os.getcwd(),
+                "fpga_modeling_reports",
+                self.model_name,
+                "partition_results",
+            )
             if not os.path.exists(log_results_path):
                 os.makedirs(log_results_path)
+            else:
+                for file in os.listdir(log_results_path):
+                    os.unlink(os.path.join(log_results_path, file))
 
         batch_size = np.arange(1, 500, 1)
-        lat_sec = ((self.model_avg_metrics["latency(C) Sum"] - self.model_avg_metrics["depth Sum"]) * batch_size + self.model_avg_metrics["depth Sum"]) / (self.clock_frequency * 1e6) + (self.reconfiguration_time * num_dev_reconfig)
+        lat_sec = (
+            (
+                self.model_avg_metrics["latency(C) Sum"]
+                - self.model_avg_metrics["depth Sum"]
+            )
+            * batch_size
+            + self.model_avg_metrics["depth Sum"]
+        ) / (self.platform.clock_freq * 1e6) + (
+            self.platform.reconfiguration_time * num_dev_reconfig
+        )
         plt.plot(batch_size, lat_sec)
         plt.xlabel("Batch Size")
         plt.ylabel("Seconds")
@@ -517,7 +596,9 @@ class PartitionParser(PartitionDescriptor):
         if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s) vs Batch Size": plt})
         else:
-            plt.savefig(os.path.join(log_results_path, "throughput_gops_vs_batch_size.png"))
+            plt.savefig(
+                os.path.join(log_results_path, "throughput_gops_vs_batch_size.png")
+            )
         through_vols_sec = batch_size / lat_sec
         plt.cla()
         plt.clf()
@@ -528,8 +609,10 @@ class PartitionParser(PartitionDescriptor):
         if self.enable_wandb:
             wandb.log({"Throughput (Volumes/s) vs Batch Size": plt})
         else:
-            plt.savefig(os.path.join(log_results_path, "throughput_vols_vs_batch_size.png"))
-        gops_sec_dsp = through_gops_sec / self.total_dsp
+            plt.savefig(
+                os.path.join(log_results_path, "throughput_vols_vs_batch_size.png")
+            )
+        gops_sec_dsp = through_gops_sec / self.platform.dsp
         plt.cla()
         plt.clf()
         plt.plot(batch_size, gops_sec_dsp)
@@ -539,8 +622,10 @@ class PartitionParser(PartitionDescriptor):
         if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s/DSP) vs Batch Size": plt})
         else:
-            plt.savefig(os.path.join(log_results_path, "throughput_gops_dsp_vs_batch_size.png"))
-        gops_sec_dsp_cycle = (gops_sec_dsp / self.clock_frequency) * 1e3
+            plt.savefig(
+                os.path.join(log_results_path, "throughput_gops_dsp_vs_batch_size.png")
+            )
+        gops_sec_dsp_cycle = (gops_sec_dsp / self.platform.clock_freq) * 1e3
         plt.cla()
         plt.clf()
         plt.plot(batch_size, gops_sec_dsp_cycle)
@@ -550,33 +635,42 @@ class PartitionParser(PartitionDescriptor):
         if self.enable_wandb:
             wandb.log({"Throughput (GOPs/s/DSP/Cycle) vs Batch Size": plt})
         else:
-            plt.savefig(os.path.join(log_results_path, "throughput_gops_dsp_cycle_vs_batch_size.png"))
+            plt.savefig(
+                os.path.join(
+                    log_results_path, "throughput_gops_dsp_cycle_vs_batch_size.png"
+                )
+            )
 
         self.model_avg_metrics["latency(S)-reconfig"] = {
             "Batch 1": lat_sec[0],
             "Batch 30": lat_sec[29],
-            "Batch 100": lat_sec[99]
+            "Batch 100": lat_sec[99],
+            "Batch 250": lat_sec[249],
         }
 
         self.model_avg_metrics["GOPs/s"] = {
             "Batch 1": through_gops_sec[0],
             "Batch 30": through_gops_sec[29],
-            "Batch 100": through_gops_sec[99]
+            "Batch 100": through_gops_sec[99],
+            "Batch 250": through_gops_sec[249],
         }
         self.model_avg_metrics["Volumes/s"] = {
             "Batch 1": through_vols_sec[0],
             "Batch 30": through_vols_sec[29],
-            "Batch 100": through_vols_sec[99]
+            "Batch 100": through_vols_sec[99],
+            "Batch 250": through_vols_sec[249],
         }
         self.model_avg_metrics["GOPs/s/DSP"] = {
             "Batch 1": gops_sec_dsp[0],
             "Batch 30": gops_sec_dsp[29],
-            "Batch 100": gops_sec_dsp[99]
+            "Batch 100": gops_sec_dsp[99],
+            "Batch 250": gops_sec_dsp[249],
         }
         self.model_avg_metrics["GOPs/s/DSP/cycle"] = {
             "Batch 1": gops_sec_dsp_cycle[0],
             "Batch 30": gops_sec_dsp_cycle[29],
-            "Batch 100": gops_sec_dsp_cycle[99]
+            "Batch 100": gops_sec_dsp_cycle[99],
+            "Batch 250": gops_sec_dsp_cycle[249],
         }
 
         del self.model_avg_metrics["latency(C)"]
@@ -588,22 +682,33 @@ class PartitionParser(PartitionDescriptor):
             wandb.log(self.model_avg_metrics)
             wandb.log({"Partition Results": wandb.Table(dataframe=self.df)})
         else:
-            with open(self.partition_model_file, 'r') as fp:
+            with open(self.partition_model_file, "r") as fp:
                 dictObj = json.load(fp)
 
-            dictObj['metrics'] = self.model_avg_metrics
+            dictObj["metrics"] = self.model_avg_metrics
 
-            with open(self.partition_model_file, 'w') as json_file:
-                json.dump(dictObj, json_file,
-                                    indent=2)
+            with open(self.partition_model_file, "w") as json_file:
+                json.dump(dictObj, json_file, indent=2)
         end = time.time()
         _logger.info("Partition modeling took {:.2f} seconds".format(end - start))
 
     def model_custom_partition(self, name: str):
-        if not os.path.exists(os.path.join(os.getcwd(), "fpga_modeling_reports", "custom_partitions", name)):
-            os.makedirs(os.path.join(os.getcwd(), "fpga_modeling_reports", "custom_partitions", name))
+        if not os.path.exists(
+            os.path.join(
+                os.getcwd(), "fpga_modeling_reports", "custom_partitions", name
+            )
+        ):
+            os.makedirs(
+                os.path.join(
+                    os.getcwd(), "fpga_modeling_reports", "custom_partitions", name
+                )
+            )
         self.partition_model_file = os.path.join(
-            os.getcwd(), "fpga_modeling_reports", "custom_partitions", name, f"{name}_layers.json"
+            os.getcwd(),
+            "fpga_modeling_reports",
+            "custom_partitions",
+            name,
+            f"{name}_layers.json",
         )
         if os.path.exists(self.partition_model_file):
             os.remove(self.partition_model_file)
@@ -616,7 +721,10 @@ class PartitionParser(PartitionDescriptor):
         # extra_reconfig = self.model_partition(custom_partition, name=name)
         # return
 
-        custom_partition = ["custom_Conv_1", "custom_Relu_1"] # "custom_Conv_1", "custom_Relu_1"
+        custom_partition = [
+            "custom_Conv_1",
+            "custom_Relu_1",
+        ]  # "custom_Conv_1", "custom_Relu_1"
         self.layers["custom_Conv_1"] = {
             "operation": "Conv",
             "shape_in": [[1, 6, 4, 4, 4]],
@@ -913,4 +1021,5 @@ class PartitionParser(PartitionDescriptor):
         ]
         self.layers["Add_68"]["shape_out"] = [1, 10, 6, 6, 6]
 
+        extra_reconfig = self.model_partition(custom_partition, name=name)
         extra_reconfig = self.model_partition(custom_partition, name=name)

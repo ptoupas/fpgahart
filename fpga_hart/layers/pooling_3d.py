@@ -5,15 +5,15 @@ from typing import Tuple
 import numpy as np
 
 from fpga_hart import _logger
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
 
 
-class Pooling3DLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class Pooling3DLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
         # _logger.setLevel(level=logging.DEBUG)
 
         self.op_type = "max" if "Max" in description["operation"] else "avg"
@@ -33,6 +33,7 @@ class Pooling3DLayer(BaseLayer):
         self.kw = self.kernel_shape[2]
 
         self.channels = self.input_shape[1]
+        self.filters = self.input_shape[1]
 
         self.padding = description["padding"]
         self.stride = description["stride"]
@@ -51,6 +52,7 @@ class Pooling3DLayer(BaseLayer):
         self.data_size_in = np.prod(np.array(self.input_shape[1:]))
 
         self.output_shape = output_shape
+        self.filters = self.output_shape[1]
         self.depth_out = self.output_shape[2]
         self.rows_out = self.output_shape[3]
         self.cols_out = self.output_shape[4]
@@ -134,6 +136,22 @@ class Pooling3DLayer(BaseLayer):
         f_coarse_inout: np.float64,
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+        pipeline_depth += (
+            math.ceil(1 / f_coarse_inout)
+            * (self.cols_in + 2 * self.padding[2])
+            * (self.depth_in + 2 * self.padding[0])
+            * (self.kh - 1)
+            + math.ceil(1 / f_coarse_inout)
+            * (self.depth_in + 2 * self.padding[0])
+            * (self.kw - 1)
+            + math.ceil(1 / f_coarse_inout) * (self.kd - 1)
+        )
+        pipeline_depth += math.ceil(1 / f_coarse_inout) * (
+            (self.kh - 1) * self.kw * self.kd + (self.kw - 1) * self.kd + (self.kd - 1)
+        )
+        pipeline_depth += math.ceil(1 / f_fine) + 1
+
         kernel_elems = int(np.prod(np.array(self.kernel_shape)))
 
         layer_fifos_arrays = {
@@ -191,7 +209,7 @@ class Pooling3DLayer(BaseLayer):
             fine=math.ceil(kernel_elems * f_fine),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_design_point(
         self,

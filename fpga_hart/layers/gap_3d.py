@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -11,9 +11,9 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class GAPLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class GAP3DLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         self.input_shape = description["shape_in"][0]
         self.depth_in = self.input_shape[2]
@@ -72,9 +72,20 @@ class GAPLayer(BaseLayer):
     def get_resource_util(
         self,
         f_coarse_inout: np.float64,
-        supported_ops: list
+        supported_ops: list,
+        gap_approx: bool, 
     ) -> Tuple[float, float]:
-
+        
+        if gap_approx:
+            pipeline_depth = 2
+        else:
+            pipeline_depth = (
+                math.ceil(1 / f_coarse_inout)
+                * self.depth_in
+                * self.rows_in
+                * self.cols_in
+            )
+        
         muls = math.ceil(self.channels * f_coarse_inout * 2)
         adds = math.ceil(self.channels * f_coarse_inout)
 
@@ -91,7 +102,7 @@ class GAPLayer(BaseLayer):
             coarse_inout=math.ceil(self.channels * f_coarse_inout),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}

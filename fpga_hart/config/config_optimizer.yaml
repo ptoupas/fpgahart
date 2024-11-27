@@ -1,8 +1,8 @@
 simulatedAnnealing:
-  t_min: 0.000001 #1e-6
+  t_min: 1.0e-4
   t_max: 10
   iterationPerTemp: 10
-  cooling_rate: 0.975
+  cooling_rate: 0.98
   best_of_iter: 1
 max_dsp_util: 95
 max_bram_util: 95
@@ -14,3 +14,11 @@ use_previous_config: True
 chan_dist_thresh: 60
 depth_dist_thresh: 30
 height_dist_thresh: 60
+initial_max_bram_util: 80
+enable_partition_merging: True
+merge_bram_threshold: 30
+batch_size: 1
+num_reconfig_points: 20
+allowed_reconfig_layers: ['Conv', 'GlobalAveragePool', 'Add', 'Mul'] # MaxPool
+min_partition_layers: 1
+max_partition_layers: 50

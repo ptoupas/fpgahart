@@ -1,16 +1,15 @@
 import bisect
-import configparser
 import logging
 import math
-import os
 
 import numpy as np
 
 from fpga_hart import _logger
+from fpga_hart.platform.platform import Platform
 
 
-class BaseLayer:
-    def __init__(self, max_DSP_util=95.0, max_BRAM_util=95.0, data_format="NHWDC"):
+class BaseLayer3D:
+    def __init__(self, max_DSP_util=95.0, max_BRAM_util=95.0, platform=None, data_format="NHWDC"):
         assert (
             data_format == "NHWDC" or data_format == "NCHWD"
         ), "Wrong data format. Accepted formats are 'NHWDC' or 'NCHWD'"
@@ -18,31 +17,27 @@ class BaseLayer:
 
         self.double_buffer_weights = False
         self.stream_weights = False
-        self.get_config()
         self.data_format = data_format
-        self.word_bytes = self.word_length / 8
-        self.cycles_per_sec = self.clock_freq * 1e6
-        self.mem_bandwidth = self.mem_bw * 1e9
-        self.mem_words_per_cycle = (
-            self.mem_bandwidth / self.word_length
-        ) / self.cycles_per_sec
+
+        assert platform is not None, "FPGA platform must be defined (BaseLayer3D)"
+        self.platform = platform
+
+        self.word_length = self.platform.word_length
+        self.clock_freq = self.platform.clock_freq
+        self.bram = self.platform.bram
+        self.bram_Kbytes = self.platform.bram_Kbytes
+        self.dsp = self.platform.dsp
+        self.mem_bw = self.platform.mem_bw
+        self.fpga_device = self.platform.fpga_device
+        self.word_bytes = self.platform.word_bytes
+        self.cycles_per_sec = self.platform.cycles_per_sec
+        self.mem_bandwidth = self.platform.mem_bandwidth
+        self.mem_words_per_cycle = self.platform.mem_words_per_cycle
 
         self.max_DSP_util = max_DSP_util
         self.max_BRAM_util = max_BRAM_util
         self.BRAM_CONF_WIDTH = {1: 16384, 2: 8192, 4: 4096, 9: 2048, 18: 1024, 36: 512}
         self.BRAM_CONF_DEPTH = {16384: 1, 8192: 2, 4096: 4, 2048: 9, 1024: 18, 512: 36}
-
-    def get_config(self):
-        config = configparser.ConfigParser()
-        config.read(os.path.join(os.getcwd(), "fpga_hart", "config", "config_fpga.ini"))
-
-        self.word_length = int(config.get("FPGA Specifications", "word_length"))
-        self.clock_freq = int(config.get("FPGA Specifications", "clock_freq"))
-        self.bram = int(config.get("FPGA Specifications", "bram"))
-        self.bram_Kbytes = int(config.get("FPGA Specifications", "bram_type")) / 8
-        self.dsp = int(config.get("FPGA Specifications", "dsp"))
-        self.mem_bw = float(config.get("FPGA Specifications", "mem_bw"))
-        self.fpga_device = config.get("FPGA Specifications", "fpga_device")
 
     def bram_stream_resource_model(self, depth, width):
         assert width > 0, "width must be greater than zero"
@@ -441,10 +436,10 @@ class BaseLayer:
 
         assert abs(matrix[0, branch_node]) == abs(
             matrix[branch_node - 1, branch_node]
-        ), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
+        ), "Problem with the graph balancing"
         assert abs(matrix[0, branch_node]) == abs(
             matrix[branch_node, branch_node]
-        ), "Problem with the graph balancing\n{}\n{}".format(origin_matrix, matrix)
+        ), "Problem with the graph balancing"
 
         return matrix, mem_bounded_in_1, mem_bounded_in_2, mem_bounded_out
 

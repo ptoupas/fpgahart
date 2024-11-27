@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from fpga_hart.layers.base_layer import BaseLayer
+from fpga_hart.layers.base_layer_3d import BaseLayer3D
 
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 np.seterr(divide="ignore", invalid="ignore")
@@ -11,9 +11,9 @@ np.seterr(divide="ignore", invalid="ignore")
 DEBUG = False
 
 
-class ElementWiseLayer(BaseLayer):
-    def __init__(self, max_DSP_util, max_BRAM_util, description):
-        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util)
+class ElementWise3DLayer(BaseLayer3D):
+    def __init__(self, max_DSP_util, max_BRAM_util, description, platform):
+        super().__init__(max_DSP_util=max_DSP_util, max_BRAM_util=max_BRAM_util, platform=platform)
 
         # Available options 'C' channel parallelism, 'DC' channel AND depth parallelism
         self.parrallel_dims = "C"
@@ -157,6 +157,8 @@ class ElementWiseLayer(BaseLayer):
         supported_ops: list
     ) -> Tuple[float, float]:
 
+        pipeline_depth = 2
+
         final_channel = self.input_shape[1]
         final_depth = self.input_shape[2]
 
@@ -200,7 +202,7 @@ class ElementWiseLayer(BaseLayer):
             coarse_inout=math.ceil(final_channel * f_coarse_inout),
         )
 
-        return dsps_util, bram_util
+        return dsps_util, bram_util, pipeline_depth
 
     def get_dp_info(self):
         dp_info = {}
