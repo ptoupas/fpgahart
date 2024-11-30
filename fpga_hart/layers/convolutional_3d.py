@@ -271,7 +271,7 @@ class Convolutional3DLayer(BaseLayer3D):
                 + (self.kw - 1) * self.kd
                 + (self.kd - 1)
             )
-        
+
         pipeline_depth += math.ceil(1 / f_fine) + 1
 
         if not self.depthwise:
@@ -552,7 +552,7 @@ class Convolutional3DLayer(BaseLayer3D):
         layer_mem_bw_weights = 0
         if self.stream_weights:
             layer_mem_bw_weights = (
-                abs(conv_gamma) * self.cycles_per_sec * self.word_length * (f_fine*kh*kw*kd)
+                abs(conv_gamma) * self.cycles_per_sec * self.word_length * (f_fine*self.kh*self.kw*self.kd)
             )
         total_bw_util = (
             (layer_mem_bw_in + layer_mem_bw_out + layer_mem_bw_weights) / self.mem_bandwidth

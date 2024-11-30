@@ -764,7 +764,7 @@ class PartitionComposer(BaseLayer3D):
                 curr_depth = v["depth"]
                 # depth_per_fifo = math.ceil(curr_depth/config[merge_node]['coarse_factor'])
                 bram_raw_out += (
-                    self.bram_stream_resource_model(curr_depth, 16)
+                    self.bram_stream_resource_model(curr_depth, self.word_length)
                     * config[merge_node]["coarse_factor"]
                 )
 

@@ -141,13 +141,13 @@ class BaseLayer3D:
         if "sw_lb_3d" in layer_fifos_arrays.keys():
             filters, channels, kd, kh, kw = kernel_shape
             line_buffer_3d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["sw_lb_3d"], 16
+                layer_fifos_arrays["sw_lb_3d"], self.word_length
             )
             line_buffer_2d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["sw_lb_2d"], 16
+                layer_fifos_arrays["sw_lb_2d"], self.word_length
             )
             window_buffer_3d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["sw_wb_3d"], 16
+                layer_fifos_arrays["sw_wb_3d"], self.word_length
             )
 
             sw_brams = (
@@ -178,7 +178,7 @@ class BaseLayer3D:
             )
             if self.double_buffer_weights:
                 weights_depth *= 2
-            weights_bram = self.bram_memory_resource_model(weights_depth, 8)
+            weights_bram = self.bram_memory_resource_model(weights_depth, self.word_length)
             if weights_depth < 100:
                 weights_bram = 0
             # print(f"WEIGHTS: depth={weights_depth},\tbram={weights_bram},\tcoarse_factors={fine * coarse_in * coarse_out},\ttotal_bram={weights_bram * fine * coarse_in * coarse_out}\t{sw_brams * coarse_in}\t{(fifo_accumulator_brams + array_accumulator_brams) * coarse_in * coarse_out}")
@@ -193,13 +193,13 @@ class BaseLayer3D:
         if "pool_sw_lb_3d" in layer_fifos_arrays.keys():
             filters, channels, kd, kh, kw = kernel_shape
             line_buffer_3d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["pool_sw_lb_3d"], 16
+                layer_fifos_arrays["pool_sw_lb_3d"], self.word_length
             )
             line_buffer_2d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["pool_sw_lb_2d"], 16
+                layer_fifos_arrays["pool_sw_lb_2d"], self.word_length
             )
             window_buffer_3d_brams = self.bram_stream_resource_model(
-                layer_fifos_arrays["pool_sw_wb_3d"], 16
+                layer_fifos_arrays["pool_sw_wb_3d"], self.word_length
             )
 
             sw_brams = (
@@ -218,7 +218,7 @@ class BaseLayer3D:
 
         if "fc_array" in layer_fifos_arrays.keys():
             array_fc_brams = self.bram_memory_resource_model(
-                layer_fifos_arrays["fc_array"], 30
+                layer_fifos_arrays["fc_array"], self.word_length
             )
             if layer_fifos_arrays["fc_array"] < 100:
                 array_fc_brams = 0
