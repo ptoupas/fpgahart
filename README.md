@@ -46,3 +46,17 @@ The arguments are the same as in the `backend_pipeline.sh` case.
 
 ## Configuration files
 The configuration files for specifying the FPGA device characteristics (`config_fpga.ini`), the wandb and optimizer parameters (`config_optimizer.yaml`), and the pytorch/onnx supported layers and parameters (`config_pytorch.ini`) are all under the following path `$fpga-hart/fpga_hart/config/`.
+
+# Citation
+
+If you find this project useful in your research, please consider cite:
+
+```BibTeX
+@inproceedings{toupas2023fpgahart,
+  title={fpgaHART: A Toolflow for Throughput-Oriented Acceleration of 3D CNNs for HAR onto FPGAs}, 
+  author={Toupas, Petros and Bouganis, Christos-Savvas and Tzovaras, Dimitrios},
+  booktitle={2023 33rd International Conference on Field-Programmable Logic and Applications (FPL)}, 
+  year={2023},
+  pages={86-92},
+  doi={10.1109/FPL60245.2023.00020}
+}
